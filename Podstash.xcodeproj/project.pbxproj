@@ -14,7 +14,10 @@
 		6C9955E2301C05A700F804F3 /* Exceptions for "Podstash" folder in "Podstash" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
+				AirfoilScriptsTestScript.applescript,
 				Info.plist,
+				RemoteControl.applescript,
+				TrackMetadata.applescript,
 			);
 			target = 6C9955A9301BE5A500F804F3 /* Podstash */;
 		};

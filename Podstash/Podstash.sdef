@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE dictionary SYSTEM "file://localhost/System/Library/DTDs/sdef.dtd">
+<dictionary title="Podstash Terminology">
+    <suite name="Podstash Suite" code="Pdst" description="Podstash scripting support for Airfoil integration">
+        <class name="application" code="capp" description="Podstash application">
+            <cocoa class="NSApplication"/>
+            
+            <!-- Track metadata properties for Airfoil -->
+            <property name="track title" code="pTTl" type="text" access="r" description="The title of the currently playing episode">
+                <cocoa key="trackTitle"/>
+            </property>
+            
+            <property name="artist" code="pArt" type="text" access="r" description="The podcast name (artist)">
+                <cocoa key="artist"/>
+            </property>
+            
+            <property name="album" code="pAlb" type="text" access="r" description="The podcast name (album)">
+                <cocoa key="album"/>
+            </property>
+            
+            <property name="duration" code="pDur" type="integer" access="r" description="The duration of the current episode in seconds">
+                <cocoa key="duration"/>
+            </property>
+            
+            <property name="logo" code="pLog" type="any" access="r" description="The podcast artwork as TIFF data">
+                <cocoa key="logo"/>
+            </property>
+            
+            <!-- Indicate that the application responds to these commands -->
+            <responds-to command="playpause">
+                <cocoa method="handlePlayPauseScriptCommand:"/>
+            </responds-to>
+            
+            <responds-to command="next">
+                <cocoa method="handleNextScriptCommand:"/>
+            </responds-to>
+            
+            <responds-to command="previous">
+                <cocoa method="handlePreviousScriptCommand:"/>
+            </responds-to>
+        </class>
+        
+        <!-- Command definitions at suite level -->
+        <command name="playpause" code="PdstPlps" description="Toggle play/pause of the current episode">
+            <cocoa class="NSScriptCommand"/>
+        </command>
+        
+        <command name="next" code="PdstNext" description="Skip to the next episode in the queue">
+            <cocoa class="NSScriptCommand"/>
+        </command>
+        
+        <command name="previous" code="PdstPrev" description="Skip backward in the current episode">
+            <cocoa class="NSScriptCommand"/>
+        </command>
+    </suite>
+</dictionary>

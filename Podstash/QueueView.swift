@@ -1,0 +1,587 @@
+//
+//  QueueView.swift
+//  Podstash
+//
+//  Created by Geoff Oliver on 7/30/26.
+//
+
+import SwiftUI
+import SwiftData
+
+struct QueueView: View {
+    @Environment(\.modelContext) private var modelContext
+    // Query directly for queued episodes instead of filtering all episodes
+    @Query(
+        filter: #Predicate<Episode> { episode in
+            episode.queuePosition != nil && !episode.isPlayed
+        },
+        sort: \Episode.queuePosition
+    ) private var queuedEpisodes: [Episode]
+    
+    @EnvironmentObject var audioPlayer: AudioPlayerManager
+    @State private var multiSelection = Set<UUID>()
+    @State private var showingRemoveAlert = false
+    @FocusState private var isFocused: Bool
+    #if !os(macOS)
+    @State private var editMode: EditMode = .inactive
+    #endif
+    
+    // Removed the computed property - using @Query directly above
+    
+    var body: some View {
+        Group {
+            #if os(macOS)
+            // macOS: Use proper NSTableView for double-click support
+            VStack(spacing: 0) {
+                if queuedEpisodes.isEmpty {
+                    VStack(spacing: 16) {
+                        Image(systemName: "text.line.first.and.arrowtriangle.forward")
+                            .font(.system(size: 48))
+                            .foregroundStyle(.secondary)
+                        
+                        Text("Queue is Empty")
+                            .font(.title2)
+                            .fontWeight(.semibold)
+                        
+                        Text("Add episodes to your queue from any podcast")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else {
+                    QueueTableView(
+                        episodes: queuedEpisodes,
+                        selection: $multiSelection,
+                        onDoubleClick: { episode in
+                            audioPlayer.play(episode: episode)
+                        },
+                        onRemove: { episodes in
+                            for episode in episodes {
+                                episode.queuePosition = nil
+                            }
+                            try? modelContext.save()
+                            reindexQueue()
+                            multiSelection.removeAll()
+                        },
+                        onMarkPlayed: { episodes in
+                            for episode in episodes {
+                                episode.isPlayed = true
+                                episode.queuePosition = nil
+                                episode.playbackPosition = 0
+                            }
+                            try? modelContext.save()
+                            reindexQueue()
+                            multiSelection.removeAll()
+                            
+                            // If current episode was marked, play next
+                            if let currentID = audioPlayer.currentEpisode?.id,
+                               episodes.contains(where: { $0.id == currentID }) {
+                                playNextInQueue()
+                            }
+                        },
+                        onMove: { indices, destination in
+                            moveEpisodes(from: indices, to: destination)
+                        },
+                        currentlyPlayingID: audioPlayer.currentEpisode?.id,
+                        isPlaying: audioPlayer.isPlaying
+                    )
+                }
+            }
+            .navigationTitle("Queue")
+            .focused($isFocused)
+            .onAppear {
+                isFocused = true
+            }
+            .onKeyPress(.return) {
+                if let selectedID = multiSelection.first,
+                   multiSelection.count == 1,
+                   let episode = queuedEpisodes.first(where: { $0.id == selectedID }) {
+                    audioPlayer.play(episode: episode)
+                    return .handled
+                }
+                return .ignored
+            }
+            .onDeleteCommand {
+                if !multiSelection.isEmpty {
+                    showingRemoveAlert = true
+                }
+            }
+            .toolbar {
+                ToolbarItem {
+                    Menu {
+                        Button {
+                            addAllUnplayedToQueue()
+                        } label: {
+                            Label("Add All Unplayed", systemImage: "plus.circle")
+                        }
+                        
+                        Button {
+                            clearQueue()
+                        } label: {
+                            Label("Clear Queue", systemImage: "trash")
+                        }
+                        .disabled(queuedEpisodes.isEmpty)
+                    } label: {
+                        Label("Queue Options", systemImage: "ellipsis.circle")
+                    }
+                }
+            }
+            #else
+            // iOS: Use SwiftUI List
+            List(selection: $multiSelection) {
+            if queuedEpisodes.isEmpty {
+                VStack(spacing: 16) {
+                    Image(systemName: "text.line.first.and.arrowtriangle.forward")
+                        .font(.system(size: 48))
+                        .foregroundStyle(.secondary)
+                    
+                    Text("Queue is Empty")
+                        .font(.title2)
+                        .fontWeight(.semibold)
+                    
+                    Text("Add episodes to your queue from any podcast")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 40)
+            } else {
+                ForEach(queuedEpisodes) { episode in
+                    QueueEpisodeRow(episode: episode)
+                        .tag(episode.id)
+                        .environmentObject(audioPlayer)
+                        .simultaneousGesture(
+                            TapGesture(count: 2)
+                                .onEnded {
+                                    audioPlayer.play(episode: episode)
+                                }
+                        )
+                        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                            Button(role: .destructive) {
+                                removeFromQueue(episode)
+                            } label: {
+                                Label("Remove", systemImage: "trash")
+                            }
+                        }
+                        .swipeActions(edge: .leading, allowsFullSwipe: true) {
+                            Button {
+                                markAsPlayed(episode)
+                            } label: {
+                                Label("Mark Played", systemImage: "checkmark.circle.fill")
+                            }
+                            .tint(.green)
+                        }
+                        .contextMenu {
+                            Button {
+                                audioPlayer.play(episode: episode)
+                            } label: {
+                                Label("Play", systemImage: "play.fill")
+                            }
+                            .disabled(multiSelection.count > 1)
+                            
+                            Button {
+                                if multiSelection.count > 1 {
+                                    // Mark all selected as played
+                                    markSelectedAsPlayed()
+                                } else {
+                                    markAsPlayed(episode)
+                                }
+                            } label: {
+                                if multiSelection.count > 1 {
+                                    Label("Mark \(multiSelection.count) as Played", systemImage: "checkmark.circle")
+                                } else {
+                                    Label("Mark as Played", systemImage: "checkmark.circle")
+                                }
+                            }
+                            
+                            Button(role: .destructive) {
+                                if multiSelection.count > 1 {
+                                    // Remove all selected
+                                    showingRemoveAlert = true
+                                } else {
+                                    removeFromQueue(episode)
+                                }
+                            } label: {
+                                if multiSelection.count > 1 {
+                                    Label("Remove \(multiSelection.count) from Queue", systemImage: "trash")
+                                } else {
+                                    Label("Remove from Queue", systemImage: "trash")
+                                }
+                            }
+                        }
+                }
+                .onMove { indices, destination in
+                    moveEpisodes(from: indices, to: destination)
+                }
+            }
+        }
+        .navigationTitle("Queue")
+        .focused($isFocused)
+        .onAppear {
+            isFocused = true
+        }
+        .onDeleteCommand {
+            if !multiSelection.isEmpty {
+                showingRemoveAlert = true
+            }
+        }
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                EditButton()
+            }
+            
+            ToolbarItem {
+                Menu {
+                    Button {
+                        addAllUnplayedToQueue()
+                    } label: {
+                        Label("Add All Unplayed", systemImage: "plus.circle")
+                    }
+                    
+                    Button {
+                        clearQueue()
+                    } label: {
+                        Label("Clear Queue", systemImage: "trash")
+                    }
+                    .disabled(queuedEpisodes.isEmpty)
+                } label: {
+                    Label("Queue Options", systemImage: "ellipsis.circle")
+                }
+            }
+        }
+        .environment(\.editMode, $editMode)
+        #endif
+        }
+        // Shared alert - now applied to Group
+        .alert(multiSelection.count == 1 ? "Remove Episode from Queue?" : "Remove \(multiSelection.count) Episodes from Queue?",
+               isPresented: $showingRemoveAlert) {
+            Button("Cancel", role: .cancel) { }
+            Button("Remove", role: .destructive) {
+                removeSelectedFromQueue()
+            }
+        } message: {
+            if multiSelection.count == 1 {
+                Text("Are you sure you want to remove this episode from the queue?")
+            } else {
+                Text("Are you sure you want to remove \(multiSelection.count) episodes from the queue?")
+            }
+        }
+    }
+    
+    private func markSelectedAsPlayed() {
+        let episodesToMark = queuedEpisodes.filter { multiSelection.contains($0.id) }
+        
+        for episode in episodesToMark {
+            episode.isPlayed = true
+            episode.queuePosition = nil
+            episode.playbackPosition = 0
+        }
+        
+        try? modelContext.save()
+        reindexQueue()
+        multiSelection.removeAll()
+        
+        // If current episode was marked, play next
+        if let currentID = audioPlayer.currentEpisode?.id,
+           episodesToMark.contains(where: { $0.id == currentID }) {
+            playNextInQueue()
+        }
+    }
+    
+    private func removeSelectedFromQueue() {
+        let episodesToRemove = queuedEpisodes.filter { multiSelection.contains($0.id) }
+        
+        for episode in episodesToRemove {
+            episode.queuePosition = nil
+        }
+        
+        try? modelContext.save()
+        reindexQueue()
+        multiSelection.removeAll()
+    }
+    
+    private func removeFromQueue(_ episode: Episode) {
+        episode.queuePosition = nil
+        try? modelContext.save()
+        reindexQueue()
+    }
+    
+    private func markAsPlayed(_ episode: Episode) {
+        episode.isPlayed = true
+        episode.queuePosition = nil
+        episode.playbackPosition = 0
+        try? modelContext.save()
+        reindexQueue()
+        
+        // If this was the currently playing episode, play next
+        if audioPlayer.currentEpisode?.id == episode.id {
+            playNextInQueue()
+        }
+    }
+    
+    private func moveEpisodes(from source: IndexSet, to destination: Int) {
+        var episodes = queuedEpisodes
+        episodes.move(fromOffsets: source, toOffset: destination)
+        
+        // Reindex all episodes with their new positions
+        for (index, episode) in episodes.enumerated() {
+            episode.queuePosition = index
+        }
+        
+        try? modelContext.save()
+    }
+    
+    private func reindexQueue() {
+        let episodes = queuedEpisodes
+        for (index, episode) in episodes.enumerated() {
+            episode.queuePosition = index
+        }
+        try? modelContext.save()
+    }
+    
+    private func addAllUnplayedToQueue() {
+        // Fetch unplayed episodes that aren't in queue
+        let descriptor = FetchDescriptor<Episode>(
+            predicate: #Predicate { episode in
+                !episode.isPlayed && episode.queuePosition == nil
+            },
+            sortBy: [SortDescriptor(\.publishDate)] // Oldest first
+        )
+        
+        guard let unplayedEpisodes = try? modelContext.fetch(descriptor) else { return }
+        
+        var nextPosition = (queuedEpisodes.last?.queuePosition ?? -1) + 1
+        
+        for episode in unplayedEpisodes {
+            episode.queuePosition = nextPosition
+            nextPosition += 1
+        }
+        
+        try? modelContext.save()
+    }
+    
+    private func clearQueue() {
+        for episode in queuedEpisodes {
+            episode.queuePosition = nil
+        }
+        try? modelContext.save()
+    }
+    
+    private func playNextInQueue() {
+        if let nextEpisode = queuedEpisodes.first {
+            audioPlayer.play(episode: nextEpisode)
+        }
+    }
+}
+
+struct QueueEpisodeRow: View {
+    let episode: Episode
+    
+    #if os(macOS)
+    // On macOS: Pass these explicitly to avoid environment object issues
+    let isCurrentlyPlaying: Bool
+    let isPlaying: Bool
+    #else
+    // On iOS: Use environment object as normal
+    @EnvironmentObject var audioPlayer: AudioPlayerManager
+    
+    var isCurrentlyPlaying: Bool {
+        audioPlayer.currentEpisode?.id == episode.id
+    }
+    
+    var isPlaying: Bool {
+        audioPlayer.isPlaying
+    }
+    #endif
+    
+    var body: some View {
+        #if os(macOS)
+        // On macOS: Row should be completely non-interactive
+        // Selection and double-click are handled by NSTableView
+        rowContent
+        #else
+        // On iOS: Button for tap to play
+        Button {
+            audioPlayer.play(episode: episode)
+        } label: {
+            rowContent
+        }
+        .buttonStyle(.plain)
+        #endif
+    }
+    
+    private var rowContent: some View {
+        HStack(spacing: 12) {
+                // Queue position indicator
+                if let position = episode.queuePosition {
+                    Text("\(position + 1)")
+                        .font(.caption)
+                        .fontWeight(.bold)
+                        .foregroundStyle(.secondary)
+                        .frame(width: 30, alignment: .trailing)
+                }
+                
+                // Episode artwork or podcast artwork
+                if let podcast = episode.podcast,
+                   let artworkURL = podcast.artworkURL,
+                   let url = URL(string: artworkURL) {
+                    CachedAsyncImage(url: url) { image in
+                        image
+                            .resizable()
+                            .aspectRatio(contentMode: .fill)
+                    } placeholder: {
+                        Color.gray.opacity(0.2)
+                    }
+                    .frame(width: 50, height: 50)
+                    .cornerRadius(8)
+                } else {
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(Color.gray.opacity(0.2))
+                        .frame(width: 50, height: 50)
+                        .overlay(
+                            Image(systemName: "music.note")
+                                .foregroundStyle(.secondary)
+                        )
+                }
+                
+                // Episode info
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack {
+                        Text(episode.title)
+                            .font(.subheadline)
+                            .fontWeight(.medium)
+                            .lineLimit(2)
+                        
+                        if isCurrentlyPlaying && isPlaying {
+                            Image(systemName: "speaker.wave.2.fill")
+                                .font(.caption2)
+                                .foregroundStyle(.blue)
+                        }
+                    }
+                    
+                    if let podcast = episode.podcast {
+                        Text(podcast.title)
+                            .font(.caption)
+                            .lineLimit(1)
+                    }
+                    
+                    HStack(spacing: 4) {
+                        Text(episode.publishDate, style: .date)
+                            .font(.caption2)
+                        
+                        if let duration = episode.duration {
+                            Text("•")
+                            Text(formatDuration(duration))
+                                .font(.caption2)
+                        }
+                        
+                        // Show progress if partially played
+                        if episode.playbackPosition > 0 {
+                            Text("•")
+                            if let duration = episode.duration, duration > 0 {
+                                let percent = Int((episode.playbackPosition / duration) * 100)
+                                Text("\(percent)%")
+                                    .font(.caption2)
+                                    .foregroundStyle(.blue)
+                            }
+                        }
+                    }
+                }
+                
+                Spacer()
+            }
+            .padding(.vertical, 4)
+    }
+    
+    private func formatDuration(_ duration: TimeInterval) -> String {
+        let hours = Int(duration) / 3600
+        let minutes = (Int(duration) % 3600) / 60
+        let seconds = Int(duration) % 60
+        
+        if hours > 0 {
+            return String(format: "%d:%02d:%02d", hours, minutes, seconds)
+        } else {
+            return String(format: "%d:%02d", minutes, seconds)
+        }
+    }
+}
+
+#Preview {
+    QueueView()
+        .environmentObject(AudioPlayerManager())
+}
+#if os(macOS)
+import AppKit
+
+struct TableRowDoubleClickHandler<Content: View>: NSViewRepresentable {
+    @Binding var selection: Set<UUID>
+    let onDoubleClick: (UUID) -> Void
+    let content: () -> Content
+    
+    func makeNSView(context: Context) -> NSHostingView<Content> {
+        let hostingView = NSHostingView(rootView: content())
+        
+        // Find the NSTableView in the view hierarchy
+        DispatchQueue.main.async {
+            if let tableView = findTableView(in: hostingView) {
+                tableView.doubleAction = #selector(context.coordinator.handleDoubleClick(_:))
+                tableView.target = context.coordinator
+                context.coordinator.tableView = tableView
+            }
+        }
+        
+        return hostingView
+    }
+    
+    func updateNSView(_ nsView: NSHostingView<Content>, context: Context) {
+        nsView.rootView = content()
+    }
+    
+    func makeCoordinator() -> Coordinator {
+        Coordinator(selection: $selection, onDoubleClick: onDoubleClick)
+    }
+    
+    private func findTableView(in view: NSView) -> NSTableView? {
+        if let tableView = view as? NSTableView {
+            return tableView
+        }
+        
+        for subview in view.subviews {
+            if let tableView = findTableView(in: subview) {
+                return tableView
+            }
+        }
+        
+        return nil
+    }
+    
+    class Coordinator: NSObject {
+        @Binding var selection: Set<UUID>
+        let onDoubleClick: (UUID) -> Void
+        weak var tableView: NSTableView?
+        
+        init(selection: Binding<Set<UUID>>, onDoubleClick: @escaping (UUID) -> Void) {
+            self._selection = selection
+            self.onDoubleClick = onDoubleClick
+        }
+        
+        @objc func handleDoubleClick(_ sender: Any?) {
+            guard let tableView = tableView,
+                  tableView.clickedRow >= 0 else { return }
+            
+            // Get the first selected item (or clicked item if no selection)
+            if let selectedID = selection.first {
+                onDoubleClick(selectedID)
+            }
+        }
+        
+        // This is what NSTableView actually calls
+        @objc func onAction(_ sender: Any?) {
+            handleDoubleClick(sender)
+        }
+    }
+}
+#endif
+

@@ -1,0 +1,226 @@
+//
+//  DownloadManager.swift
+//  Podstash
+//
+//  Created by Geoff Oliver on 7/30/26.
+//
+
+import Foundation
+import SwiftData
+import Combine
+
+@MainActor
+final class DownloadManager: NSObject, ObservableObject {
+    @Published var activeDownloads: [UUID: Double] = [:] // Episode ID -> Progress (0.0 to 1.0)
+    
+    private var modelContext: ModelContext?
+    private var downloadTasks: [UUID: URLSessionDownloadTask] = [:]
+    private var urlSession: URLSession!
+    
+    override init() {
+        super.init()
+        let config = URLSessionConfiguration.default
+        self.urlSession = URLSession(configuration: config, delegate: self, delegateQueue: .main)
+    }
+    
+    func setModelContext(_ context: ModelContext) {
+        self.modelContext = context
+    }
+    
+    func isDownloading(_ episode: Episode) -> Bool {
+        return activeDownloads[episode.id] != nil
+    }
+    
+    func downloadProgress(for episode: Episode) -> Double? {
+        return activeDownloads[episode.id]
+    }
+    
+    func downloadEpisode(_ episode: Episode) {
+        guard !isDownloading(episode) else { return }
+        guard !episode.isDownloaded else { return }
+        guard let url = URL(string: episode.audioURL) else { return }
+        
+        let task = urlSession.downloadTask(with: url)
+        downloadTasks[episode.id] = task
+        activeDownloads[episode.id] = 0.0
+        task.resume()
+    }
+    
+    func cancelDownload(_ episode: Episode) {
+        guard let task = downloadTasks[episode.id] else { return }
+        task.cancel()
+        downloadTasks.removeValue(forKey: episode.id)
+        activeDownloads.removeValue(forKey: episode.id)
+    }
+    
+    func deleteDownload(_ episode: Episode) {
+        guard episode.isDownloaded else { return }
+        guard let fileURLString = episode.downloadedFileURL else { return }
+        guard let fileURL = URL(string: fileURLString) else { return }
+        
+        try? FileManager.default.removeItem(at: fileURL)
+        
+        episode.isDownloaded = false
+        episode.downloadedFileURL = nil
+        try? modelContext?.save()
+    }
+    
+    private func saveDownloadedFile(from tempURL: URL, for episodeID: UUID) {
+        guard let modelContext = modelContext else {
+            print("No model context available")
+            return
+        }
+        
+        // Find the episode
+        let descriptor = FetchDescriptor<Episode>(
+            predicate: #Predicate { ep in
+                ep.id == episodeID
+            }
+        )
+        
+        guard let episode = try? modelContext.fetch(descriptor).first else {
+            print("Could not find episode with ID: \(episodeID)")
+            return
+        }
+        
+        // Create downloads directory
+        let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let downloadsPath = documentsPath.appendingPathComponent("Downloads", isDirectory: true)
+        
+        do {
+            try FileManager.default.createDirectory(at: downloadsPath, withIntermediateDirectories: true)
+        } catch {
+            print("Failed to create downloads directory: \(error)")
+            return
+        }
+        
+        // Generate unique filename
+        let fileExtension = tempURL.pathExtension.isEmpty ? "mp3" : tempURL.pathExtension
+        let fileName = "\(episodeID.uuidString).\(fileExtension)"
+        let destinationURL = downloadsPath.appendingPathComponent(fileName)
+        
+        // Move or copy file to final destination
+        do {
+            // Remove existing file if present
+            if FileManager.default.fileExists(atPath: destinationURL.path) {
+                try FileManager.default.removeItem(at: destinationURL)
+            }
+            
+            // Try to move first (faster), fall back to copy if that fails
+            do {
+                try FileManager.default.moveItem(at: tempURL, to: destinationURL)
+            } catch {
+                // If move fails, try copying instead
+                try FileManager.default.copyItem(at: tempURL, to: destinationURL)
+            }
+            
+            // Update episode
+            episode.isDownloaded = true
+            episode.downloadedFileURL = destinationURL.absoluteString
+            
+            // Add to queue if not already in queue
+            if episode.queuePosition == nil {
+                // Find the highest queue position
+                let allEpisodesDescriptor = FetchDescriptor<Episode>()
+                let allEpisodes = try? modelContext.fetch(allEpisodesDescriptor)
+                let maxPosition = allEpisodes?.compactMap { $0.queuePosition }.max() ?? -1
+                episode.queuePosition = maxPosition + 1
+            }
+            
+            try modelContext.save()
+            
+            print("✅ Successfully saved episode download to: \(destinationURL.path)")
+            print("📋 Added episode to queue at position \(episode.queuePosition ?? -1)")
+            
+        } catch {
+            print("Failed to save downloaded file: \(error)")
+        }
+    }
+}
+
+// MARK: - URLSessionDownloadDelegate
+
+extension DownloadManager: URLSessionDownloadDelegate {
+    nonisolated func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {
+        guard let url = downloadTask.originalRequest?.url else { return }
+        
+        // IMPORTANT: Copy the file immediately before this method returns!
+        // The system will delete the temp file after this delegate method completes.
+        
+        // Create a temporary destination in a location we control
+        let tempDirectory = FileManager.default.temporaryDirectory
+        let tempDestination = tempDirectory.appendingPathComponent(UUID().uuidString + "." + location.pathExtension)
+        
+        do {
+            // Copy the file immediately to our own temp location
+            try FileManager.default.copyItem(at: location, to: tempDestination)
+            
+            // Now we can safely process the file asynchronously
+            Task { @MainActor in
+                var episodeID: UUID?
+                for (id, task) in downloadTasks {
+                    if task == downloadTask {
+                        episodeID = id
+                        break
+                    }
+                }
+                
+                guard let episodeID = episodeID else {
+                    // Clean up our temp file if we can't find the episode
+                    try? FileManager.default.removeItem(at: tempDestination)
+                    return
+                }
+                
+                // Save the file from our temp location
+                saveDownloadedFile(from: tempDestination, for: episodeID)
+                
+                // Clean up our temp file
+                try? FileManager.default.removeItem(at: tempDestination)
+                
+                // Clean up download tracking
+                downloadTasks.removeValue(forKey: episodeID)
+                activeDownloads.removeValue(forKey: episodeID)
+            }
+        } catch {
+            print("Failed to copy temp download file: \(error)")
+        }
+    }
+    
+    nonisolated func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didWriteData bytesWritten: Int64, totalBytesWritten: Int64, totalBytesExpectedToWrite: Int64) {
+        guard totalBytesExpectedToWrite > 0 else { return }
+        
+        let progress = Double(totalBytesWritten) / Double(totalBytesExpectedToWrite)
+        
+        Task { @MainActor in
+            // Find the episode ID for this download
+            for (id, task) in downloadTasks {
+                if task == downloadTask {
+                    activeDownloads[id] = progress
+                    break
+                }
+            }
+        }
+    }
+    
+    nonisolated func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+        guard let error = error else { return }
+        
+        Task { @MainActor in
+            // Find and remove the failed download
+            var episodeID: UUID?
+            for (id, downloadTask) in downloadTasks {
+                if downloadTask == task {
+                    episodeID = id
+                    break
+                }
+            }
+            
+            if let episodeID = episodeID {
+                downloadTasks.removeValue(forKey: episodeID)
+                activeDownloads.removeValue(forKey: episodeID)
+            }
+            
+            print("Download failed: \(error.localizedDescription)")
+        }
+    }
+}

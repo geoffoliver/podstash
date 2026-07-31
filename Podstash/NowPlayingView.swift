@@ -1,0 +1,208 @@
+//
+//  NowPlayingView.swift
+//  Podstash
+//
+//  Created by Geoff Oliver on 7/30/26.
+//
+
+import SwiftUI
+
+struct NowPlayingView: View {
+    @EnvironmentObject var audioPlayer: AudioPlayerManager
+    
+    var body: some View {
+        if let episode = audioPlayer.currentEpisode {
+            VStack(spacing: 20) {
+                #if os(macOS)
+                HStack {
+                    Spacer()
+                    Button {
+                        audioPlayer.showMiniPlayer()
+                    } label: {
+                        Label("Mini Player", systemImage: "pip.enter")
+                    }
+                    .help("Open mini player window")
+                    .padding()
+                }
+                #endif
+                
+                Spacer()
+                
+                // Episode Info
+                VStack(spacing: 8) {
+                    Text(episode.title)
+                        .font(.title2)
+                        .fontWeight(.semibold)
+                        .multilineTextAlignment(.center)
+                        .lineLimit(2)
+                    
+                    if let podcast = episode.podcast {
+                        Text(podcast.title)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .padding(.horizontal)
+                
+                Spacer()
+                
+                // Progress Slider
+                VStack(spacing: 8) {
+                    Slider(
+                        value: Binding(
+                            get: { audioPlayer.currentTime },
+                            set: { audioPlayer.seek(to: $0) }
+                        ),
+                        in: 0...max(audioPlayer.duration, 1)
+                    )
+                    .padding(.horizontal)
+                    
+                    HStack {
+                        Text(formatTime(audioPlayer.currentTime))
+                            .font(.caption)
+                            .monospacedDigit()
+                            .foregroundStyle(.secondary)
+                        
+                        Spacer()
+                        
+                        Text(formatTime(audioPlayer.duration))
+                            .font(.caption)
+                            .monospacedDigit()
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(.horizontal)
+                }
+                
+                // Playback Controls
+                HStack(spacing: 40) {
+                    // Skip Back 15s
+                    Button {
+                        audioPlayer.skip(by: -15)
+                    } label: {
+                        Image(systemName: "gobackward.15")
+                            .font(.title)
+                    }
+                    
+                    // Play/Pause
+                    Button {
+                        audioPlayer.togglePlayPause()
+                    } label: {
+                        Image(systemName: audioPlayer.isPlaying ? "pause.circle.fill" : "play.circle.fill")
+                            .font(.system(size: 64))
+                    }
+                    
+                    // Skip Forward 30s
+                    Button {
+                        audioPlayer.skip(by: 30)
+                    } label: {
+                        Image(systemName: "goforward.30")
+                            .font(.title)
+                    }
+                }
+                .padding()
+                
+                // Playback Speed
+                Menu {
+                    ForEach([0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0], id: \.self) { speed in
+                        Button(action: {
+                            audioPlayer.setPlaybackRate(Float(speed))
+                        }) {
+                            HStack {
+                                Text("\(speed, specifier: "%.2f")x")
+                                if audioPlayer.playbackRate == Float(speed) {
+                                    Image(systemName: "checkmark")
+                                }
+                            }
+                        }
+                    }
+                } label: {
+                    HStack {
+                        Image(systemName: "gauge")
+                        Text("\(audioPlayer.playbackRate, specifier: "%.2f")x")
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+                    .background(.regularMaterial)
+                    .cornerRadius(20)
+                }
+                
+                Spacer()
+            }
+            .padding()
+        } else {
+            // Empty State
+            VStack(spacing: 16) {
+                Image(systemName: "music.note")
+                    .font(.system(size: 64))
+                    .foregroundStyle(.secondary)
+                
+                Text("No Episode Playing")
+                    .font(.title2)
+                    .fontWeight(.semibold)
+                
+                Text("Select an episode from your podcasts to start listening")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+            }
+            .padding()
+        }
+    }
+    
+    private func formatTime(_ time: TimeInterval) -> String {
+        let hours = Int(time) / 3600
+        let minutes = (Int(time) % 3600) / 60
+        let seconds = Int(time) % 60
+        
+        if hours > 0 {
+            return String(format: "%d:%02d:%02d", hours, minutes, seconds)
+        } else {
+            return String(format: "%d:%02d", minutes, seconds)
+        }
+    }
+}
+
+// MARK: - Compact Player Bar (for iOS bottom bar)
+
+struct CompactPlayerBar: View {
+    @EnvironmentObject var audioPlayer: AudioPlayerManager
+    
+    var body: some View {
+        if let episode = audioPlayer.currentEpisode {
+            HStack(spacing: 12) {
+                // Episode Info
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(episode.title)
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                        .lineLimit(1)
+                    
+                    if let podcast = episode.podcast {
+                        Text(podcast.title)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+                }
+                
+                Spacer()
+                
+                // Play/Pause Button
+                Button {
+                    audioPlayer.togglePlayPause()
+                } label: {
+                    Image(systemName: audioPlayer.isPlaying ? "pause.fill" : "play.fill")
+                        .font(.title3)
+                }
+                .buttonStyle(.plain)
+            }
+            .padding()
+            .background(.regularMaterial)
+        }
+    }
+}
+
+#Preview {
+    NowPlayingView()
+        .environmentObject(AudioPlayerManager())
+}

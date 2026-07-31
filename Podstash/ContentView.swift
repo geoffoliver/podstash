@@ -44,6 +44,17 @@ struct ContentView: View {
                     onCancel: { refreshCoordinator.cancelRefresh() }
                 )
                 .transition(.move(edge: .bottom).combined(with: .opacity))
+            } else if let message = refreshCoordinator.refreshCompleted {
+                // Show completion message in the status bar area
+                RefreshStatusBar(
+                    completionMessage: message,
+                    onDismiss: {
+                        withAnimation {
+                            refreshCoordinator.refreshCompleted = nil
+                        }
+                    }
+                )
+                .transition(.move(edge: .bottom).combined(with: .opacity))
             }
             
             // Transport controls bar at bottom
@@ -103,16 +114,6 @@ struct ContentView: View {
                     .padding()
                     .transition(.move(edge: .top).combined(with: .opacity))
                     .zIndex(1)
-            } else if let message = refreshCoordinator.refreshCompleted {
-                Text(message)
-                    .font(.subheadline)
-                    .padding()
-                    .background(.regularMaterial)
-                    .cornerRadius(10)
-                    .shadow(radius: 5)
-                    .padding()
-                    .transition(.move(edge: .top).combined(with: .opacity))
-                    .zIndex(1)
             }
         }
         .onChange(of: opmlCoordinator.isImporting) { showingImportProgress = $0 }
@@ -155,6 +156,17 @@ struct ContentView: View {
                         currentPodcastTitle: refreshCoordinator.currentPodcastTitle,
                         progress: refreshCoordinator.progress,
                         onCancel: { refreshCoordinator.cancelRefresh() }
+                    )
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                } else if let message = refreshCoordinator.refreshCompleted {
+                    // Show completion message in the status bar area
+                    RefreshStatusBar(
+                        completionMessage: message,
+                        onDismiss: {
+                            withAnimation {
+                                refreshCoordinator.refreshCompleted = nil
+                            }
+                        }
                     )
                     .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
@@ -214,16 +226,6 @@ struct ContentView: View {
         }
         .overlay(alignment: .top) {
             if let message = importCompletedMessage {
-                Text(message)
-                    .font(.subheadline)
-                    .padding()
-                    .background(.regularMaterial)
-                    .cornerRadius(10)
-                    .shadow(radius: 5)
-                    .padding()
-                    .transition(.move(edge: .top).combined(with: .opacity))
-                    .zIndex(1)
-            } else if let message = refreshCoordinator.refreshCompleted {
                 Text(message)
                     .font(.subheadline)
                     .padding()

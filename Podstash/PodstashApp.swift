@@ -427,8 +427,31 @@ class OPMLFeedParser: NSObject, XMLParserDelegate {
     }
 }
 
+#if os(macOS)
+// Global reference to audio player for menu validation
+// This avoids capturing @StateObject in the commands block
+@MainActor
+class MenuCoordinator {
+    static let shared = MenuCoordinator()
+    weak var audioPlayer: AudioPlayerManager?
+    
+    private init() {}
+}
+
+// App delegate to configure menu behavior  
+class AppDelegate: NSObject, NSApplicationDelegate {
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        // Nothing needed here for now
+    }
+}
+#endif
+
 @main
 struct PodstashApp: App {
+    #if os(macOS)
+    @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
+    #endif
+    
     @StateObject private var settings = AppSettings()
     @StateObject private var addPodcastCoordinator = AddPodcastCoordinator()
     @StateObject private var opmlCoordinator = OPMLImportCoordinator()
@@ -495,43 +518,17 @@ struct PodstashApp: App {
                             autoRefreshManager?.startAutoRefresh()
                         }
                     }
+                    
+                    #if os(macOS)
+                    // Register audio player for menu validation
+                    MenuCoordinator.shared.audioPlayer = audioPlayer
+                    #endif
                 }
                 .sheet(isPresented: $addPodcastCoordinator.isPresented) {
                     AddPodcastSheet(coordinator: addPodcastCoordinator)
                 }
         }
         .modelContainer(sharedModelContainer)
-        .commands {
-            // Remove the default "New Window" command
-            CommandGroup(replacing: .newItem) {
-                Button("Add Podcast by URL…") {
-                    addPodcastCoordinator.showDialog()
-                }
-                .keyboardShortcut("n", modifiers: .command)
-                
-                Button("Import OPML…") {
-                    opmlCoordinator.importOPML()
-                }
-                .keyboardShortcut("i", modifiers: .command)
-                
-                Divider()
-                
-                Button("Refresh All Feeds") {
-                    refreshCoordinator.refreshAllFeeds()
-                }
-                .keyboardShortcut("r", modifiers: .command)
-                .disabled(refreshCoordinator.isRefreshing)
-            }
-            
-            #if os(macOS)
-            CommandGroup(after: .windowArrangement) {
-                Button("Mini Player") {
-                    audioPlayer.showMiniPlayer()
-                }
-                .keyboardShortcut("m", modifiers: [.command, .shift])
-            }
-            #endif
-        }
         
         #if os(macOS)
         Settings {
@@ -539,7 +536,39 @@ struct PodstashApp: App {
         }
         #endif
     }
+    
+    @CommandsBuilder var commands: some Commands {
+        CommandGroup(replacing: .newItem) {
+            Button("Add Podcast by URL…") {
+                addPodcastCoordinator.showDialog()
+            }
+            .keyboardShortcut("n", modifiers: .command)
+            
+            Button("Import OPML…") {
+                opmlCoordinator.importOPML()
+            }
+            .keyboardShortcut("i", modifiers: .command)
+            
+            Divider()
+            
+            Button("Refresh All Feeds") {
+                refreshCoordinator.refreshAllFeeds()
+            }
+            .keyboardShortcut("r", modifiers: .command)
+            .disabled(refreshCoordinator.isRefreshing)
+        }
+        
+        CommandGroup(before: .windowList) {
+            Button("Mini Player") {
+                MenuCoordinator.shared.audioPlayer?.showMiniPlayer()
+            }
+            .keyboardShortcut("m", modifiers: [.command, .shift])
+            
+            Divider()
+        }
+    }
 }
+
 // MARK: - Add Podcast Sheet
 
 struct AddPodcastSheet: View {

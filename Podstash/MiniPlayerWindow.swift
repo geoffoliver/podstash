@@ -94,6 +94,9 @@ class SquareMiniPlayerWindow: NSWindow {
     override init(contentRect: NSRect, styleMask style: NSWindow.StyleMask, backing backingStoreType: NSWindow.BackingStoreType, defer flag: Bool) {
         super.init(contentRect: contentRect, styleMask: style, backing: backingStoreType, defer: flag)
         
+        // Exclude this window from the Window menu to prevent menu update conflicts
+        self.isExcludedFromWindowsMenu = true
+        
         // Add rounded corners to the window
         self.contentView?.wantsLayer = true
         self.contentView?.layer?.cornerRadius = 12

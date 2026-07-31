@@ -7,52 +7,96 @@
 
 import SwiftUI
 
-/// A subtle status bar that shows refresh progress at the bottom of the window
+/// A subtle status bar that shows refresh progress or completion message at the bottom of the window
 struct RefreshStatusBar: View {
     let currentPodcastTitle: String?
     let progress: (current: Int, total: Int)?
     let onCancel: () -> Void
+    let completionMessage: String?
+    let onDismiss: (() -> Void)?
+    
+    // Convenience initializer for backward compatibility
+    init(currentPodcastTitle: String?, progress: (current: Int, total: Int)?, onCancel: @escaping () -> Void) {
+        self.currentPodcastTitle = currentPodcastTitle
+        self.progress = progress
+        self.onCancel = onCancel
+        self.completionMessage = nil
+        self.onDismiss = nil
+    }
+    
+    // Full initializer with completion message support
+    init(currentPodcastTitle: String? = nil, progress: (current: Int, total: Int)? = nil, onCancel: @escaping () -> Void = {}, completionMessage: String? = nil, onDismiss: (() -> Void)? = nil) {
+        self.currentPodcastTitle = currentPodcastTitle
+        self.progress = progress
+        self.onCancel = onCancel
+        self.completionMessage = completionMessage
+        self.onDismiss = onDismiss
+    }
     
     var body: some View {
         HStack(spacing: 12) {
-            // Spinner
-            ProgressView()
-                .controlSize(.small)
-                .scaleEffect(0.8)
-            
-            // Status text
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 8) {
-                    Text("Refreshing Feeds")
-                        .font(.caption)
-                        .fontWeight(.medium)
-                    
-                    if let progress = progress {
-                        Text("(\(progress.current)/\(progress.total))")
+            if let message = completionMessage {
+                // Completion state
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundStyle(.green)
+                    .imageScale(.small)
+                
+                Text(message)
+                    .font(.caption)
+                    .fontWeight(.medium)
+                
+                Spacer()
+                
+                // Dismiss button
+                Button(action: {
+                    onDismiss?()
+                }) {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(.secondary)
+                        .imageScale(.small)
+                }
+                .buttonStyle(.plain)
+                .help("Dismiss")
+            } else {
+                // Refreshing state
+                ProgressView()
+                    .controlSize(.small)
+                    .scaleEffect(0.8)
+                
+                // Status text
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 8) {
+                        Text("Refreshing Feeds")
                             .font(.caption)
+                            .fontWeight(.medium)
+                        
+                        if let progress = progress {
+                            Text("(\(progress.current)/\(progress.total))")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    
+                    if let title = currentPodcastTitle {
+                        Text(title)
+                            .font(.caption2)
                             .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
                     }
                 }
                 
-                if let title = currentPodcastTitle {
-                    Text(title)
-                        .font(.caption2)
+                Spacer()
+                
+                // Cancel button
+                Button(action: onCancel) {
+                    Image(systemName: "xmark.circle.fill")
                         .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
+                        .imageScale(.small)
                 }
+                .buttonStyle(.plain)
+                .help("Cancel Refresh")
             }
-            
-            Spacer()
-            
-            // Cancel button
-            Button(action: onCancel) {
-                Image(systemName: "xmark.circle.fill")
-                    .foregroundStyle(.secondary)
-                    .imageScale(.small)
-            }
-            .buttonStyle(.plain)
-            .help("Cancel Refresh")
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)

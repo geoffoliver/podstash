@@ -42,11 +42,22 @@ class AudioPlayerManager: ObservableObject {
     func showMiniPlayer() {
         guard let settings = settings else { return }
         
+        // If mini player already exists and is visible, just bring it to front
+        if let existingWindow = miniPlayerController?.window, existingWindow.isVisible {
+            existingWindow.makeKeyAndOrderFront(nil)
+            return
+        }
+        
         let isNewWindow = miniPlayerController == nil
         
+        // Create mini player window if needed
         if miniPlayerController == nil {
             miniPlayerController = MiniPlayerWindowController(audioPlayer: self, settings: settings)
         }
+        
+        // Batch window operations to minimize menu updates
+        NSAnimationContext.beginGrouping()
+        NSAnimationContext.current.duration = 0
         
         // Hide all main windows when showing mini player
         for window in NSApp.windows {
@@ -62,20 +73,31 @@ class AudioPlayerManager: ObservableObject {
             }
         }
         
-        miniPlayerController?.window?.makeKeyAndOrderFront(nil)
-        
-        // Only center if this is a new window with no saved position
-        if isNewWindow && UserDefaults.standard.string(forKey: "miniPlayerWindowFrame") == nil {
-            miniPlayerController?.window?.center()
+        // Show mini player
+        if let window = miniPlayerController?.window {
+            window.makeKeyAndOrderFront(nil)
+            
+            // Only center if this is a new window with no saved position
+            if isNewWindow && UserDefaults.standard.string(forKey: "miniPlayerWindowFrame") == nil {
+                window.center()
+            }
         }
+        
+        NSAnimationContext.endGrouping()
     }
     
     func hideMiniPlayer() {
+        // Batch window operations to minimize menu updates
+        NSAnimationContext.beginGrouping()
+        NSAnimationContext.current.duration = 0
+        
         miniPlayerController?.close()
         miniPlayerController = nil
         
         // Restore main window when hiding mini player
         restoreMainWindow()
+        
+        NSAnimationContext.endGrouping()
     }
     
     private func restoreMainWindow() {

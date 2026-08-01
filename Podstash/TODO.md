@@ -1,5 +1,7 @@
 # TODO
 
+- [ ] Bug - app downloads episodes even when "auto download" setting is disabled (i.e., the default setting)
+- [ ] Bug - inconsistent row slide controls (mark as played/remove) on iOS and macOS queue views. Make iOS match macOS, both buttons on right, only icons.
 - [ ] ui enhancement - remove number from start of queue items
 - [ ] ui bug/enhancement - iOS "now playing" view -- where is it?
 - [ ] ui bug/enhancement - iOS, show artwork with bottom controls

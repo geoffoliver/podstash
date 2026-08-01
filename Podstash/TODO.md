@@ -4,6 +4,7 @@
 - [ ] Bug - app downloads episodes even when "auto download" setting is disabled (i.e., the default setting)
 - [ ] Bug - inconsistent row slide controls (mark as played/remove) on iOS and macOS queue views. Make iOS match macOS, both buttons on right, only icons.
 - [ ] Bug - iOS transport controls only include play/pause - no way to scrub. probably related to missing "now playing" view
+- [ ] UI bug - "Queue" item in sidebar is weird. Click directly on it results in two background colors, one spans full width of sidebar and is not as vibrant/bright, other is correct (not full width, rounded corners) and is very bright blue.
 - [ ] UI bug - episode detail dialog dropdown button, shortcut for all items appear to be return/enter -- get rid of shortcuts for this menu
 - [ ] UI bug - "More" button on podcast description on desktop breaks whole view - window and sidebar contents disappear!
 - [ ] UI bug - User can close main window and there is no way to get it back

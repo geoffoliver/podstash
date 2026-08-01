@@ -26,38 +26,39 @@ echo -e "${BLUE}Creating Airfoil support directories...${NC}"
 mkdir -p ~/Library/Application\ Support/Airfoil/TrackTitles
 mkdir -p ~/Library/Application\ Support/Airfoil/RemoteControl
 
-# Check if the AppleScript source files exist
-if [ ! -f "$SCRIPT_DIR/TrackMetadata.applescript" ]; then
-    echo -e "${RED}Error: TrackMetadata.applescript not found in $SCRIPT_DIR${NC}"
+# Check if the precompiled AppleScript resources exist (built by the
+# "Compile AppleScript Resources" build phase into the app's Resources folder)
+if [ ! -f "$SCRIPT_DIR/TrackMetadata.scpt" ]; then
+    echo -e "${RED}Error: TrackMetadata.scpt not found in $SCRIPT_DIR${NC}"
     exit 1
 fi
 
-if [ ! -f "$SCRIPT_DIR/RemoteControl.applescript" ]; then
-    echo -e "${RED}Error: RemoteControl.applescript not found in $SCRIPT_DIR${NC}"
+if [ ! -f "$SCRIPT_DIR/RemoteControl.scpt" ]; then
+    echo -e "${RED}Error: RemoteControl.scpt not found in $SCRIPT_DIR${NC}"
     exit 1
 fi
 
-# Compile and install track metadata script
-echo -e "${BLUE}Compiling and installing track metadata script...${NC}"
-osacompile -o ~/Library/Application\ Support/Airfoil/TrackTitles/${BUNDLE_ID}.scpt \
-    "$SCRIPT_DIR/TrackMetadata.applescript"
+# Install track metadata script
+echo -e "${BLUE}Installing track metadata script...${NC}"
+cp "$SCRIPT_DIR/TrackMetadata.scpt" \
+    ~/Library/Application\ Support/Airfoil/TrackTitles/${BUNDLE_ID}.scpt
 
 if [ $? -eq 0 ]; then
     echo -e "${GREEN}✓ Track metadata script installed${NC}"
 else
-    echo -e "${RED}✗ Failed to compile track metadata script${NC}"
+    echo -e "${RED}✗ Failed to install track metadata script${NC}"
     exit 1
 fi
 
-# Compile and install remote control script
-echo -e "${BLUE}Compiling and installing remote control script...${NC}"
-osacompile -o ~/Library/Application\ Support/Airfoil/RemoteControl/dacp.${BUNDLE_ID}.scpt \
-    "$SCRIPT_DIR/RemoteControl.applescript"
+# Install remote control script
+echo -e "${BLUE}Installing remote control script...${NC}"
+cp "$SCRIPT_DIR/RemoteControl.scpt" \
+    ~/Library/Application\ Support/Airfoil/RemoteControl/dacp.${BUNDLE_ID}.scpt
 
 if [ $? -eq 0 ]; then
     echo -e "${GREEN}✓ Remote control script installed${NC}"
 else
-    echo -e "${RED}✗ Failed to compile remote control script${NC}"
+    echo -e "${RED}✗ Failed to install remote control script${NC}"
     exit 1
 fi
 

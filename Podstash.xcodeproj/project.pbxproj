@@ -14,9 +14,24 @@
 		6C9955E2301C05A700F804F3 /* Exceptions for "Podstash" folder in "Podstash" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
+				ADD_PODCAST_BY_URL_FEATURE.md,
+				"Airfoil Info.md",
+				AIRFOIL_CHECKLIST.md,
+				AIRFOIL_CLEANUP_GUIDE.md,
+				AIRFOIL_CORRECTIONS.md,
+				AIRFOIL_HOW_IT_WORKS.md,
+				AIRFOIL_INTEGRATION.md,
+				AIRFOIL_QUICKSTART.md,
+				AirfoilScriptsInfoPlistChanges.md,
 				AirfoilScriptsTestScript.applescript,
+				ARTWORK_CACHING_README.md,
+				CRITICAL_FIXES_ROUND_2.md,
 				Info.plist,
+				KEYBOARD_ACCESSIBILITY.md,
+				"PERFORMANCE_FIXES 2.md",
+				PERFORMANCE_FIXES.md,
 				RemoteControl.applescript,
+				TODO.md,
 				TrackMetadata.applescript,
 			);
 			target = 6C9955A9301BE5A500F804F3 /* Podstash */;
@@ -71,6 +86,7 @@
 				6C9955A6301BE5A500F804F3 /* Sources */,
 				6C9955A7301BE5A500F804F3 /* Frameworks */,
 				6C9955A8301BE5A500F804F3 /* Resources */,
+				0ABF5342A8F64BD3B20BD246 /* Compile AppleScript Resources */,
 			);
 			buildRules = (
 			);
@@ -131,6 +147,27 @@
 		};
 /* End PBXResourcesBuildPhase section */
 
+/* Begin PBXShellScriptBuildPhase section */
+		0ABF5342A8F64BD3B20BD246 /* Compile AppleScript Resources */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+				"$(SRCROOT)/Podstash/TrackMetadata.applescript",
+				"$(SRCROOT)/Podstash/RemoteControl.applescript",
+			);
+			name = "Compile AppleScript Resources";
+			outputPaths = (
+				"$(BUILT_PRODUCTS_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/TrackMetadata.scpt",
+				"$(BUILT_PRODUCTS_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/RemoteControl.scpt",
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "if [ \"${PLATFORM_NAME}\" = \"macosx\" ]; then\n  DEST_DIR=\"${BUILT_PRODUCTS_DIR}/${UNLOCALIZED_RESOURCES_FOLDER_PATH}\"\n  mkdir -p \"${DEST_DIR}\"\n  osacompile -o \"${DEST_DIR}/TrackMetadata.scpt\" \"${SRCROOT}/Podstash/TrackMetadata.applescript\"\n  osacompile -o \"${DEST_DIR}/RemoteControl.scpt\" \"${SRCROOT}/Podstash/RemoteControl.applescript\"\nfi\n";
+		};
+/* End PBXShellScriptBuildPhase section */
+
 /* Begin PBXSourcesBuildPhase section */
 		6C9955A6301BE5A500F804F3 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
@@ -180,7 +217,7 @@
 				DEVELOPMENT_TEAM = 8F5SLDK3C7;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
-				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GCC_C_LANGUAGE_STANDARD = gnu17;
 				GCC_DYNAMIC_NO_PIC = NO;
 				GCC_NO_COMMON_BLOCKS = YES;
@@ -242,7 +279,7 @@
 				DEVELOPMENT_TEAM = 8F5SLDK3C7;
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
-				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = NO;
 				GCC_C_LANGUAGE_STANDARD = gnu17;
 				GCC_NO_COMMON_BLOCKS = YES;
 				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;

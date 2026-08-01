@@ -407,9 +407,9 @@ class OPMLFeedParser: NSObject, XMLParserDelegate {
                 return
             }
             
-            let title = attributeDict["title"] ?? attributeDict["text"] ?? "Untitled Feed"
+            let title = (attributeDict["title"] ?? attributeDict["text"] ?? "Untitled Feed").decodingBasicHTMLEntities()
             let websiteURL = attributeDict["htmlUrl"]
-            let description = attributeDict["description"]
+            let description = attributeDict["description"]?.decodingBasicHTMLEntities()
             
             let feed = OPMLFeed(
                 title: title,

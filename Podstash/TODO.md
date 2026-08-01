@@ -3,6 +3,7 @@
 - [ ] ui enhancement - remove number from start of queue items
 - [ ] ui bug/enhancement - iOS "now playing" view -- where is it?
 - [ ] ui bug/enhancement - iOS, show artwork with bottom controls
+- [ ] ui enhancement - hide iCloud stuff until it can be implemented
 - [ ] sync - enroll in paid Apple Developer Program, enable CloudKit capability, flip `cloudKitEntitlementsConfigured` in PodstashApp.swift to sync data between devices
 
 # Maybe

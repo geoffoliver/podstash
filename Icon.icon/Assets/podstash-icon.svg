@@ -1,0 +1,34 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="cardGrad1" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FF8A70"/>
+      <stop offset="100%" stop-color="#E14D8C"/>
+    </linearGradient>
+    <linearGradient id="cardGrad2" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#C24DB0"/>
+      <stop offset="100%" stop-color="#8A47C8"/>
+    </linearGradient>
+    <linearGradient id="cardGrad3" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#6C4CE0"/>
+      <stop offset="100%" stop-color="#4432C8"/>
+    </linearGradient>
+    <filter id="softShadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="16" stdDeviation="20" flood-color="#2E1A5C" flood-opacity="0.30"/>
+    </filter>
+  </defs>
+
+  <!-- Stashed episode cards, fanned like a small deck -->
+  <g filter="url(#softShadow)">
+    <rect x="222" y="332" width="420" height="420" rx="80"
+          transform="rotate(-16 432 542)"
+          fill="url(#cardGrad1)"/>
+    <rect x="292" y="292" width="420" height="420" rx="80"
+          transform="rotate(-6 502 502)"
+          fill="url(#cardGrad2)"/>
+    <rect x="302" y="252" width="420" height="420" rx="80"
+          fill="url(#cardGrad3)"/>
+  </g>
+
+  <!-- Play triangle, centered in top card (center at 512,462) -->
+  <path d="M462 372 L622 462 L462 552 Z" fill="#FFFFFF"/>
+</svg>

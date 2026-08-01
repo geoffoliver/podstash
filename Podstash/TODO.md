@@ -1,6 +1,6 @@
 # TODO
 
-- [ ] Bug - app downloads episodes even when "auto download" setting is disabled (i.e., the default setting)
+- [x] Bug - app downloads episodes even when "auto download" setting is disabled (i.e., the default setting)
 - [ ] Bug - iOS transport controls only include play/pause - no way to scrub. probably related to missing "now playing" view
   - [ ] Bug - iOS "now playing" view -- where is it?
   - [ ] Enhancement - iOS, show artwork with bottom controls

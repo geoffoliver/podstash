@@ -49,8 +49,8 @@ class RSSFeedParser: NSObject, XMLParserDelegate {
     private var isInItem = false
     private var isInChannel = false
     
-    // Limit episodes to avoid parsing huge feeds
-    private let maxEpisodesToParse = 200  // Only parse first 200 episodes
+    // Safety valve against pathological/malformed feeds - real feeds won't hit this
+    private let maxEpisodesToParse = 5000
     private var didAbortIntentionally = false
     
     private let dateFormatter: DateFormatter = {

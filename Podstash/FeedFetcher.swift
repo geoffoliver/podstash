@@ -130,11 +130,23 @@ class FeedFetcher {
             modelContext.insert(episode)
         }
         
+        // Auto-download the most recent episodes per the user's setting
+        if let downloadManager = downloadManager {
+            let recentEpisodes = podcast.episodes
+                .sorted { $0.publishDate > $1.publishDate }
+                .prefix(settings.maxEpisodesToDownload)
+
+            for episode in recentEpisodes
+            where !episode.isDownloaded && !downloadManager.isDownloading(episode) {
+                downloadManager.downloadEpisode(episode)
+            }
+        }
+
         // Save if requested
         if shouldSave {
             try? modelContext.save()
         }
-        
+
         // Yield to let other tasks run and keep UI responsive
         await Task.yield()
     }

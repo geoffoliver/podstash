@@ -465,11 +465,9 @@ struct PodcastListView: View {
             }
         }
         
-        for podcast in podcastsToDelete {
-            modelContext.delete(podcast)
-        }
-        
-        try? modelContext.save()
+        let subscriptionManager = SubscriptionManager(modelContext: modelContext)
+        subscriptionManager.unsubscribe(podcasts: podcastsToDelete)
+
         multiSelection.removeAll()
         selectedPodcast = nil
     }

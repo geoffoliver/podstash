@@ -194,8 +194,13 @@ struct PodcastDetailView: View {
     }
     
     private func unsubscribe() {
-        modelContext.delete(podcast)
-        try? modelContext.save()
+        if let currentEpisode = audioPlayer.currentEpisode,
+           podcast.episodes.contains(where: { $0.id == currentEpisode.id }) {
+            audioPlayer.stop()
+        }
+
+        let subscriptionManager = SubscriptionManager(modelContext: modelContext)
+        subscriptionManager.unsubscribe(podcast: podcast)
         dismiss()
     }
     

@@ -51,10 +51,35 @@ class SubscriptionManager {
         }
     }
     
-    /// Unsubscribe from a podcast
-    func unsubscribe(podcast: Podcast) {
-        modelContext.delete(podcast)
-        try? modelContext.save()
+    /// Unsubscribe from a podcast, deleting all of its data: episodes, playback
+    /// state, and any downloaded audio files on disk.
+    /// - Returns: true if the unsubscribe was actually persisted to the store.
+    @discardableResult
+    func unsubscribe(podcast: Podcast) -> Bool {
+        unsubscribe(podcasts: [podcast])
+    }
+
+    /// Unsubscribe from multiple podcasts in a single save.
+    /// - Returns: true if the unsubscribe was actually persisted to the store.
+    @discardableResult
+    func unsubscribe(podcasts: [Podcast]) -> Bool {
+        for podcast in podcasts {
+            for episode in podcast.episodes {
+                if let downloadedFileURLString = episode.downloadedFileURL,
+                   let downloadedFileURL = URL(string: downloadedFileURLString) {
+                    try? FileManager.default.removeItem(at: downloadedFileURL)
+                }
+            }
+            modelContext.delete(podcast)
+        }
+
+        do {
+            try modelContext.save()
+            return true
+        } catch {
+            print("Error unsubscribing: \(error)")
+            return false
+        }
     }
     
     /// Get all subscribed podcasts

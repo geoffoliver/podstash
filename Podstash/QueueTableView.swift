@@ -125,9 +125,9 @@ struct QueueTableView: NSViewRepresentable {
             let view = NSHostingView(
                 rootView: QueueEpisodeRow(
                     episode: episode,
+                    onShowInfo: { [weak self] in self?.parent.onShowInfo?($0) },
                     isCurrentlyPlaying: episode.id == parent.currentlyPlayingID,
-                    isPlaying: parent.isPlaying,
-                    onShowInfo: parent.onShowInfo
+                    isPlaying: parent.isPlaying
                 )
             )
             return view

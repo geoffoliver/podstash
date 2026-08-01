@@ -16,6 +16,7 @@ struct PodcastDetailView: View {
     @EnvironmentObject var downloadManager: DownloadManager
     @State private var showingUnsubscribeAlert = false
     @State private var selectedTab: EpisodeFilter = .unplayed
+    @State private var episodeForInfoSheet: Episode?
     @Environment(\.dismiss) private var dismiss
     
     enum EpisodeFilter {
@@ -85,7 +86,7 @@ struct PodcastDetailView: View {
                             Button {
                                 audioPlayer.play(episode: episode)
                             } label: {
-                                EpisodeRowView(episode: episode)
+                                EpisodeRowView(episode: episode, onShowInfo: { episodeForInfoSheet = $0 })
                             }
                             .buttonStyle(.plain)
                             
@@ -133,7 +134,7 @@ struct PodcastDetailView: View {
                             } label: {
                                 Label("Play", systemImage: "play.fill")
                             }
-                            
+
                             Button {
                                 addToQueue(episode)
                             } label: {
@@ -190,6 +191,9 @@ struct PodcastDetailView: View {
             }
         } message: {
             Text("Are you sure you want to unsubscribe from \"\(podcast.title)\"? This will delete all downloaded episodes.")
+        }
+        .sheet(item: $episodeForInfoSheet) { episode in
+            EpisodeDetailView(episode: episode)
         }
     }
     

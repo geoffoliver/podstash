@@ -117,9 +117,6 @@ struct QueueView: View {
                     showingRemoveAlert = true
                 }
             }
-            .sheet(item: $episodeForInfoSheet) { episode in
-                EpisodeDetailView(episode: episode)
-            }
             .toolbar {
                 ToolbarItem {
                     Menu {
@@ -162,7 +159,7 @@ struct QueueView: View {
                 .padding(.vertical, 40)
             } else {
                 ForEach(queuedEpisodes) { episode in
-                    QueueEpisodeRow(episode: episode)
+                    QueueEpisodeRow(episode: episode, onShowInfo: { episodeForInfoSheet = $0 })
                         .tag(episode.id)
                         .environmentObject(audioPlayer)
                         .simultaneousGesture(
@@ -241,7 +238,7 @@ struct QueueView: View {
             ToolbarItem(placement: .navigationBarTrailing) {
                 EditButton()
             }
-            
+
             ToolbarItem {
                 Menu {
                     Button {
@@ -277,6 +274,9 @@ struct QueueView: View {
             } else {
                 Text("Are you sure you want to remove \(multiSelection.count) episodes from the queue?")
             }
+        }
+        .sheet(item: $episodeForInfoSheet) { episode in
+            EpisodeDetailView(episode: episode)
         }
     }
     
@@ -389,26 +389,25 @@ struct QueueView: View {
 
 struct QueueEpisodeRow: View {
     let episode: Episode
-    @State private var showingDetail = false
-    
+    let onShowInfo: (Episode) -> Void
+
     #if os(macOS)
     // On macOS: Pass these explicitly to avoid environment object issues
     let isCurrentlyPlaying: Bool
     let isPlaying: Bool
-    let onShowInfo: ((Episode) -> Void)?
     #else
     // On iOS: Use environment object as normal
     @EnvironmentObject var audioPlayer: AudioPlayerManager
-    
+
     var isCurrentlyPlaying: Bool {
         audioPlayer.currentEpisode?.id == episode.id
     }
-    
+
     var isPlaying: Bool {
         audioPlayer.isPlaying
     }
     #endif
-    
+
     var body: some View {
         #if os(macOS)
         // On macOS: Row should be completely non-interactive
@@ -422,9 +421,6 @@ struct QueueEpisodeRow: View {
             rowContent
         }
         .buttonStyle(.plain)
-        .sheet(isPresented: $showingDetail) {
-            EpisodeDetailView(episode: episode)
-        }
         #endif
     }
     
@@ -510,11 +506,7 @@ struct QueueEpisodeRow: View {
 
                 // Info button
                 Button {
-                    #if os(macOS)
-                    onShowInfo?(episode)
-                    #else
-                    showingDetail = true
-                    #endif
+                    onShowInfo(episode)
                 } label: {
                     Image(systemName: "info.circle")
                         .foregroundStyle(.secondary)

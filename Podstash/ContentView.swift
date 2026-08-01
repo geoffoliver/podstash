@@ -675,7 +675,8 @@ struct PodcastRowView: View {
 struct EpisodeListView: View {
     let podcast: Podcast
     @EnvironmentObject var audioPlayer: AudioPlayerManager
-    
+    @State private var episodeForInfoSheet: Episode?
+
     var body: some View {
         List {
             if podcast.episodes.isEmpty {
@@ -694,26 +695,30 @@ struct EpisodeListView: View {
                     Button {
                         audioPlayer.play(episode: episode)
                     } label: {
-                        EpisodeRowView(episode: episode)
+                        EpisodeRowView(episode: episode, onShowInfo: { episodeForInfoSheet = $0 })
                     }
                     .buttonStyle(.plain)
                 }
             }
         }
         .navigationTitle(podcast.title)
+        .sheet(item: $episodeForInfoSheet) { episode in
+            EpisodeDetailView(episode: episode)
+        }
     }
 }
 
 struct EpisodeRowView: View {
     let episode: Episode
+    let onShowInfo: (Episode) -> Void
     @EnvironmentObject var audioPlayer: AudioPlayerManager
-    @State private var showingDetail = false
-    
+
     // Cache stripped description to avoid repeated HTML processing
     private let strippedDescription: String?
-    
-    init(episode: Episode) {
+
+    init(episode: Episode, onShowInfo: @escaping (Episode) -> Void) {
         self.episode = episode
+        self.onShowInfo = onShowInfo
         self.strippedDescription = episode.episodeDescription?.stripHTMLTags()
     }
     
@@ -781,7 +786,7 @@ struct EpisodeRowView: View {
             
             // Info button
             Button {
-                showingDetail = true
+                onShowInfo(episode)
             } label: {
                 Image(systemName: "info.circle")
                     .foregroundStyle(.secondary)
@@ -792,7 +797,7 @@ struct EpisodeRowView: View {
         }
         .contextMenu {
             Button {
-                showingDetail = true
+                onShowInfo(episode)
             } label: {
                 Label("Show Details", systemImage: "info.circle")
             }
@@ -819,16 +824,13 @@ struct EpisodeRowView: View {
                 }
             }
         }
-        .sheet(isPresented: $showingDetail) {
-            EpisodeDetailView(episode: episode)
-        }
     }
-    
+
     private func formatDuration(_ duration: TimeInterval) -> String {
         let hours = Int(duration) / 3600
         let minutes = (Int(duration) % 3600) / 60
         let seconds = Int(duration) % 60
-        
+
         if hours > 0 {
             return String(format: "%d:%02d:%02d", hours, minutes, seconds)
         } else {
@@ -1059,7 +1061,7 @@ struct EpisodeDetailView: View {
     
     var body: some View {
         NavigationStack {
-            ScrollView {
+            List {
                 VStack(spacing: 24) {
                     // Artwork
                     if let artworkURL = episode.artworkURL ?? episode.podcast?.artworkURL,
@@ -1196,6 +1198,7 @@ struct EpisodeDetailView: View {
                                 
                                 HTMLText(html: description)
                                     .textSelection(.enabled)
+                                    .fixedSize(horizontal: false, vertical: true)
                             }
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(.horizontal)
@@ -1222,8 +1225,13 @@ struct EpisodeDetailView: View {
                         }
                     }
                 }
-                .padding(.vertical)
+                .frame(maxWidth: .infinity)
+                .listRowSeparator(.hidden)
+                .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 16, trailing: 16))
             }
+            .listStyle(.plain)
+            .environment(\.defaultMinListRowHeight, 0)
+            .contentMargins(.top, 0, for: .scrollContent)
             .navigationTitle("Episode Details")
 #if !os(macOS)
             .navigationBarTitleDisplayMode(.inline)

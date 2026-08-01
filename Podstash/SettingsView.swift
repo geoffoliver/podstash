@@ -14,12 +14,15 @@ struct SettingsView: View {
     var body: some View {
         #if os(macOS)
         TabView {
-            GeneralSettingsView(settings: settings)
-                .tabItem {
-                    Label("General", systemImage: "gear")
-                }
-            
-            Group {
+            Form {
+                GeneralSettingsView(settings: settings)
+            }
+            .formStyle(.grouped)
+            .tabItem {
+                Label("General", systemImage: "gear")
+            }
+
+            Form {
                 if let manager = autoRefreshManager {
                     FeedSettingsView(settings: settings)
                         .environmentObject(manager)
@@ -27,24 +30,34 @@ struct SettingsView: View {
                     FeedSettingsView(settings: settings)
                 }
             }
+            .formStyle(.grouped)
             .tabItem {
                 Label("Feeds", systemImage: "antenna.radiowaves.left.and.right")
             }
-            
-            EpisodeSettingsView(settings: settings)
-                .tabItem {
-                    Label("Episodes", systemImage: "list.bullet")
-                }
-            
-            PlaybackSettingsView(settings: settings)
-                .tabItem {
-                    Label("Playback", systemImage: "play.circle")
-                }
-            
-            SyncSettingsView(settings: settings)
-                .tabItem {
-                    Label("Sync", systemImage: "icloud")
-                }
+
+            Form {
+                EpisodeSettingsView(settings: settings)
+            }
+            .formStyle(.grouped)
+            .tabItem {
+                Label("Episodes", systemImage: "list.bullet")
+            }
+
+            Form {
+                PlaybackSettingsView(settings: settings)
+            }
+            .formStyle(.grouped)
+            .tabItem {
+                Label("Playback", systemImage: "play.circle")
+            }
+
+            Form {
+                SyncSettingsView(settings: settings)
+            }
+            .formStyle(.grouped)
+            .tabItem {
+                Label("Sync", systemImage: "icloud")
+            }
         }
         .frame(width: 500, height: 400)
         #else
@@ -88,40 +101,39 @@ struct GeneralSettingsView: View {
     @ObservedObject var settings: AppSettings
     
     var body: some View {
-        Form {
+        Group {
             Toggle("Auto-refresh feeds on launch", isOn: $settings.autoRefreshOnLaunch)
-            
+
             Divider()
-            
+
             Picker("Sidebar icon size", selection: $settings.sidebarIconSize) {
                 ForEach(SidebarIconSize.allCases) { size in
                     Text(size.rawValue).tag(size.rawValue)
                 }
             }
-            
+
             Toggle("Show artwork in episode lists", isOn: $settings.showArtworkInList)
-            
+
             Toggle("Compact list mode", isOn: $settings.compactListMode)
-            
+
             Divider()
-            
+
             #if os(macOS)
             Toggle("Keep Mini Player always on top", isOn: $settings.miniPlayerAlwaysOnTop)
-            
+
             Divider()
             #endif
-            
+
             Toggle("Notify about new episodes", isOn: $settings.notifyNewEpisodes)
-            
+
             Toggle("Notify when downloads complete", isOn: $settings.notifyDownloadComplete)
-            
+
             Divider()
-            
+
             Button("Reset to Defaults") {
                 settings.resetToDefaults()
             }
         }
-        .formStyle(.grouped)
     }
 }
 
@@ -132,7 +144,7 @@ struct FeedSettingsView: View {
     @EnvironmentObject var autoRefreshManager: AutoRefreshManager
     
     var body: some View {
-        Form {
+        Group {
             Picker("Refresh interval", selection: $settings.refreshInterval) {
                 ForEach(RefreshInterval.allCases) { interval in
                     Text(interval.rawValue).tag(interval.rawValue)
@@ -142,17 +154,16 @@ struct FeedSettingsView: View {
                 // Restart timer with new interval
                 autoRefreshManager.updateRefreshInterval()
             }
-            
+
             Toggle("Refresh only on Wi-Fi", isOn: $settings.refreshOnlyOnWiFi)
                 .disabled(settings.refreshIntervalEnum == .manual)
-            
+
             if settings.refreshIntervalEnum != .manual {
                 Text("Feeds will refresh automatically in the background")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
         }
-        .formStyle(.grouped)
     }
 }
 
@@ -165,41 +176,41 @@ struct EpisodeSettingsView: View {
     @State private var isCleaningUp = false
     
     var body: some View {
-        Form {
-            Stepper("Download \(settings.maxEpisodesToDownload) most recent episode\(settings.maxEpisodesToDownload == 1 ? "" : "s")", 
-                   value: $settings.maxEpisodesToDownload, 
+        Group {
+            Stepper("Download \(settings.maxEpisodesToDownload) most recent episode\(settings.maxEpisodesToDownload == 1 ? "" : "s")",
+                   value: $settings.maxEpisodesToDownload,
                    in: 1...100)
-            
+
             Text("When refreshing feeds, only the most recent \(settings.maxEpisodesToDownload) episode\(settings.maxEpisodesToDownload == 1 ? "" : "s") will be downloaded.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
-            
+
             Divider()
-            
+
             Picker("Keep episodes", selection: $settings.episodeRetentionPolicy) {
                 ForEach(EpisodeRetentionPolicy.allCases) { policy in
                     Text(policy.rawValue).tag(policy.rawValue)
                 }
             }
-            
+
             if settings.episodeRetentionPolicyEnum == .mostRecent {
-                Stepper("Keep \(settings.episodeRetentionCount) episodes", 
-                       value: $settings.episodeRetentionCount, 
+                Stepper("Keep \(settings.episodeRetentionCount) episodes",
+                       value: $settings.episodeRetentionCount,
                        in: 1...100)
             }
-            
+
             Divider()
-            
+
             Toggle("Auto-delete played episodes", isOn: $settings.autoDeletePlayedEpisodes)
-            
+
             if settings.autoDeletePlayedEpisodes {
-                Stepper("Delete after \(settings.autoDeleteAfterDays) days", 
-                       value: $settings.autoDeleteAfterDays, 
+                Stepper("Delete after \(settings.autoDeleteAfterDays) days",
+                       value: $settings.autoDeleteAfterDays,
                        in: 1...30)
             }
-            
+
             Divider()
-            
+
             // Storage Info Display
             if let info = storageInfo {
                 VStack(alignment: .leading, spacing: 4) {
@@ -214,7 +225,7 @@ struct EpisodeSettingsView: View {
                 }
                 .padding(.vertical, 4)
             }
-            
+
             Button(action: {
                 cleanUpNow()
             }) {
@@ -227,14 +238,14 @@ struct EpisodeSettingsView: View {
                 }
             }
             .disabled(isCleaningUp)
-            
+
             Divider()
-            
+
             Toggle("Auto-download new episodes", isOn: $settings.autoDownloadNewEpisodes)
-            
+
             if settings.autoDownloadNewEpisodes {
                 Toggle("Download only on Wi-Fi", isOn: $settings.downloadOnlyOnWiFi)
-                
+
                 Picker("Download quality", selection: $settings.downloadQuality) {
                     ForEach(DownloadQuality.allCases) { quality in
                         Text(quality.rawValue).tag(quality.rawValue)
@@ -242,7 +253,6 @@ struct EpisodeSettingsView: View {
                 }
             }
         }
-        .formStyle(.grouped)
         .onAppear {
             loadStorageInfo()
         }
@@ -275,7 +285,7 @@ struct PlaybackSettingsView: View {
     @ObservedObject var settings: AppSettings
     
     var body: some View {
-        Form {
+        Group {
             Picker("Default playback speed", selection: $settings.defaultPlaybackSpeed) {
                 Text("0.5x").tag(Double(0.5))
                 Text("0.75x").tag(Double(0.75))
@@ -285,33 +295,32 @@ struct PlaybackSettingsView: View {
                 Text("1.75x").tag(Double(1.75))
                 Text("2.0x").tag(Double(2.0))
             }
-            
+
             Toggle("Remember playback speed per podcast", isOn: $settings.rememberPlaybackSpeed)
-            
+
             Divider()
-            
-            Stepper("Skip forward: \(settings.skipForwardInterval)s", 
-                   value: $settings.skipForwardInterval, 
-                   in: 5...120, 
+
+            Stepper("Skip forward: \(settings.skipForwardInterval)s",
+                   value: $settings.skipForwardInterval,
+                   in: 5...120,
                    step: 5)
-            
-            Stepper("Skip backward: \(settings.skipBackwardInterval)s", 
-                   value: $settings.skipBackwardInterval, 
-                   in: 5...60, 
+
+            Stepper("Skip backward: \(settings.skipBackwardInterval)s",
+                   value: $settings.skipBackwardInterval,
+                   in: 5...60,
                    step: 5)
-            
+
             Divider()
-            
+
             Toggle("Continue playback across devices", isOn: $settings.continuePlaybackAcrossDevices)
                 .disabled(!settings.iCloudSyncEnabled)
-            
+
             if !settings.iCloudSyncEnabled {
                 Text("Enable iCloud sync to use this feature")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
         }
-        .formStyle(.grouped)
     }
 }
 
@@ -321,7 +330,7 @@ struct SyncSettingsView: View {
     @ObservedObject var settings: AppSettings
     
     var body: some View {
-        Form {
+        Group {
             Toggle("Enable iCloud sync", isOn: $settings.iCloudSyncEnabled)
                 .disabled(true)
 
@@ -338,7 +347,6 @@ struct SyncSettingsView: View {
                 .foregroundStyle(.secondary)
                 .padding(.top, 8)
         }
-        .formStyle(.grouped)
     }
 }
 

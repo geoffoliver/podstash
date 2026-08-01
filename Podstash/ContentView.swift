@@ -276,6 +276,8 @@ struct PodcastListView: View {
     @EnvironmentObject var refreshCoordinator: RefreshCoordinator
     @EnvironmentObject var audioPlayer: AudioPlayerManager
     @EnvironmentObject var settings: AppSettings
+    @EnvironmentObject var addPodcastCoordinator: AddPodcastCoordinator
+    @EnvironmentObject var opmlCoordinator: OPMLImportCoordinator
     @Binding var selectedPodcast: Podcast?
     @Binding var showingQueue: Bool
     @State private var showingSettings = false
@@ -429,6 +431,24 @@ struct PodcastListView: View {
             }
             
             #if !os(macOS)
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Menu {
+                    Button {
+                        addPodcastCoordinator.showDialog()
+                    } label: {
+                        Label("Add Podcast by URL…", systemImage: "plus.circle")
+                    }
+
+                    Button {
+                        opmlCoordinator.importOPML()
+                    } label: {
+                        Label("Import OPML…", systemImage: "square.and.arrow.down")
+                    }
+                } label: {
+                    Label("Add", systemImage: "plus")
+                }
+            }
+
             ToolbarItem(placement: .navigationBarTrailing) {
                 Button(action: {
                     showingSettings = true

@@ -24,12 +24,13 @@ struct ContentView: View {
     @State private var importCompletedMessage: String?
     @State private var selectedPodcast: Podcast?
     @State private var showingQueue = false
+    @State private var columnVisibility: NavigationSplitViewVisibility = .automatic
 
     var body: some View {
 #if os(macOS)
         VStack(spacing: 0) {
-            NavigationSplitView {
-                PodcastListView(selectedPodcast: $selectedPodcast, showingQueue: $showingQueue)
+            NavigationSplitView(columnVisibility: $columnVisibility) {
+                PodcastListView(selectedPodcast: $selectedPodcast, showingQueue: $showingQueue, columnVisibility: $columnVisibility)
             } detail: {
                 if showingQueue {
                     QueueView()
@@ -142,8 +143,8 @@ struct ContentView: View {
             return .ignored
         }
 #else
-        NavigationSplitView {
-            PodcastListView(selectedPodcast: $selectedPodcast, showingQueue: $showingQueue)
+        NavigationSplitView(columnVisibility: $columnVisibility) {
+            PodcastListView(selectedPodcast: $selectedPodcast, showingQueue: $showingQueue, columnVisibility: $columnVisibility)
         } detail: {
             if showingQueue {
                 QueueView()
@@ -280,12 +281,27 @@ struct PodcastListView: View {
     @EnvironmentObject var opmlCoordinator: OPMLImportCoordinator
     @Binding var selectedPodcast: Podcast?
     @Binding var showingQueue: Bool
+    @Binding var columnVisibility: NavigationSplitViewVisibility
     @State private var showingSettings = false
     @State private var autoRefreshManager: AutoRefreshManager?
     @State private var multiSelection = Set<UUID>()
     @State private var showingUnsubscribeAlert = false
     @FocusState private var isFocused: Bool
-    
+
+    // Sentinel tag so the Queue row participates in the List's real selection mechanism,
+    // just like podcast rows do (tagged with their own id). NavigationSplitView only
+    // auto-pushes to the detail column on compact width when the sidebar List's actual
+    // `selection` binding changes to a genuinely-tagged value - an untagged row's tap
+    // gesture alone (e.g. `multiSelection.removeAll()`) doesn't count as a selection.
+    private static let queueTag = UUID(uuidString: "00000000-0000-0000-0000-000000000001")!
+
+    // The Queue row is tagged so it participates in real List selection (see queueTag above),
+    // but it must never be treated as a podcast for counting/deletion purposes - e.g. Cmd+A
+    // (Select All) or a Shift+click range on macOS can legitimately include it in multiSelection.
+    private var selectedPodcastIDs: Set<UUID> {
+        multiSelection.subtracting([Self.queueTag])
+    }
+
     var body: some View {
         // Cache the queue count to avoid multiple database queries per render
         let queueCount = fetchQueueCount()
@@ -298,11 +314,15 @@ struct PodcastListView: View {
             // Queue section at top
             Section {
                 QueueRowView(queueCount: queueCount, isSelected: showingQueue, iconSize: settings.sidebarIconSizeEnum.points, fontSize: settings.sidebarIconSizeEnum.fontSize)
+                    .tag(Self.queueTag)
                     .contentShape(Rectangle())
                     .onTapGesture {
                         showingQueue = true
                         selectedPodcast = nil
-                        multiSelection.removeAll()
+                        multiSelection = [Self.queueTag]
+                        #if !os(macOS)
+                        columnVisibility = .detailOnly
+                        #endif
                     }
             }
             
@@ -345,6 +365,7 @@ struct PodcastListView: View {
                                     multiSelection = [podcast.id]
                                     showingQueue = false
                                     selectedPodcast = podcast
+                                    columnVisibility = .detailOnly
                                 }
                                 #endif
                             }
@@ -367,14 +388,14 @@ struct PodcastListView: View {
                                 Button("Refresh Feed") {
                                     refreshCoordinator.refreshSingleFeed(podcast)
                                 }
-                                .disabled(multiSelection.count > 1)
-                                
+                                .disabled(selectedPodcastIDs.count > 1)
+
                                 Button("Mark All as Played") {
                                     markAllAsPlayed(for: podcast)
                                 }
-                                
+
                                 Button("Unsubscribe", role: .destructive) {
-                                    if multiSelection.count > 1 && multiSelection.contains(podcast.id) {
+                                    if selectedPodcastIDs.count > 1 && selectedPodcastIDs.contains(podcast.id) {
                                         // Keep existing multi-selection
                                         showingUnsubscribeAlert = true
                                     } else {
@@ -404,18 +425,27 @@ struct PodcastListView: View {
         #endif
         .onChange(of: multiSelection) { newSelection in
             // Update selectedPodcast when single selection changes
-            if newSelection.count == 1, 
+            if newSelection == [Self.queueTag] {
+                showingQueue = true
+                selectedPodcast = nil
+                #if !os(macOS)
+                columnVisibility = .detailOnly
+                #endif
+            } else if newSelection.count == 1,
                let selectedID = newSelection.first,
                let podcast = podcasts.first(where: { $0.id == selectedID }) {
                 showingQueue = false
                 selectedPodcast = podcast
+                #if !os(macOS)
+                columnVisibility = .detailOnly
+                #endif
             } else if newSelection.isEmpty {
                 selectedPodcast = nil
             }
         }
         #if os(macOS)
         .onDeleteCommand {
-            if !multiSelection.isEmpty {
+            if !selectedPodcastIDs.isEmpty {
                 showingUnsubscribeAlert = true
             }
         }
@@ -458,19 +488,19 @@ struct PodcastListView: View {
             }
             #endif
         }
-        .alert(multiSelection.count == 1 ? "Unsubscribe from Podcast?" : "Unsubscribe from \(multiSelection.count) Podcasts?", 
+        .alert(selectedPodcastIDs.count == 1 ? "Unsubscribe from Podcast?" : "Unsubscribe from \(selectedPodcastIDs.count) Podcasts?",
                isPresented: $showingUnsubscribeAlert) {
             Button("Cancel", role: .cancel) { }
             Button("Unsubscribe", role: .destructive) {
                 unsubscribeSelected()
             }
         } message: {
-            if multiSelection.count == 1, 
-               let selectedID = multiSelection.first,
+            if selectedPodcastIDs.count == 1,
+               let selectedID = selectedPodcastIDs.first,
                let podcast = podcasts.first(where: { $0.id == selectedID }) {
                 Text("Are you sure you want to unsubscribe from \"\(podcast.title)\"? This will delete all downloaded episodes.")
             } else {
-                Text("Are you sure you want to unsubscribe from \(multiSelection.count) podcasts? This will delete all downloaded episodes.")
+                Text("Are you sure you want to unsubscribe from \(selectedPodcastIDs.count) podcasts? This will delete all downloaded episodes.")
             }
         }
         #if !os(macOS)
@@ -481,7 +511,7 @@ struct PodcastListView: View {
     }
     
     private func unsubscribeSelected() {
-        let podcastsToDelete = podcasts.filter { multiSelection.contains($0.id) }
+        let podcastsToDelete = podcasts.filter { selectedPodcastIDs.contains($0.id) }
         
         // Check if we're deleting a podcast that has the currently playing episode
         if let currentEpisode = audioPlayer.currentEpisode {

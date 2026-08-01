@@ -94,8 +94,11 @@ final class DownloadManager: NSObject, ObservableObject {
             return
         }
         
-        // Generate unique filename
-        let fileExtension = tempURL.pathExtension.isEmpty ? "mp3" : tempURL.pathExtension
+        // Generate unique filename. Derive the extension from the episode's audio URL,
+        // not tempURL - tempURL's extension comes from URLSession's own internal temp
+        // file naming (e.g. "CFNetworkDownload_XXXXXX.tmp"), not the actual audio format.
+        let audioURLExtension = URL(string: episode.audioURL)?.pathExtension ?? ""
+        let fileExtension = audioURLExtension.isEmpty ? "mp3" : audioURLExtension
         let fileName = "\(episodeID.uuidString).\(fileExtension)"
         let destinationURL = downloadsPath.appendingPathComponent(fileName)
         

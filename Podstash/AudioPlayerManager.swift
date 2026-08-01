@@ -157,6 +157,8 @@ class AudioPlayerManager: ObservableObject {
         
         // Setup new episode
         currentEpisode = episode
+        lastSavedPosition = episode.playbackPosition // Reset the save tracking
+        
         guard let url = URL(string: episode.audioURL) else {
             print("Invalid audio URL: \(episode.audioURL)")
             return
@@ -202,16 +204,23 @@ class AudioPlayerManager: ObservableObject {
         
         // Update Now Playing info
         updateNowPlayingInfo()
+        
+        // Load artwork once (asynchronously, won't block)
+        loadNowPlayingArtwork()
     }
     
     func resume() {
         player?.play()
+        // CRITICAL: Force immediate UI update by using objectWillChange
+        objectWillChange.send()
         isPlaying = true
         updateNowPlayingInfo()
     }
     
     func pause() {
         player?.pause()
+        // CRITICAL: Force immediate UI update by using objectWillChange
+        objectWillChange.send()
         isPlaying = false
         
         // Save progress when pausing
@@ -379,21 +388,32 @@ class AudioPlayerManager: ObservableObject {
         nowPlayingInfo[MPNowPlayingInfoPropertyElapsedPlaybackTime] = currentTime
         nowPlayingInfo[MPNowPlayingInfoPropertyPlaybackRate] = isPlaying ? Double(playbackRate) : 0.0
         
-        // Artwork
-        if let artworkURL = episode.podcast?.artworkURL,
-           let url = URL(string: artworkURL) {
-            // Try to load artwork asynchronously
-            Task {
-                if let (data, _) = try? await URLSession.shared.data(from: url),
-                   let image = loadImage(from: data) {
-                    let artwork = MPMediaItemArtwork(boundsSize: image.size) { _ in image }
-                    nowPlayingInfo[MPMediaItemPropertyArtwork] = artwork
-                    MPNowPlayingInfoCenter.default().nowPlayingInfo = nowPlayingInfo
-                }
-            }
-        }
+        // CRITICAL FIX: Don't download artwork every time this is called!
+        // Just set the info we have. Artwork should be loaded once at the start.
+        // If artwork was previously loaded, it should still be in the info center.
         
         MPNowPlayingInfoCenter.default().nowPlayingInfo = nowPlayingInfo
+    }
+    
+    // New function to load artwork once when starting playback
+    private func loadNowPlayingArtwork() {
+        guard let episode = currentEpisode,
+              let artworkURL = episode.podcast?.artworkURL,
+              let url = URL(string: artworkURL) else {
+            return
+        }
+        
+        // Try to load artwork asynchronously (only called once per episode)
+        Task {
+            if let (data, _) = try? await URLSession.shared.data(from: url),
+               let image = loadImage(from: data) {
+                // Update only the artwork in the existing info
+                var nowPlayingInfo = MPNowPlayingInfoCenter.default().nowPlayingInfo ?? [:]
+                let artwork = MPMediaItemArtwork(boundsSize: image.size) { _ in image }
+                nowPlayingInfo[MPMediaItemPropertyArtwork] = artwork
+                MPNowPlayingInfoCenter.default().nowPlayingInfo = nowPlayingInfo
+            }
+        }
     }
     
     private func clearNowPlayingInfo() {
@@ -410,12 +430,26 @@ class AudioPlayerManager: ObservableObject {
     
     // MARK: - Progress Management
     
+    private var lastSavedPosition: TimeInterval = 0
+    
     private func saveProgress(for episode: Episode) {
+        // CRITICAL FIX: Only save if progress changed significantly (at least 10 seconds)
+        // This prevents constant @Query updates in SwiftUI views
+        let significantChange = abs(currentTime - lastSavedPosition) >= 10
+        
+        // Always save when marking as played
+        let shouldMarkPlayed = episode.duration != nil && currentTime >= episode.duration! - 30
+        
+        guard significantChange || shouldMarkPlayed else {
+            return // Skip save if progress hasn't changed much
+        }
+        
         episode.playbackPosition = currentTime
         episode.lastPlayedDate = Date()
+        lastSavedPosition = currentTime
         
         // Mark as played if reached within 30 seconds of end
-        if let duration = episode.duration, currentTime >= duration - 30 {
+        if shouldMarkPlayed {
             episode.isPlayed = true
             episode.playbackPosition = 0 // Reset position for played episodes
         }
@@ -425,7 +459,10 @@ class AudioPlayerManager: ObservableObject {
     
     private func setupPeriodicSaveTimer() {
         periodicSaveTimer?.invalidate()
-        periodicSaveTimer = Timer.scheduledTimer(withTimeInterval: 10, repeats: true) { [weak self] _ in
+        // CRITICAL FIX: Reduce save frequency from 10s to 30s
+        // Saving every 10 seconds is excessive and triggers SwiftData @Query updates
+        // We already save on pause, stop, and when episodes finish
+        periodicSaveTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
             guard let self = self, let episode = self.currentEpisode else { return }
             Task { @MainActor in
                 self.saveProgress(for: episode)
@@ -439,17 +476,25 @@ class AudioPlayerManager: ObservableObject {
         // Only setup observer if we're actually playing
         guard player?.currentItem != nil else { return }
         
-        let interval = CMTime(seconds: 0.5, preferredTimescale: 600)
+        // CRITICAL FIX: Increase interval to 1 second instead of 0.5 to reduce CPU usage
+        // UI updates don't need to be more frequent than once per second
+        let interval = CMTime(seconds: 1.0, preferredTimescale: 600)
         timeObserver = player?.addPeriodicTimeObserver(forInterval: interval, queue: .main) { [weak self] time in
             guard let self = self else { return }
             
-            // Only update if playing to avoid unnecessary view updates
-            guard self.isPlaying else { return }
+            let newTime = time.seconds
             
-            self.currentTime = time.seconds
+            // CRITICAL FIX: Only publish time updates if they've changed by at least 0.5 seconds
+            // This prevents rapid-fire @Published updates that cause view re-rendering
+            // Note: We removed the "guard isPlaying" check to ensure currentTime updates
+            // even when paused, which helps UI responsiveness for play/pause button state
+            if abs(newTime - self.currentTime) >= 0.5 {
+                self.currentTime = newTime
+            }
             
-            // Update duration
-            if let duration = self.player?.currentItem?.duration.seconds,
+            // Update duration only once, not on every tick
+            if self.duration == 0,
+               let duration = self.player?.currentItem?.duration.seconds,
                !duration.isNaN && !duration.isInfinite {
                 self.duration = duration
                 
@@ -459,12 +504,6 @@ class AudioPlayerManager: ObservableObject {
                     episode.duration = duration
                     try? self.modelContext?.save()
                 }
-            }
-            
-            // Update Now Playing info periodically (every 5 seconds to avoid excessive updates)
-            let currentSeconds = Int(time.seconds)
-            if currentSeconds % 5 == 0 && currentSeconds != Int(self.currentTime) {
-                self.updateNowPlayingInfo()
             }
         }
     }

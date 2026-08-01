@@ -30,41 +30,34 @@ class FeedFetcher {
     
     /// Determine optimal concurrency based on system capabilities
     private var maxConcurrentFetches: Int {
-        let processorCount = ProcessInfo.processInfo.processorCount
-        
-        // Use 2-6 concurrent tasks based on CPU cores
-        // More cores = more concurrent tasks, but cap it to avoid overwhelming the network
-        switch processorCount {
-        case 1...2:
-            return 2  // Low-end devices
-        case 3...4:
-            return 3  // Mid-range devices
-        case 5...8:
-            return 4  // High-end devices
-        default:
-            return 6  // Very powerful devices (Mac, iPad Pro)
-        }
+        // Process feeds one at a time to keep UI responsive
+        return 1
     }
     
     /// Fetch and parse a single podcast feed, updating the podcast and adding episodes
-    @MainActor
-    func fetchFeed(for podcast: Podcast) async throws {
-        // Clean and validate URL
-        let cleanURL = podcast.feedURL.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let url = URL(string: cleanURL), 
-              url.scheme == "http" || url.scheme == "https" else {
+    func fetchFeed(for podcast: Podcast, shouldSave: Bool = true) async throws {
+        // Capture podcast data on main actor
+        let (feedURL, existingAudioURLs) = await MainActor.run {
+            let cleanURL = podcast.feedURL.trimmingCharacters(in: .whitespacesAndNewlines)
+            let url = URL(string: cleanURL)
+            let existingAudioURLs = Set(podcast.episodes.map { $0.audioURL })
+            return (url, existingAudioURLs)
+        }
+        
+        guard let feedURL = feedURL,
+              feedURL.scheme == "http" || feedURL.scheme == "https" else {
             throw FeedFetchError.invalidURL
         }
         
-        // Capture what we need from the podcast
-        let feedURL = url
-        let existingAudioURLs = Set(podcast.episodes.map { $0.audioURL })
-        let podcastID = podcast.persistentModelID
-        
-        // Do all the heavy lifting off the main actor
-        let (parsedPodcast, newEpisodeData) = try await Task.detached { [modelContext, existingAudioURLs] in
+        // Do ALL the heavy work OFF the main thread using Task.detached
+        let parsedData: (ParsedPodcast, [ParsedEpisode]) = try await Task.detached {
+            // Check for cancellation
+            try Task.checkCancellation()
+            
             // Download feed data
             let (data, _) = try await URLSession.shared.data(from: feedURL)
+            
+            try Task.checkCancellation()
             
             // Parse feed
             let parser = RSSFeedParser()
@@ -72,7 +65,9 @@ class FeedFetcher {
                 throw FeedFetchError.parsingFailed
             }
             
-            // Sort episodes by publish date (most recent first)
+            try Task.checkCancellation()
+            
+            // Sort episodes by publish date
             let sortedEpisodes = parsedPodcast.episodes.sorted { $0.publishDate > $1.publishDate }
             
             // Identify new episodes
@@ -81,24 +76,22 @@ class FeedFetcher {
             return (parsedPodcast, newEpisodeData)
         }.value
         
-        // Quick main actor update
+        // Update on main actor
         await updatePodcastAndEpisodes(
             podcast: podcast,
-            parsedPodcast: parsedPodcast,
-            newEpisodeData: newEpisodeData
+            parsedPodcast: parsedData.0,
+            newEpisodeData: parsedData.1,
+            shouldSave: shouldSave
         )
-        
-        // Cache artwork in background
-        Task.detached { [imageCacheManager] in
-            await imageCacheManager.cacheArtwork(for: podcast)
-        }
     }
     
     @MainActor
     private func updatePodcastAndEpisodes(
         podcast: Podcast,
         parsedPodcast: ParsedPodcast,
-        newEpisodeData: [ParsedEpisode]
+        newEpisodeData: [ParsedEpisode],
+        updateTimestamp: Bool = true,
+        shouldSave: Bool = false
     ) async {
         // Update podcast metadata
         if podcast.podcastDescription == nil || podcast.podcastDescription?.isEmpty == true {
@@ -117,9 +110,10 @@ class FeedFetcher {
             podcast.websiteURL = parsedPodcast.websiteURL
         }
         
-        podcast.lastUpdated = Date()
-        
-        var newEpisodes: [Episode] = []
+        // Only update timestamp if requested (skip during batch to avoid UI thrashing)
+        if updateTimestamp {
+            podcast.lastUpdated = Date()
+        }
         
         // Create new episode objects
         for parsedEpisode in newEpisodeData {
@@ -134,27 +128,25 @@ class FeedFetcher {
             
             episode.podcast = podcast
             modelContext.insert(episode)
-            newEpisodes.append(episode)
         }
         
-        try? modelContext.save()
-        
-        // Auto-download new episodes if enabled
-        print("📥 Auto-download settings: enabled=\(settings.autoDownloadNewEpisodes), downloadManager=\(downloadManager != nil), newEpisodes=\(newEpisodes.count)")
-        if settings.autoDownloadNewEpisodes, let downloadManager = downloadManager {
-            let episodesToAutoDownload = newEpisodes.prefix(settings.maxEpisodesToDownload)
-            print("📥 Starting auto-download for \(episodesToAutoDownload.count) of \(newEpisodes.count) new episode(s)")
-            for episode in episodesToAutoDownload {
-                print("📥 Downloading: \(episode.title)")
-                downloadManager.downloadEpisode(episode)
-            }
+        // Save if requested
+        if shouldSave {
+            try? modelContext.save()
         }
+        
+        // Yield to let other tasks run and keep UI responsive
+        await Task.yield()
     }
     
     /// Fetch feeds for multiple podcasts with concurrent processing
     func fetchFeeds(for podcasts: [Podcast], progressHandler: ((String, Int, Int) -> Void)? = nil) async -> [Podcast: Result<Void, Error>] {
         var results: [Podcast: Result<Void, Error>] = [:]
         let resultsLock = NSLock()
+        
+        // Track podcasts that were successfully updated
+        var updatedPodcasts: [Podcast] = []
+        let podcastsLock = NSLock()
         
         // Process podcasts concurrently with a limit
         await withTaskGroup(of: (Podcast, Result<Void, Error>).self) { group in
@@ -168,10 +160,17 @@ class FeedFetcher {
                         return (podcast, .failure(FeedFetchError.parsingFailed))
                     }
                     
+                    // Check for cancellation before starting
+                    if Task.isCancelled {
+                        return (podcast, .failure(CancellationError()))
+                    }
+                    
                     let result: Result<Void, Error>
                     do {
-                        try await self.fetchFeed(for: podcast)
+                        try await self.fetchFeed(for: podcast, shouldSave: false)
                         result = .success(())
+                    } catch is CancellationError {
+                        return (podcast, .failure(CancellationError()))
                     } catch {
                         result = .failure(error)
                     }
@@ -182,13 +181,23 @@ class FeedFetcher {
             }
             
             var completed = 0
+            var lastProgressUpdate = CFAbsoluteTimeGetCurrent()
             
             // As tasks complete, add new ones
             for await (podcast, result) in group {
-                // Update progress on main actor
-                await MainActor.run {
-                    completed += 1
-                    progressHandler?(podcast.title, completed, total)
+                // Check for cancellation
+                if Task.isCancelled {
+                    break
+                }
+                
+                // Throttle progress updates to reduce UI thrashing
+                completed += 1
+                let now = CFAbsoluteTimeGetCurrent()
+                if now - lastProgressUpdate > 0.1 || completed == total {
+                    await MainActor.run {
+                        progressHandler?(podcast.title, completed, total)
+                    }
+                    lastProgressUpdate = now
                 }
                 
                 // Store result
@@ -196,8 +205,15 @@ class FeedFetcher {
                 results[podcast] = result
                 resultsLock.unlock()
                 
-                // Add next task if available
-                if currentIndex < podcasts.count {
+                // Track successfully updated podcasts
+                if case .success = result {
+                    podcastsLock.lock()
+                    updatedPodcasts.append(podcast)
+                    podcastsLock.unlock()
+                }
+                
+                // Add next task if available and not cancelled
+                if currentIndex < podcasts.count && !Task.isCancelled {
                     let nextPodcast = podcasts[currentIndex]
                     currentIndex += 1
                     
@@ -206,10 +222,17 @@ class FeedFetcher {
                             return (nextPodcast, .failure(FeedFetchError.parsingFailed))
                         }
                         
+                        // Check for cancellation before starting
+                        if Task.isCancelled {
+                            return (nextPodcast, .failure(CancellationError()))
+                        }
+                        
                         let result: Result<Void, Error>
                         do {
-                            try await self.fetchFeed(for: nextPodcast)
+                            try await self.fetchFeed(for: nextPodcast, shouldSave: false)
                             result = .success(())
+                        } catch is CancellationError {
+                            return (nextPodcast, .failure(CancellationError()))
                         } catch {
                             result = .failure(error)
                         }
@@ -220,7 +243,28 @@ class FeedFetcher {
             }
         }
         
+        // ONE SINGLE SAVE AT THE END - no intermediate saves!
+        if !Task.isCancelled {
+            // Update all timestamps at once to trigger ONE UI update instead of 40
+            await MainActor.run {
+                let now = Date()
+                for podcast in updatedPodcasts {
+                    podcast.lastUpdated = now
+                }
+            }
+            
+            await performFinalSave()
+        }
+        
         return results
+    }
+    
+    /// Perform the final save operation on the main actor
+    @MainActor
+    private func performFinalSave() async {
+        if modelContext.hasChanges {
+            try? modelContext.save()
+        }
     }
     
     /// Fetch all subscribed podcast feeds

@@ -263,9 +263,8 @@ struct ContentView: View {
 
 struct PodcastListView: View {
     @Query(sort: \Podcast.title) private var podcasts: [Podcast]
-    @Query(filter: #Predicate<Episode> { episode in
-        episode.queuePosition != nil && !episode.isPlayed
-    }) private var queuedEpisodes: [Episode]
+    // REMOVED: Don't query all episodes just for the count - it causes massive re-renders
+    // Instead, we'll fetch the count on-demand when needed for the badge
     @Environment(\.modelContext) private var modelContext
     @EnvironmentObject var refreshCoordinator: RefreshCoordinator
     @EnvironmentObject var audioPlayer: AudioPlayerManager
@@ -278,11 +277,14 @@ struct PodcastListView: View {
     @State private var showingUnsubscribeAlert = false
     @FocusState private var isFocused: Bool
     
-    private var queueCount: Int {
-        queuedEpisodes.count
-    }
-    
     var body: some View {
+        // Cache the queue count to avoid multiple database queries per render
+        let queueCount = fetchQueueCount()
+        // Compute downloaded+unplayed counts once via a single lightweight query, instead of
+        // letting each PodcastRowView fault in and filter its full episodes relationship
+        // (which was materializing the entire library - 20k+ episodes - on every render).
+        let downloadedUnplayedCounts = fetchDownloadedUnplayedCounts()
+
         List(selection: $multiSelection) {
             // Queue section at top
             Section {
@@ -303,7 +305,7 @@ struct PodcastListView: View {
                         .padding()
                 } else {
                     ForEach(podcasts) { podcast in
-                        PodcastRowView(podcast: podcast, iconSize: settings.sidebarIconSizeEnum.points, fontSize: settings.sidebarIconSizeEnum.fontSize)
+                        PodcastRowView(podcast: podcast, iconSize: settings.sidebarIconSizeEnum.points, fontSize: settings.sidebarIconSizeEnum.fontSize, downloadedUnplayedCount: downloadedUnplayedCounts[podcast.id] ?? 0)
                             .tag(podcast.id)
                             .contentShape(Rectangle()) // Make entire row tappable
                             .onTapGesture {
@@ -478,6 +480,34 @@ struct PodcastListView: View {
         }
         try? modelContext.save()
     }
+    
+    private func fetchQueueCount() -> Int {
+        let descriptor = FetchDescriptor<Episode>(
+            predicate: #Predicate { episode in
+                episode.queuePosition != nil && !episode.isPlayed
+            }
+        )
+        return (try? modelContext.fetchCount(descriptor)) ?? 0
+    }
+
+    /// Downloaded+unplayed episode counts keyed by podcast ID, computed with one query scoped to
+    /// downloaded episodes only (a small subset) rather than faulting in every episode per podcast.
+    private func fetchDownloadedUnplayedCounts() -> [UUID: Int] {
+        let descriptor = FetchDescriptor<Episode>(
+            predicate: #Predicate { episode in
+                episode.isDownloaded && !episode.isPlayed
+            }
+        )
+        guard let episodes = try? modelContext.fetch(descriptor) else { return [:] }
+
+        var counts: [UUID: Int] = [:]
+        for episode in episodes {
+            if let podcastID = episode.podcast?.id {
+                counts[podcastID, default: 0] += 1
+            }
+        }
+        return counts
+    }
 }
 
 struct QueueRowView: View {
@@ -528,16 +558,7 @@ struct PodcastRowView: View {
     let podcast: Podcast
     let iconSize: CGFloat
     let fontSize: CGFloat
-    
-    // Cache computed values to avoid recalculating on every render
-    private let downloadedUnplayedCount: Int
-    
-    init(podcast: Podcast, iconSize: CGFloat, fontSize: CGFloat) {
-        self.podcast = podcast
-        self.iconSize = iconSize
-        self.fontSize = fontSize
-        self.downloadedUnplayedCount = podcast.episodes.filter { $0.isDownloaded && !$0.isPlayed }.count
-    }
+    let downloadedUnplayedCount: Int
     
     var body: some View {
         HStack(spacing: 12) {
@@ -1331,8 +1352,14 @@ struct HTMLText: View {
 
 extension String {
     func stripHTMLTags() -> String {
+        // Quick check - if no HTML tags, just decode entities
+        guard self.contains("<") else {
+            return self.decodingBasicHTMLEntities()
+        }
+        
+        // Use regex only when actually displaying to the user (not during parsing)
         return self.replacingOccurrences(of: "<[^>]+>", with: "", options: .regularExpression)
-            .decodingHTMLEntities()
+            .decodingBasicHTMLEntities()
             .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }

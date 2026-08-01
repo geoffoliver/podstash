@@ -467,10 +467,23 @@ struct PodstashApp: App {
             Episode.self,
         ])
         
-        // Enable iCloud sync with automatic fallback to local-only if iCloud is unavailable
+        // CloudKit requires a paid Apple Developer Program membership (the com.apple.developer.icloud-*
+        // entitlements can't be provisioned on a free/personal team) and Podstash.entitlements currently
+        // has no iCloud container configured. Requesting .automatic without that entitlement still makes
+        // SwiftData enable Core Data's persistent history tracking, but nothing ever consumes/trims it since
+        // sync can never complete - the history tables grow unbounded and every modelContext.save() gets
+        // slower over time. Flip this once real iCloud entitlements are added.
+        let cloudKitEntitlementsConfigured = false
+
+        // Respect the user's iCloud sync preference (defaults to true, matching AppSettings.iCloudSyncEnabled).
+        // Read directly from UserDefaults since this runs before AppSettings is constructed.
+        let iCloudSyncEnabled = UserDefaults.standard.object(forKey: "iCloudSyncEnabled") == nil
+            ? true
+            : UserDefaults.standard.bool(forKey: "iCloudSyncEnabled")
+
         let modelConfiguration = ModelConfiguration(
             schema: schema,
-            cloudKitDatabase: .automatic
+            cloudKitDatabase: (cloudKitEntitlementsConfigured && iCloudSyncEnabled) ? .automatic : .none
         )
 
         do {
@@ -529,43 +542,42 @@ struct PodstashApp: App {
                 }
         }
         .modelContainer(sharedModelContainer)
+        .commands {
+            CommandGroup(replacing: .newItem) {
+                Button("Add Podcast by URL…") {
+                    addPodcastCoordinator.showDialog()
+                }
+                .keyboardShortcut("n", modifiers: .command)
+                
+                Button("Import OPML…") {
+                    opmlCoordinator.importOPML()
+                }
+                .keyboardShortcut("i", modifiers: .command)
+                
+                Divider()
+                
+                Button("Refresh All Feeds") {
+                    refreshCoordinator.refreshAllFeeds()
+                }
+                .keyboardShortcut("r", modifiers: .command)
+                .disabled(refreshCoordinator.isRefreshing)
+            }
+            
+            CommandGroup(before: .windowList) {
+                Button("Mini Player") {
+                    MenuCoordinator.shared.audioPlayer?.showMiniPlayer()
+                }
+                .keyboardShortcut("m", modifiers: [.command, .shift])
+                
+                Divider()
+            }
+        }
         
         #if os(macOS)
         Settings {
             SettingsView(settings: settings, autoRefreshManager: autoRefreshManager)
         }
         #endif
-    }
-    
-    @CommandsBuilder var commands: some Commands {
-        CommandGroup(replacing: .newItem) {
-            Button("Add Podcast by URL…") {
-                addPodcastCoordinator.showDialog()
-            }
-            .keyboardShortcut("n", modifiers: .command)
-            
-            Button("Import OPML…") {
-                opmlCoordinator.importOPML()
-            }
-            .keyboardShortcut("i", modifiers: .command)
-            
-            Divider()
-            
-            Button("Refresh All Feeds") {
-                refreshCoordinator.refreshAllFeeds()
-            }
-            .keyboardShortcut("r", modifiers: .command)
-            .disabled(refreshCoordinator.isRefreshing)
-        }
-        
-        CommandGroup(before: .windowList) {
-            Button("Mini Player") {
-                MenuCoordinator.shared.audioPlayer?.showMiniPlayer()
-            }
-            .keyboardShortcut("m", modifiers: [.command, .shift])
-            
-            Divider()
-        }
     }
 }
 

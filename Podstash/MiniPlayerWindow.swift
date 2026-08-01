@@ -418,10 +418,12 @@ struct InteractiveProgressSlider: View {
                     .cornerRadius(2)
                 
                 // Filled track
+                // CRITICAL FIX: Use drawingGroup() to optimize rendering
                 Rectangle()
                     .fill(Color.white)
                     .frame(width: geometry.size.width * CGFloat(displayValue / max(duration, 1)), height: 4)
                     .cornerRadius(2)
+                    .drawingGroup() // Reduces CPU usage for frequently updating views
             }
             .frame(height: 20) // Larger hit area
             .contentShape(Rectangle()) // Make entire area tappable

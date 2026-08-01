@@ -21,6 +21,8 @@ struct QueueView: View {
     @EnvironmentObject var audioPlayer: AudioPlayerManager
     @State private var multiSelection = Set<UUID>()
     @State private var showingRemoveAlert = false
+    @State private var showingEpisodeInfo = false
+    @State private var selectedEpisodeForInfo: Episode?
     @FocusState private var isFocused: Bool
     #if !os(macOS)
     @State private var editMode: EditMode = .inactive
@@ -57,22 +59,28 @@ struct QueueView: View {
                             audioPlayer.play(episode: episode)
                         },
                         onRemove: { episodes in
+                            // Simply remove from queue - no reindexing needed
                             for episode in episodes {
                                 episode.queuePosition = nil
                             }
+                            
+                            // Single save
                             try? modelContext.save()
-                            reindexQueue()
                             multiSelection.removeAll()
                         },
                         onMarkPlayed: { episodes in
+                            // Mark episodes as played immediately in memory
                             for episode in episodes {
                                 episode.isPlayed = true
                                 episode.queuePosition = nil
                                 episode.playbackPosition = 0
                             }
-                            try? modelContext.save()
-                            reindexQueue()
+                            
+                            // Clear selection immediately for instant UI feedback
                             multiSelection.removeAll()
+                            
+                            // Save synchronously - required for SwiftData
+                            try? modelContext.save()
                             
                             // If current episode was marked, play next
                             if let currentID = audioPlayer.currentEpisode?.id,
@@ -82,6 +90,10 @@ struct QueueView: View {
                         },
                         onMove: { indices, destination in
                             moveEpisodes(from: indices, to: destination)
+                        },
+                        onShowInfo: { episode in
+                            selectedEpisodeForInfo = episode
+                            showingEpisodeInfo = true
                         },
                         currentlyPlayingID: audioPlayer.currentEpisode?.id,
                         isPlaying: audioPlayer.isPlaying
@@ -105,6 +117,11 @@ struct QueueView: View {
             .onDeleteCommand {
                 if !multiSelection.isEmpty {
                     showingRemoveAlert = true
+                }
+            }
+            .sheet(isPresented: $showingEpisodeInfo) {
+                if let episode = selectedEpisodeForInfo {
+                    EpisodeDetailView(episode: episode)
                 }
             }
             .toolbar {
@@ -180,6 +197,8 @@ struct QueueView: View {
                                 Label("Play", systemImage: "play.fill")
                             }
                             .disabled(multiSelection.count > 1)
+                            
+                            Divider()
                             
                             Button {
                                 if multiSelection.count > 1 {
@@ -279,8 +298,8 @@ struct QueueView: View {
             episode.playbackPosition = 0
         }
         
+        // Single save - no reindexing
         try? modelContext.save()
-        reindexQueue()
         multiSelection.removeAll()
         
         // If current episode was marked, play next
@@ -297,23 +316,24 @@ struct QueueView: View {
             episode.queuePosition = nil
         }
         
+        // Single save - no reindexing
         try? modelContext.save()
-        reindexQueue()
         multiSelection.removeAll()
     }
     
     private func removeFromQueue(_ episode: Episode) {
         episode.queuePosition = nil
+        // Single save - no reindexing
         try? modelContext.save()
-        reindexQueue()
     }
     
     private func markAsPlayed(_ episode: Episode) {
         episode.isPlayed = true
         episode.queuePosition = nil
         episode.playbackPosition = 0
+        
+        // Single save - no reindexing
         try? modelContext.save()
-        reindexQueue()
         
         // If this was the currently playing episode, play next
         if audioPlayer.currentEpisode?.id == episode.id {
@@ -378,6 +398,7 @@ struct QueueView: View {
 
 struct QueueEpisodeRow: View {
     let episode: Episode
+    @State private var showingDetail = false
     
     #if os(macOS)
     // On macOS: Pass these explicitly to avoid environment object issues
@@ -409,6 +430,9 @@ struct QueueEpisodeRow: View {
             rowContent
         }
         .buttonStyle(.plain)
+        .sheet(isPresented: $showingDetail) {
+            EpisodeDetailView(episode: episode)
+        }
         #endif
     }
     
@@ -491,6 +515,19 @@ struct QueueEpisodeRow: View {
                 }
                 
                 Spacer()
+                
+                #if !os(macOS)
+                // Info button (iOS only - macOS will add to context menu)
+                Button {
+                    showingDetail = true
+                } label: {
+                    Image(systemName: "info.circle")
+                        .foregroundStyle(.secondary)
+                        .font(.title3)
+                }
+                .buttonStyle(.plain)
+                .help("Show episode details")
+                #endif
             }
             .padding(.vertical, 4)
     }

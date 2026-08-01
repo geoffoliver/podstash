@@ -49,6 +49,10 @@ class RSSFeedParser: NSObject, XMLParserDelegate {
     private var isInItem = false
     private var isInChannel = false
     
+    // Limit episodes to avoid parsing huge feeds
+    private let maxEpisodesToParse = 200  // Only parse first 200 episodes
+    private var didAbortIntentionally = false
+    
     private let dateFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
@@ -59,8 +63,12 @@ class RSSFeedParser: NSObject, XMLParserDelegate {
     func parse(data: Data) -> ParsedPodcast? {
         parser = XMLParser(data: data)
         parser?.delegate = self
+        didAbortIntentionally = false
         
-        guard parser?.parse() ?? false else {
+        let parseSucceeded = parser?.parse() ?? false
+        
+        // If we aborted intentionally, that's actually a success
+        guard parseSucceeded || didAbortIntentionally else {
             return nil
         }
         
@@ -149,16 +157,22 @@ class RSSFeedParser: NSObject, XMLParserDelegate {
                         artworkURL: currentEpisodeArtworkURL
                     )
                     episodes.append(episode)
+                    
+                    // Stop parsing if we've hit the limit
+                    if episodes.count >= maxEpisodesToParse {
+                        didAbortIntentionally = true
+                        parser.abortParsing()
+                    }
                 }
                 isInItem = false
                 
             case "title":
-                currentEpisodeTitle = trimmedText.decodingHTMLEntities()
+                currentEpisodeTitle = trimmedText.decodingBasicHTMLEntities()
                 
             case "description", "itunes:summary", "content:encoded":
                 if currentEpisodeDescription == nil || elementName == "content:encoded" {
-                    // Don't strip HTML, just decode entities - we'll render it in the UI
-                    currentEpisodeDescription = trimmedText.decodingHTMLEntities()
+                    // Keep raw HTML/text - we'll render it in the UI
+                    currentEpisodeDescription = trimmedText
                 }
                 
             case "pubDate":
@@ -178,12 +192,13 @@ class RSSFeedParser: NSObject, XMLParserDelegate {
                 
             case "title":
                 if podcastTitle.isEmpty {
-                    podcastTitle = trimmedText.decodingHTMLEntities()
+                    podcastTitle = trimmedText.decodingBasicHTMLEntities()
                 }
                 
             case "description", "itunes:summary":
                 if podcastDescription == nil {
-                    podcastDescription = trimmedText.decodingHTMLEntities()
+                    // Keep raw HTML/text - we'll render it in the UI
+                    podcastDescription = trimmedText
                 }
                 
             case "itunes:author", "author":
@@ -236,64 +251,34 @@ class RSSFeedParser: NSObject, XMLParserDelegate {
 // MARK: - String Extension
 
 extension String {
-    func stripHTML() -> String {
+    /// Decode only the most common HTML entities for titles and plain text
+    /// No regex, no complex parsing - just simple string replacement
+    func decodingBasicHTMLEntities() -> String {
+        // Quick check: if there are no entities, skip all the work
+        guard self.contains("&") else {
+            return self
+        }
+        
         var result = self
         
-        // Remove HTML tags
-        result = result.replacingOccurrences(of: "<[^>]+>", with: "", options: .regularExpression)
-        
-        // Decode HTML entities
-        result = result.decodingHTMLEntities()
-        
-        return result.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-    
-    func decodingHTMLEntities() -> String {
-        var result = self
-        
-        // Common named entities
+        // Most common entities - do these in order of likelihood
         result = result.replacingOccurrences(of: "&amp;", with: "&")
+        result = result.replacingOccurrences(of: "&apos;", with: "'")
+        result = result.replacingOccurrences(of: "&#39;", with: "'")
+        result = result.replacingOccurrences(of: "&quot;", with: "\"")
         result = result.replacingOccurrences(of: "&lt;", with: "<")
         result = result.replacingOccurrences(of: "&gt;", with: ">")
-        result = result.replacingOccurrences(of: "&quot;", with: "\"")
-        result = result.replacingOccurrences(of: "&#39;", with: "'")
-        result = result.replacingOccurrences(of: "&apos;", with: "'")
         result = result.replacingOccurrences(of: "&nbsp;", with: " ")
         result = result.replacingOccurrences(of: "&ndash;", with: "–")
         result = result.replacingOccurrences(of: "&mdash;", with: "—")
-        result = result.replacingOccurrences(of: "&ldquo;", with: "\u{201C}") // Left double quote
-        result = result.replacingOccurrences(of: "&rdquo;", with: "\u{201D}") // Right double quote
-        result = result.replacingOccurrences(of: "&lsquo;", with: "\u{2018}") // Left single quote
-        result = result.replacingOccurrences(of: "&rsquo;", with: "\u{2019}") // Right single quote
-        result = result.replacingOccurrences(of: "&hellip;", with: "…")
+        result = result.replacingOccurrences(of: "&rsquo;", with: "'")
+        result = result.replacingOccurrences(of: "&lsquo;", with: "'")
+        result = result.replacingOccurrences(of: "&rdquo;", with: "\"")
+        result = result.replacingOccurrences(of: "&ldquo;", with: "\"")
         
-        // Decode numeric entities (&#123; and &#x1F4A9;)
-        let decimalPattern = "&#(\\d+);"
-        if let regex = try? NSRegularExpression(pattern: decimalPattern) {
-            var matches = regex.matches(in: result, range: NSRange(result.startIndex..., in: result))
-            // Process in reverse to maintain string indices
-            for match in matches.reversed() {
-                if let range = Range(match.range(at: 0), in: result),
-                   let numberRange = Range(match.range(at: 1), in: result),
-                   let codePoint = Int(result[numberRange]),
-                   let scalar = UnicodeScalar(codePoint) {
-                    result.replaceSubrange(range, with: String(scalar))
-                }
-            }
-        }
-        
-        let hexPattern = "&#x([0-9A-Fa-f]+);"
-        if let regex = try? NSRegularExpression(pattern: hexPattern) {
-            var matches = regex.matches(in: result, range: NSRange(result.startIndex..., in: result))
-            for match in matches.reversed() {
-                if let range = Range(match.range(at: 0), in: result),
-                   let numberRange = Range(match.range(at: 1), in: result),
-                   let codePoint = Int(result[numberRange], radix: 16),
-                   let scalar = UnicodeScalar(codePoint) {
-                    result.replaceSubrange(range, with: String(scalar))
-                }
-            }
-        }
+        // That's it! No regex, no complex parsing.
+        // If there are weird numeric entities in titles, tough luck.
+        // Descriptions will be rendered as HTML anyway.
         
         return result
     }

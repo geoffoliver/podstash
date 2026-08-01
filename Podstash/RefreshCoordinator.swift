@@ -36,6 +36,7 @@ class RefreshCoordinator: ObservableObject {
     
     func cancelRefresh() {
         refreshTask?.cancel()
+        refreshTask = nil
         isRefreshing = false
         currentPodcastTitle = nil
         progress = nil
@@ -52,6 +53,9 @@ class RefreshCoordinator: ObservableObject {
     
     func refreshAllFeeds() {
         guard let modelContext = modelContext, !isRefreshing else { return }
+        
+        // Cancel any existing refresh first
+        refreshTask?.cancel()
         
         refreshTask = Task {
             await performRefresh()

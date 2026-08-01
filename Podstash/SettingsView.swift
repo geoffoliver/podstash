@@ -323,22 +323,20 @@ struct SyncSettingsView: View {
     var body: some View {
         Form {
             Toggle("Enable iCloud sync", isOn: $settings.iCloudSyncEnabled)
-            
+                .disabled(true)
+
             if settings.iCloudSyncEnabled {
                 Toggle("Sync playback progress", isOn: $settings.syncPlaybackProgress)
-                
+                    .disabled(true)
+
                 Toggle("Sync subscriptions", isOn: $settings.syncSubscriptions)
-                
-                Text("Your podcasts, episodes, and playback progress will sync across all your devices signed in to iCloud.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .padding(.top, 8)
-            } else {
-                Text("When disabled, data will only be stored locally on this device. You can enable iCloud sync at any time.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .padding(.top, 8)
+                    .disabled(true)
             }
+
+            Text("iCloud sync isn't available in this build yet - it requires a paid Apple Developer Program membership, which this app isn't currently signed with. All data is stored locally on this device for now.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .padding(.top, 8)
         }
         .formStyle(.grouped)
     }

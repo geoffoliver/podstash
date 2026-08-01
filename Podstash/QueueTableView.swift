@@ -16,6 +16,7 @@ struct QueueTableView: NSViewRepresentable {
     let onRemove: ([Episode]) -> Void
     let onMarkPlayed: ([Episode]) -> Void
     let onMove: (IndexSet, Int) -> Void // NEW: Callback for reordering
+    let onShowInfo: ((Episode) -> Void)? // NEW: Callback for showing episode info
     let currentlyPlayingID: UUID?
     let isPlaying: Bool
     
@@ -68,14 +69,41 @@ struct QueueTableView: NSViewRepresentable {
     func updateNSView(_ scrollView: NSScrollView, context: Context) {
         guard let tableView = scrollView.documentView as? NSTableView else { return }
         
+        let oldParent = context.coordinator.parent
         context.coordinator.parent = self
-        context.coordinator.episodes = episodes
         
-        tableView.reloadData()
+        // CRITICAL: Only reload if episodes list actually changed
+        let episodesChanged = !areEpisodesEqual(oldParent.episodes, episodes)
+        
+        if episodesChanged {
+            // Episodes list changed - do a full reload
+            context.coordinator.episodes = episodes
+            tableView.reloadData()
+        } else if oldParent.currentlyPlayingID != currentlyPlayingID || 
+                  oldParent.isPlaying != isPlaying {
+            // Only playback state changed - update affected rows
+            if let oldPlayingRow = episodes.firstIndex(where: { $0.id == oldParent.currentlyPlayingID }) {
+                tableView.reloadData(forRowIndexes: IndexSet(integer: oldPlayingRow), columnIndexes: IndexSet(integer: 0))
+            }
+            if let newPlayingRow = episodes.firstIndex(where: { $0.id == currentlyPlayingID }) {
+                tableView.reloadData(forRowIndexes: IndexSet(integer: newPlayingRow), columnIndexes: IndexSet(integer: 0))
+            }
+        }
         
         // Update selection
         let selectedRows = episodes.enumerated().filter { selection.contains($0.element.id) }.map { $0.offset }
         tableView.selectRowIndexes(IndexSet(selectedRows), byExtendingSelection: false)
+    }
+    
+    // Helper to compare episode arrays by ID only
+    private func areEpisodesEqual(_ lhs: [Episode], _ rhs: [Episode]) -> Bool {
+        guard lhs.count == rhs.count else { return false }
+        for (left, right) in zip(lhs, rhs) {
+            if left.id != right.id {
+                return false
+            }
+        }
+        return true
     }
     
     class Coordinator: NSObject, NSTableViewDelegate, NSTableViewDataSource {
@@ -109,8 +137,8 @@ struct QueueTableView: NSViewRepresentable {
         }
         
         func tableView(_ tableView: NSTableView, rowViewForRow row: Int) -> NSTableRowView? {
-            let rowView = HoverableTableRowView()
-            return rowView
+            // Use standard row view without hover effects
+            return nil  // Let the table view create default row views
         }
         
         func tableViewSelectionDidChange(_ notification: Notification) {
@@ -200,6 +228,16 @@ extension QueueTableView.Coordinator: NSMenuDelegate {
             menu.addItem(playItem)
             
             menu.addItem(NSMenuItem.separator())
+            
+            let infoItem = NSMenuItem(
+                title: "Show Details",
+                action: #selector(showEpisodeInfo),
+                keyEquivalent: ""
+            )
+            infoItem.target = self
+            menu.addItem(infoItem)
+            
+            menu.addItem(NSMenuItem.separator())
         }
         
         let markPlayedTitle = selectedEpisodes.count > 1 ? "Mark \(selectedEpisodes.count) as Played" : "Mark as Played"
@@ -226,6 +264,12 @@ extension QueueTableView.Coordinator: NSMenuDelegate {
     @objc func playSelectedEpisode() {
         if let episode = parent.selection.compactMap({ id in episodes.first { $0.id == id } }).first {
             parent.onDoubleClick(episode)
+        }
+    }
+    
+    @objc func showEpisodeInfo() {
+        if let episode = parent.selection.compactMap({ id in episodes.first { $0.id == id } }).first {
+            parent.onShowInfo?(episode)
         }
     }
     
@@ -298,52 +342,6 @@ extension QueueTableView.Coordinator: NSMenuDelegate {
 extension Collection {
     subscript(safe index: Index) -> Element? {
         indices.contains(index) ? self[index] : nil
-    }
-}
-
-// MARK: - Hoverable Table Row View
-
-/// A custom table row view that shows a subtle background tint on hover
-class HoverableTableRowView: NSTableRowView {
-    private var trackingArea: NSTrackingArea?
-    private var isHovering = false {
-        didSet {
-            if isHovering != oldValue {
-                needsDisplay = true
-            }
-        }
-    }
-    
-    override func updateTrackingAreas() {
-        super.updateTrackingAreas()
-        
-        if let trackingArea = trackingArea {
-            removeTrackingArea(trackingArea)
-        }
-        
-        let options: NSTrackingArea.Options = [.mouseEnteredAndExited, .activeInKeyWindow]
-        trackingArea = NSTrackingArea(rect: bounds, options: options, owner: self, userInfo: nil)
-        addTrackingArea(trackingArea!)
-    }
-    
-    override func mouseEntered(with event: NSEvent) {
-        super.mouseEntered(with: event)
-        isHovering = true
-    }
-    
-    override func mouseExited(with event: NSEvent) {
-        super.mouseExited(with: event)
-        isHovering = false
-    }
-    
-    override func drawBackground(in dirtyRect: NSRect) {
-        super.drawBackground(in: dirtyRect)
-        
-        // Only show hover effect if not selected
-        if isHovering && !isSelected {
-            NSColor.controlAccentColor.withAlphaComponent(0.08).setFill()
-            bounds.fill()
-        }
     }
 }
 

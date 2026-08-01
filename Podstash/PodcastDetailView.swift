@@ -236,20 +236,6 @@ struct PodcastDetailView: View {
     }
 }
 
-private struct FullDescriptionHeightKey: PreferenceKey {
-    static var defaultValue: CGFloat = 0
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-        value = nextValue()
-    }
-}
-
-private struct CollapsedDescriptionHeightKey: PreferenceKey {
-    static var defaultValue: CGFloat = 0
-    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
-        value = nextValue()
-    }
-}
-
 struct PodcastHeaderView: View {
     let podcast: Podcast
     let onRefresh: () -> Void
@@ -257,15 +243,29 @@ struct PodcastHeaderView: View {
 
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @State private var isDescriptionExpanded = false
-    @State private var fullDescriptionHeight: CGFloat = 0
-    @State private var collapsedDescriptionHeight: CGFloat = 0
+
+    // Cache stripped description to avoid repeated HTML/regex processing on every render
+    // (same pattern as EpisodeRowView.strippedDescription).
+    private let strippedDescription: String?
+
+    init(podcast: Podcast, onRefresh: @escaping () -> Void, onUnsubscribe: @escaping () -> Void) {
+        self.podcast = podcast
+        self.onRefresh = onRefresh
+        self.onUnsubscribe = onUnsubscribe
+        self.strippedDescription = podcast.podcastDescription?.stripHTMLTags()
+    }
 
     private var isCompact: Bool {
         horizontalSizeClass == .compact
     }
 
+    // Rough character-count heuristic for "does this need a More/Less toggle",
+    // rather than measuring rendered height. On macOS, feeding GeometryReader-measured
+    // heights back into @State from inside a NavigationSplitView's detail pane caused
+    // a layout feedback loop that made NSSplitViewController collapse the whole window
+    // (sidebar + detail) when the description had significant content.
     private var isDescriptionTruncated: Bool {
-        fullDescriptionHeight > collapsedDescriptionHeight + 1
+        (strippedDescription?.count ?? 0) > 160
     }
 
     private var artworkSize: CGFloat {
@@ -293,7 +293,7 @@ struct PodcastHeaderView: View {
                     }
 
                     // Description
-                    if let description = podcast.podcastDescription {
+                    if let description = strippedDescription {
                         descriptionView(description)
                     }
 
@@ -340,44 +340,41 @@ struct PodcastHeaderView: View {
 
     private func descriptionView(_ description: String) -> some View {
         VStack(alignment: .leading, spacing: 2) {
-            Text(description)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .lineLimit(isDescriptionExpanded ? nil : 3)
-                .fixedSize(horizontal: false, vertical: true)
-                .background(
+            // Expanded text is capped at a fixed height and scrolls internally rather than
+            // using .fixedSize/lineLimit(nil) to grow to its full ideal height. Asking a
+            // NavigationSplitView detail pane to accommodate an unbounded ideal height is
+            // what made NSSplitViewController collapse the whole window on macOS.
+            if isDescriptionExpanded {
+                ScrollView {
                     Text(description)
                         .font(.caption)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .hidden()
-                        .background(GeometryReader { proxy in
-                            Color.clear.preference(key: FullDescriptionHeightKey.self, value: proxy.size.height)
-                        }),
-                    alignment: .topLeading
-                )
-                .background(
-                    Text("A\nA\nA")
-                        .font(.caption)
-                        .fixedSize()
-                        .hidden()
-                        .background(GeometryReader { proxy in
-                            Color.clear.preference(key: CollapsedDescriptionHeightKey.self, value: proxy.size.height)
-                        }),
-                    alignment: .topLeading
-                )
-                .onPreferenceChange(FullDescriptionHeightKey.self) { fullDescriptionHeight = $0 }
-                .onPreferenceChange(CollapsedDescriptionHeightKey.self) { collapsedDescriptionHeight = $0 }
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .frame(maxHeight: 180)
+            } else {
+                Text(description)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(3)
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            isDescriptionExpanded = true
+                        }
+                    }
+            }
 
             if isDescriptionTruncated || isDescriptionExpanded {
                 Text(isDescriptionExpanded ? "Less" : "More")
                     .font(.caption2.weight(.semibold))
                     .foregroundStyle(.blue)
-            }
-        }
-        .contentShape(Rectangle())
-        .onTapGesture {
-            withAnimation(.easeInOut(duration: 0.2)) {
-                isDescriptionExpanded.toggle()
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            isDescriptionExpanded.toggle()
+                        }
+                    }
             }
         }
     }

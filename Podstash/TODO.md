@@ -8,10 +8,10 @@
   - [ ] Enhancement - iOS, show artwork with bottom controls
 - [ ] Bug - right clicking in queue and "mark as played" doesn't work if user right clicks to select item and trigger menu immediately.
 
-      -
+
 - [ ] UI bug - "Queue" item in sidebar is weird. Click directly on it results in two background colors, one spans full width of sidebar and is not as vibrant/bright, other is correct (not full width, rounded corners) and is very bright blue.
 - [ ] UI bug - episode detail dialog dropdown button, shortcut for all items appear to be return/enter -- get rid of shortcuts for this menu
-- [ ] UI bug - "More" button on podcast description on desktop breaks whole view - window and sidebar contents disappear!
+- [x] UI bug - "More" button on podcast description on desktop breaks whole view - window and sidebar contents disappear!
 - [ ] UI bug - User can close main window and there is no way to get it back
 
 

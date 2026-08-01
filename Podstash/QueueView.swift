@@ -21,8 +21,7 @@ struct QueueView: View {
     @EnvironmentObject var audioPlayer: AudioPlayerManager
     @State private var multiSelection = Set<UUID>()
     @State private var showingRemoveAlert = false
-    @State private var showingEpisodeInfo = false
-    @State private var selectedEpisodeForInfo: Episode?
+    @State private var episodeForInfoSheet: Episode?
     @FocusState private var isFocused: Bool
     #if !os(macOS)
     @State private var editMode: EditMode = .inactive
@@ -92,8 +91,7 @@ struct QueueView: View {
                             moveEpisodes(from: indices, to: destination)
                         },
                         onShowInfo: { episode in
-                            selectedEpisodeForInfo = episode
-                            showingEpisodeInfo = true
+                            episodeForInfoSheet = episode
                         },
                         currentlyPlayingID: audioPlayer.currentEpisode?.id,
                         isPlaying: audioPlayer.isPlaying
@@ -119,10 +117,8 @@ struct QueueView: View {
                     showingRemoveAlert = true
                 }
             }
-            .sheet(isPresented: $showingEpisodeInfo) {
-                if let episode = selectedEpisodeForInfo {
-                    EpisodeDetailView(episode: episode)
-                }
+            .sheet(item: $episodeForInfoSheet) { episode in
+                EpisodeDetailView(episode: episode)
             }
             .toolbar {
                 ToolbarItem {
@@ -404,6 +400,7 @@ struct QueueEpisodeRow: View {
     // On macOS: Pass these explicitly to avoid environment object issues
     let isCurrentlyPlaying: Bool
     let isPlaying: Bool
+    let onShowInfo: ((Episode) -> Void)?
     #else
     // On iOS: Use environment object as normal
     @EnvironmentObject var audioPlayer: AudioPlayerManager
@@ -515,11 +512,14 @@ struct QueueEpisodeRow: View {
                 }
                 
                 Spacer()
-                
-                #if !os(macOS)
-                // Info button (iOS only - macOS will add to context menu)
+
+                // Info button
                 Button {
+                    #if os(macOS)
+                    onShowInfo?(episode)
+                    #else
                     showingDetail = true
+                    #endif
                 } label: {
                     Image(systemName: "info.circle")
                         .foregroundStyle(.secondary)
@@ -527,7 +527,7 @@ struct QueueEpisodeRow: View {
                 }
                 .buttonStyle(.plain)
                 .help("Show episode details")
-                #endif
+                .padding(.trailing, 8)
             }
             .padding(.vertical, 4)
     }

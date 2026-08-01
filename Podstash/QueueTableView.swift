@@ -126,7 +126,8 @@ struct QueueTableView: NSViewRepresentable {
                 rootView: QueueEpisodeRow(
                     episode: episode,
                     isCurrentlyPlaying: episode.id == parent.currentlyPlayingID,
-                    isPlaying: parent.isPlaying
+                    isPlaying: parent.isPlaying,
+                    onShowInfo: parent.onShowInfo
                 )
             )
             return view

@@ -237,11 +237,6 @@ struct QueueView: View {
         .onAppear {
             isFocused = true
         }
-        .onDeleteCommand {
-            if !multiSelection.isEmpty {
-                showingRemoveAlert = true
-            }
-        }
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
                 EditButton()

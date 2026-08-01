@@ -563,14 +563,16 @@ struct PodstashApp: App {
                 .disabled(refreshCoordinator.isRefreshing)
             }
             
+            #if os(macOS)
             CommandGroup(before: .windowList) {
                 Button("Mini Player") {
                     MenuCoordinator.shared.audioPlayer?.showMiniPlayer()
                 }
                 .keyboardShortcut("m", modifiers: [.command, .shift])
-                
+
                 Divider()
             }
+            #endif
         }
         
         #if os(macOS)

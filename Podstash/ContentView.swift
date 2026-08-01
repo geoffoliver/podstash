@@ -8,6 +8,13 @@
 import SwiftUI
 import Combine
 import SwiftData
+import UniformTypeIdentifiers
+
+extension UTType {
+    static var opml: UTType {
+        UTType(filenameExtension: "opml") ?? .xml
+    }
+}
 
 struct ContentView: View {
     @EnvironmentObject var opmlCoordinator: OPMLImportCoordinator
@@ -404,11 +411,13 @@ struct PodcastListView: View {
                 selectedPodcast = nil
             }
         }
+        #if os(macOS)
         .onDeleteCommand {
             if !multiSelection.isEmpty {
                 showingUnsubscribeAlert = true
             }
         }
+        #endif
         .toolbar {
             ToolbarItem {
                 Button(action: {

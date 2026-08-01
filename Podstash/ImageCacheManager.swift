@@ -8,21 +8,25 @@
 import Foundation
 import SwiftUI
 import SwiftData
+#if os(macOS)
 import AppKit
+#else
+import UIKit
+#endif
 import Combine
 
 @MainActor
 final class ImageCacheManager: ObservableObject {
     static let shared = ImageCacheManager()
-    
+
     @Published private(set) var cachingProgress: [String: Double] = [:] // URL -> Progress
-    
+
     private let fileManager = FileManager.default
     private let cacheDirectory: URL
     private var activeTasks: [String: Task<URL?, Never>] = [:]
-    
+
     // In-memory cache for quick access
-    private var memoryCache: [String: NSImage] = [:]
+    private var memoryCache: [String: PlatformImage] = [:]
     private let maxMemoryCacheSize = 50 // Maximum number of images to keep in memory
     
     init() {
@@ -37,16 +41,16 @@ final class ImageCacheManager: ObservableObject {
     // MARK: - Public Methods
     
     /// Get cached image synchronously if available
-    func getCachedImage(for urlString: String) -> NSImage? {
+    func getCachedImage(for urlString: String) -> PlatformImage? {
         // Check memory cache first
         if let image = memoryCache[urlString] {
             return image
         }
-        
+
         // Check disk cache
         if let fileURL = diskCacheURL(for: urlString),
            fileManager.fileExists(atPath: fileURL.path),
-           let image = NSImage(contentsOf: fileURL) {
+           let image = PlatformImage(contentsOfCache: fileURL) {
             // Add to memory cache
             addToMemoryCache(image, for: urlString)
             return image
@@ -150,7 +154,7 @@ final class ImageCacheManager: ObservableObject {
             cachingProgress[urlString] = 0.5
             
             // Verify it's a valid image
-            guard let image = NSImage(data: data) else {
+            guard let image = PlatformImage(data: data) else {
                 cachingProgress.removeValue(forKey: urlString)
                 return nil
             }
@@ -190,7 +194,7 @@ final class ImageCacheManager: ObservableObject {
         return cacheDirectory.appendingPathComponent(filename)
     }
     
-    private func addToMemoryCache(_ image: NSImage, for urlString: String) {
+    private func addToMemoryCache(_ image: PlatformImage, for urlString: String) {
         // Simple LRU-style: if cache is full, remove oldest entries
         if memoryCache.count >= maxMemoryCacheSize {
             // Remove first entry (oldest in iteration order)
@@ -203,13 +207,35 @@ final class ImageCacheManager: ObservableObject {
     }
 }
 
-// MARK: - Helper Extension
+// MARK: - Cross-Platform Image Support
+
+#if os(macOS)
+typealias PlatformImage = NSImage
+#else
+typealias PlatformImage = UIImage
+#endif
+
+extension PlatformImage {
+    /// Loads an image from a cache file, bridging NSImage's URL-based initializer
+    /// and UIImage's path-based initializer.
+    convenience init?(contentsOfCache fileURL: URL) {
+        #if os(macOS)
+        self.init(contentsOf: fileURL)
+        #else
+        self.init(contentsOfFile: fileURL.path)
+        #endif
+    }
+}
 
 extension Image {
-    init?(nsImage: NSImage?) {
-        guard let nsImage = nsImage else {
+    init?(platformImage: PlatformImage?) {
+        guard let platformImage = platformImage else {
             return nil
         }
-        self.init(nsImage: nsImage)
+        #if os(macOS)
+        self.init(nsImage: platformImage)
+        #else
+        self.init(uiImage: platformImage)
+        #endif
     }
 }

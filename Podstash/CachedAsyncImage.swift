@@ -6,17 +6,16 @@
 //
 
 import SwiftUI
-import AppKit
 
 /// A view that loads and displays an image from a URL, with caching support
 struct CachedAsyncImage<Content: View, Placeholder: View>: View {
     let url: URL?
     let content: (Image) -> Content
     let placeholder: () -> Placeholder
-    
-    @State private var image: NSImage?
+
+    @State private var image: PlatformImage?
     @State private var isLoading = false
-    
+
     init(
         url: URL?,
         @ViewBuilder content: @escaping (Image) -> Content,
@@ -26,11 +25,11 @@ struct CachedAsyncImage<Content: View, Placeholder: View>: View {
         self.content = content
         self.placeholder = placeholder
     }
-    
+
     var body: some View {
         Group {
-            if let image = image {
-                content(Image(nsImage: image))
+            if let image = image, let displayImage = Image(platformImage: image) {
+                content(displayImage)
             } else {
                 placeholder()
                     .task(id: url) {

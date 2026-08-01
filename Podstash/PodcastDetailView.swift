@@ -236,101 +236,194 @@ struct PodcastDetailView: View {
     }
 }
 
+private struct FullDescriptionHeightKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
+    }
+}
+
+private struct CollapsedDescriptionHeightKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = nextValue()
+    }
+}
+
 struct PodcastHeaderView: View {
     let podcast: Podcast
     let onRefresh: () -> Void
     let onUnsubscribe: () -> Void
-    
+
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @State private var isDescriptionExpanded = false
+    @State private var fullDescriptionHeight: CGFloat = 0
+    @State private var collapsedDescriptionHeight: CGFloat = 0
+
+    private var isCompact: Bool {
+        horizontalSizeClass == .compact
+    }
+
+    private var isDescriptionTruncated: Bool {
+        fullDescriptionHeight > collapsedDescriptionHeight + 1
+    }
+
+    private var artworkSize: CGFloat {
+        isCompact ? 96 : 160
+    }
+
     var body: some View {
-        HStack(alignment: .top, spacing: 20) {
-            // Artwork on left
-            if let artworkURL = podcast.artworkURL, let url = URL(string: artworkURL) {
-                CachedAsyncImage(url: url) { image in
-                    image
-                        .resizable()
-                        .aspectRatio(contentMode: .fill)
-                } placeholder: {
-                    podcastPlaceholder
-                }
-                .frame(width: 160, height: 160)
-                .cornerRadius(12)
-                .shadow(radius: 3)
-            } else {
-                podcastPlaceholder
-                    .frame(width: 160, height: 160)
-                    .cornerRadius(12)
-                    .shadow(radius: 3)
-            }
-            
-            // Info on right
-            VStack(alignment: .leading, spacing: 8) {
-                // Title and Author
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(podcast.title)
-                        .font(.title3)
-                        .fontWeight(.bold)
-                    
-                    if let author = podcast.author {
-                        Text(author)
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
+        VStack(spacing: 12) {
+            HStack(alignment: .top, spacing: 16) {
+                artworkView
+
+                // Info on right
+                VStack(alignment: .leading, spacing: 8) {
+                    // Title and Author
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(podcast.title)
+                            .font(.title3)
+                            .fontWeight(.bold)
+
+                        if let author = podcast.author {
+                            Text(author)
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                        }
                     }
-                }
-                
-                // Description
-                if let description = podcast.podcastDescription {
-                    Text(description)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(3)
-                }
-                
-                // Metadata row
-                HStack(spacing: 12) {
-                    Label("\(podcast.episodes.count)", systemImage: "list.bullet")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                    
-                    if let lastUpdated = podcast.lastUpdated {
-                        Text(formattedLastUpdated(lastUpdated))
+
+                    // Description
+                    if let description = podcast.podcastDescription {
+                        descriptionView(description)
+                    }
+
+                    // Metadata row
+                    HStack(spacing: 12) {
+                        Label("\(podcast.episodes.count)", systemImage: "list.bullet")
                             .font(.caption2)
                             .foregroundStyle(.secondary)
-                    }
-                    
-                    // Website link
-                    if let websiteURL = podcast.websiteURL, let url = URL(string: websiteURL) {
-                        Link(destination: url) {
-                            Label("Web", systemImage: "safari")
+
+                        if let lastUpdated = podcast.lastUpdated {
+                            Text(formattedLastUpdated(lastUpdated))
                                 .font(.caption2)
+                                .foregroundStyle(.secondary)
                         }
+
+                        // Website link
+                        if let websiteURL = podcast.websiteURL, let url = URL(string: websiteURL) {
+                            Link(destination: url) {
+                                Label("Web", systemImage: "safari")
+                                    .font(.caption2)
+                            }
+                        }
+                    }
+
+                    // On regular width, the buttons fit alongside the artwork.
+                    if !isCompact {
+                        actionButtons
                     }
                 }
 
-                // Action buttons
-                HStack(spacing: 8) {
-                    Button(action: onRefresh) {
-                        Label("Refresh", systemImage: "arrow.clockwise")
-                            .font(.caption)
-                    }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
-                    
-                    Button(action: onUnsubscribe) {
-                        Label("Unsubscribe", systemImage: "xmark.circle")
-                            .font(.caption)
-                    }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
-                    .tint(.red)
+                if !isCompact {
+                    Spacer()
                 }
             }
-            
-            Spacer()
+
+            // On compact width, give the buttons the full row so labels don't wrap.
+            if isCompact {
+                actionButtons
+            }
         }
         .padding()
         .background(.regularMaterial)
     }
-    
+
+    private func descriptionView(_ description: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(description)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(isDescriptionExpanded ? nil : 3)
+                .fixedSize(horizontal: false, vertical: true)
+                .background(
+                    Text(description)
+                        .font(.caption)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .hidden()
+                        .background(GeometryReader { proxy in
+                            Color.clear.preference(key: FullDescriptionHeightKey.self, value: proxy.size.height)
+                        }),
+                    alignment: .topLeading
+                )
+                .background(
+                    Text("A\nA\nA")
+                        .font(.caption)
+                        .fixedSize()
+                        .hidden()
+                        .background(GeometryReader { proxy in
+                            Color.clear.preference(key: CollapsedDescriptionHeightKey.self, value: proxy.size.height)
+                        }),
+                    alignment: .topLeading
+                )
+                .onPreferenceChange(FullDescriptionHeightKey.self) { fullDescriptionHeight = $0 }
+                .onPreferenceChange(CollapsedDescriptionHeightKey.self) { collapsedDescriptionHeight = $0 }
+
+            if isDescriptionTruncated || isDescriptionExpanded {
+                Text(isDescriptionExpanded ? "Less" : "More")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.blue)
+            }
+        }
+        .contentShape(Rectangle())
+        .onTapGesture {
+            withAnimation(.easeInOut(duration: 0.2)) {
+                isDescriptionExpanded.toggle()
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var artworkView: some View {
+        if let artworkURL = podcast.artworkURL, let url = URL(string: artworkURL) {
+            CachedAsyncImage(url: url) { image in
+                image
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+            } placeholder: {
+                podcastPlaceholder
+            }
+            .frame(width: artworkSize, height: artworkSize)
+            .cornerRadius(12)
+            .shadow(radius: 3)
+        } else {
+            podcastPlaceholder
+                .frame(width: artworkSize, height: artworkSize)
+                .cornerRadius(12)
+                .shadow(radius: 3)
+        }
+    }
+
+    private var actionButtons: some View {
+        HStack(spacing: 8) {
+            Button(action: onRefresh) {
+                Label("Refresh", systemImage: "arrow.clockwise")
+                    .font(.caption)
+                    .frame(maxWidth: isCompact ? .infinity : nil)
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+
+            Button(action: onUnsubscribe) {
+                Label("Unsubscribe", systemImage: "xmark.circle")
+                    .font(.caption)
+                    .frame(maxWidth: isCompact ? .infinity : nil)
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .tint(.red)
+        }
+    }
+
     private func formattedLastUpdated(_ date: Date) -> String {
         let timeFormatter = DateFormatter()
         timeFormatter.dateStyle = .none

@@ -131,7 +131,7 @@ class FeedFetcher {
         }
         
         // Auto-download the most recent episodes per the user's setting
-        if let downloadManager = downloadManager {
+        if settings.autoDownloadNewEpisodes, let downloadManager = downloadManager {
             let recentEpisodes = podcast.episodes
                 .sorted { $0.publishDate > $1.publishDate }
                 .prefix(settings.maxEpisodesToDownload)

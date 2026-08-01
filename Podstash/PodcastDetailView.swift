@@ -288,7 +288,7 @@ struct PodcastHeaderView: View {
                         .foregroundStyle(.secondary)
                     
                     if let lastUpdated = podcast.lastUpdated {
-                        Text("Updated \(lastUpdated, style: .relative)")
+                        Text(formattedLastUpdated(lastUpdated))
                             .font(.caption2)
                             .foregroundStyle(.secondary)
                     }
@@ -301,9 +301,7 @@ struct PodcastHeaderView: View {
                         }
                     }
                 }
-                
-                Spacer()
-                
+
                 // Action buttons
                 HStack(spacing: 8) {
                     Button(action: onRefresh) {
@@ -329,6 +327,20 @@ struct PodcastHeaderView: View {
         .background(.regularMaterial)
     }
     
+    private func formattedLastUpdated(_ date: Date) -> String {
+        let timeFormatter = DateFormatter()
+        timeFormatter.dateStyle = .none
+        timeFormatter.timeStyle = .short
+
+        if Calendar.current.isDateInToday(date) {
+            return "Updated \(timeFormatter.string(from: date))"
+        }
+
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "MM/dd/yyyy"
+        return "Updated \(dateFormatter.string(from: date)) at \(timeFormatter.string(from: date))"
+    }
+
     private var podcastPlaceholder: some View {
         ZStack {
             LinearGradient(

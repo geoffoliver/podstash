@@ -212,13 +212,19 @@ struct FeedSettingsView: View {
                 }
             }
 
-            SettingsCheckboxRow(label: "Refresh only on Wi-Fi", isOn: $settings.refreshOnlyOnWiFi)
+            // Tight spacing (rather than the row rhythm's usual 18pt) so the hint reads as a
+            // caption attached to the checkbox above it, not its own independent row - the
+            // checkbox control's own vertical padding already made the default gap look
+            // oversized relative to every other row pairing in this pane.
+            VStack(alignment: .leading, spacing: 4) {
+                SettingsCheckboxRow(label: "Refresh only on Wi-Fi", isOn: $settings.refreshOnlyOnWiFi)
 
-            if settings.refreshIntervalEnum != .manual {
-                SettingsFreeformRow {
-                    Text("Feeds will refresh automatically in the background")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                if settings.refreshIntervalEnum != .manual {
+                    SettingsFreeformRow {
+                        Text("Feeds will refresh automatically in the background")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
                 }
             }
 

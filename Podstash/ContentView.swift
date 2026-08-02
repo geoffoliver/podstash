@@ -24,7 +24,12 @@ struct ContentView: View {
     @State private var showingImportProgress = false
     @State private var importCompletedMessage: String?
     @State private var selectedPodcast: Podcast?
-    @State private var showingQueue = false
+    // Defaults to true (not false) so a freshly-created ContentView - e.g. after the macOS
+    // main window is closed and reopened, which resets all @State - lands on Queue rather
+    // than falling through to the bare NowPlayingView() below. NowPlayingView is the only
+    // detail view with no .navigationTitle/.toolbar, and landing there collapsed the
+    // NavigationSplitView's unified toolbar, making the sidebar look broken/scrolled up too.
+    @State private var showingQueue = true
     @State private var columnVisibility: NavigationSplitViewVisibility = .automatic
 
     var body: some View {
@@ -285,7 +290,8 @@ struct PodcastListView: View {
     @Binding var columnVisibility: NavigationSplitViewVisibility
     @State private var showingSettings = false
     @State private var autoRefreshManager: AutoRefreshManager?
-    @State private var multiSelection = Set<UUID>()
+    // Starts selecting the Queue row to match showingQueue's default of true in ContentView.
+    @State private var multiSelection = Set<UUID>([Self.queueTag])
     @State private var showingUnsubscribeAlert = false
     @FocusState private var isFocused: Bool
 

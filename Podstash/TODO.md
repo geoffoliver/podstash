@@ -39,7 +39,9 @@
 - [x] Enhancement - Export OPML of subscribed feeds
 - [x] UI bug/enhancement - Setting for "Keep episodes" and "Auto-delete played episodes" are confusing. What happens if "Keep episodes" is set to "all episodes", what does "Auto-delete played episodes" do? Shouldn't it do nothing and disappear or be disabled? This is confusing.
 - [x] Default settings change - Auto-delete played episodes: true; Auto-download new episodes: true; Download [1] most recent episode per refresh;
-- [x] Bug - Storage reporting 0 episodes/0MB download, but I do have files downloaded
+- [x] Bug - Storage reporting 0 episodes/0MB download, but I do have files downloaded- [ ] Github release
+- [ ] Github "pages" page - one page, screenshots for desktop and mobile, light and dark mode, download badges (point to github releases for now - point to AppStore once that is working).
+- [ ] AppStore submission
 
 # Maybe
 

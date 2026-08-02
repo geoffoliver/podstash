@@ -38,14 +38,17 @@ struct ContentView: View {
             NavigationSplitView(columnVisibility: $columnVisibility) {
                 PodcastListView(selectedPodcast: $selectedPodcast, showingQueue: $showingQueue, columnVisibility: $columnVisibility)
             } detail: {
-                if showingQueue {
-                    QueueView()
-                        .id("queue") // Force refresh when switching to queue
-                } else if let podcast = selectedPodcast {
+                if let podcast = selectedPodcast, !showingQueue {
                     PodcastDetailView(podcast: podcast)
                         .id(podcast.id) // Force new view when podcast changes
                 } else {
-                    NowPlayingView()
+                    // Queue is the default/fallback detail view (also covers the case where
+                    // a podcast gets deselected without Queue being clicked directly - see
+                    // showingQueue's default-true comment above). NowPlayingView is no longer
+                    // reachable here now that Queue is the default view; it's still used as
+                    // the iOS sheet from CompactPlayerBar.
+                    QueueView()
+                        .id("queue") // Force refresh when switching to queue
                 }
             }
             .frame(minWidth: 700, minHeight: 500)
@@ -152,14 +155,15 @@ struct ContentView: View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
             PodcastListView(selectedPodcast: $selectedPodcast, showingQueue: $showingQueue, columnVisibility: $columnVisibility)
         } detail: {
-            if showingQueue {
-                QueueView()
-                    .id("queue") // Force refresh when switching to queue
-            } else if let podcast = selectedPodcast {
+            if let podcast = selectedPodcast, !showingQueue {
                 PodcastDetailView(podcast: podcast)
                     .id(podcast.id) // Force new view when podcast changes
             } else {
-                NowPlayingView()
+                // Queue is the default/fallback detail view here too (see the macOS branch
+                // above for why). NowPlayingView is still used as the iPhone sheet from
+                // CompactPlayerBar - that path is untouched.
+                QueueView()
+                    .id("queue") // Force refresh when switching to queue
             }
         }
         .safeAreaInset(edge: .bottom) {

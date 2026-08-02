@@ -189,10 +189,10 @@ struct NowPlayingView: View {
         } else {
             // Empty State
             VStack(spacing: 16) {
-                Image(systemName: "music.note")
+                Image(systemName: "antenna.radiowaves.left.and.right")
                     .font(.system(size: 64))
                     .foregroundStyle(.secondary)
-                
+
                 Text("No Episode Playing")
                     .font(.title2)
                     .fontWeight(.semibold)

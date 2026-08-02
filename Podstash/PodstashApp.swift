@@ -601,8 +601,16 @@ struct PodstashApp: App {
                 MenuCoordinator.shared.openWindow = openWindow
                 #endif
             }
-            .sheet(isPresented: $addPodcastCoordinator.isPresented) {
-                AddPodcastSheet(coordinator: addPodcastCoordinator)
+            .overlay {
+                if addPodcastCoordinator.isPresented {
+                    Color.black.opacity(0.5)
+                        .ignoresSafeArea()
+                        .overlay(
+                            AddPodcastSheet(coordinator: addPodcastCoordinator)
+                        )
+                        .allowsHitTesting(true)
+                        .zIndex(998)
+                }
             }
             #if os(macOS)
             .background(MainWindowIdentifierAccessor())
@@ -689,8 +697,7 @@ struct PodstashApp: App {
 
 struct AddPodcastSheet: View {
     @ObservedObject var coordinator: AddPodcastCoordinator
-    @Environment(\.dismiss) private var dismiss
-    
+
     var body: some View {
         VStack(spacing: 20) {
             if coordinator.showSuccessMessage {
@@ -699,11 +706,11 @@ struct AddPodcastSheet: View {
                     Image(systemName: "checkmark.circle.fill")
                         .font(.system(size: 60))
                         .foregroundStyle(.green)
-                    
+
                     Text("Subscribed to Podcast!")
                         .font(.title2)
                         .fontWeight(.semibold)
-                    
+
                     Text("Downloading episodes…")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
@@ -714,21 +721,47 @@ struct AddPodcastSheet: View {
                 VStack(alignment: .leading, spacing: 12) {
                     Text("Add Podcast by URL")
                         .font(.headline)
-                    
+
                     Text("Enter the RSS feed URL of the podcast you want to subscribe to.")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
-                    
-                    TextField("https://example.com/feed.rss", text: $coordinator.feedURL)
-                        .textFieldStyle(.roundedBorder)
-                        #if os(macOS)
-                        .frame(width: 400)
-                        #endif
-                        .disabled(coordinator.isValidating)
-                        .onSubmit {
-                            coordinator.addPodcast()
+
+                    // Placeholder is drawn manually instead of via TextField's native
+                    // `placeholder:` param - on iOS, text that looks like a URL was getting
+                    // auto-styled in link-blue instead of the standard secondary gray, even
+                    // as unentered placeholder text. A plain overlaid Text sidesteps that.
+                    ZStack(alignment: .leading) {
+                        if coordinator.feedURL.isEmpty {
+                            Text("https://example.com/feed.rss")
+                                .foregroundStyle(.secondary)
+                                .padding(.horizontal, 10)
                         }
-                    
+                        TextField("", text: $coordinator.feedURL)
+                            .padding(10)
+                            #if os(macOS)
+                            .textFieldStyle(.plain)
+                            #else
+                            .keyboardType(.URL)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                            #endif
+                    }
+                    .background(
+                        RoundedRectangle(cornerRadius: 8)
+                            .fill(Color.primary.opacity(0.06))
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8)
+                            .stroke(Color.primary.opacity(0.15), lineWidth: 1)
+                    )
+                    #if os(macOS)
+                    .frame(width: 400)
+                    #endif
+                    .disabled(coordinator.isValidating)
+                    .onSubmit {
+                        coordinator.addPodcast()
+                    }
+
                     if let message = coordinator.validationMessage {
                         Label(message, systemImage: "exclamationmark.triangle.fill")
                             .font(.footnote)
@@ -736,17 +769,16 @@ struct AddPodcastSheet: View {
                     }
                 }
                 .padding()
-                
+
                 HStack {
                     Button("Cancel") {
                         coordinator.cancel()
-                        dismiss()
                     }
                     .keyboardShortcut(.cancelAction)
                     .disabled(coordinator.isValidating)
-                    
+
                     Spacer()
-                    
+
                     Button(action: {
                         coordinator.addPodcast()
                     }) {
@@ -764,9 +796,11 @@ struct AddPodcastSheet: View {
                 .padding([.horizontal, .bottom])
             }
         }
-        #if os(macOS)
-        .frame(width: 500)
-        #endif
+        .frame(width: 420)
+        .padding(24)
+        .background(.regularMaterial)
+        .cornerRadius(16)
+        .shadow(radius: 20)
     }
 }
 

@@ -232,10 +232,10 @@ struct MiniPlayerView: View {
             Color.black.opacity(0.8)
             
             VStack(spacing: 12) {
-                Image(systemName: "music.note")
+                Image(systemName: "antenna.radiowaves.left.and.right")
                     .font(.system(size: 60))
                     .foregroundColor(.white.opacity(0.6))
-                
+
                 Text("No Episode")
                     .font(.headline)
                     .foregroundColor(.white)

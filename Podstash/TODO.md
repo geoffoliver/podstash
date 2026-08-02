@@ -5,8 +5,8 @@
   - [x] Bug - iOS "now playing" view -- where is it?
   - [x] Enhancement - iOS, show artwork with bottom controls
 - [x] Bug - resorting queue by drag/drop is weird. Sometimes item is placed above when it should be placed below.
-- [ ] Bug - right clicking in queue and "mark as played" doesn't work if user right clicks to select item and trigger menu immediately.
-- [ ] Bug - inconsistent row slide controls (mark as played/remove) on iOS and macOS queue views. Make iOS match macOS, both buttons on right, only icons.
+- [x] Bug - right clicking in queue and "mark as played" doesn't work if user right clicks to select item and trigger menu immediately.
+- [ ] Bug - inconsistent row slide controls (mark as played/remove) on iOS and macOS queue views. Make all platforms match - put "mark played" on left, and "delete" on right. Sliding the row far enough should perform the appropriate action ("mark played" or "delete) depending on the direction.
 
 
 - [ ] UI bug - User can close main window and there is no way to get it back

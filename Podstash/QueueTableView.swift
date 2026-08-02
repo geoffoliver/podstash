@@ -62,7 +62,9 @@ struct QueueTableView: NSViewRepresentable {
         scrollView.documentView = tableView
         scrollView.hasVerticalScroller = true
         scrollView.drawsBackground = false
-        
+
+        context.coordinator.tableView = tableView
+
         return scrollView
     }
     
@@ -109,10 +111,33 @@ struct QueueTableView: NSViewRepresentable {
     class Coordinator: NSObject, NSTableViewDelegate, NSTableViewDataSource {
         var parent: QueueTableView
         var episodes: [Episode] = []
-        
+        weak var tableView: NSTableView?
+
         init(_ parent: QueueTableView) {
             self.parent = parent
             self.episodes = parent.episodes
+        }
+
+        // Right-clicking a row does NOT change `selectedRowIndexes` in stock
+        // NSTableView (that's what the blue outline-but-white-background is:
+        // a "clicked" indicator, not a selection) -- it only sets
+        // `clickedRow`. So building the menu from `selectedRowIndexes` (or
+        // the even-more-stale `parent.selection` binding) misses the common
+        // case of right-clicking with nothing selected. Mirror Finder/Mail:
+        // if the clicked row is part of the existing selection, act on the
+        // whole selection; otherwise act on just the clicked row.
+        var selectedEpisodesForMenu: [Episode] {
+            guard let tableView = tableView else {
+                return parent.selection.compactMap { id in episodes.first { $0.id == id } }
+            }
+            let clickedRow = tableView.clickedRow
+            if clickedRow >= 0 {
+                if tableView.selectedRowIndexes.contains(clickedRow) {
+                    return tableView.selectedRowIndexes.compactMap { episodes[safe: $0] }
+                }
+                return episodes[safe: clickedRow].map { [$0] } ?? []
+            }
+            return tableView.selectedRowIndexes.compactMap { episodes[safe: $0] }
         }
         
         func numberOfRows(in tableView: NSTableView) -> Int {
@@ -213,11 +238,9 @@ struct QueueTableView: NSViewRepresentable {
 extension QueueTableView.Coordinator: NSMenuDelegate {
     func menuNeedsUpdate(_ menu: NSMenu) {
         menu.removeAllItems()
-        
-        let selectedEpisodes = parent.selection.compactMap { id in
-            episodes.first { $0.id == id }
-        }
-        
+
+        let selectedEpisodes = selectedEpisodesForMenu
+
         if selectedEpisodes.count == 1 {
             // Single episode menu
             let playItem = NSMenuItem(
@@ -263,29 +286,23 @@ extension QueueTableView.Coordinator: NSMenuDelegate {
     }
     
     @objc func playSelectedEpisode() {
-        if let episode = parent.selection.compactMap({ id in episodes.first { $0.id == id } }).first {
+        if let episode = selectedEpisodesForMenu.first {
             parent.onDoubleClick(episode)
         }
     }
-    
+
     @objc func showEpisodeInfo() {
-        if let episode = parent.selection.compactMap({ id in episodes.first { $0.id == id } }).first {
+        if let episode = selectedEpisodesForMenu.first {
             parent.onShowInfo?(episode)
         }
     }
-    
+
     @objc func markSelectedAsPlayed() {
-        let selectedEpisodes = parent.selection.compactMap { id in
-            episodes.first { $0.id == id }
-        }
-        parent.onMarkPlayed(selectedEpisodes)
+        parent.onMarkPlayed(selectedEpisodesForMenu)
     }
-    
+
     @objc func removeSelectedFromQueue() {
-        let selectedEpisodes = parent.selection.compactMap { id in
-            episodes.first { $0.id == id }
-        }
-        parent.onRemove(selectedEpisodes)
+        parent.onRemove(selectedEpisodesForMenu)
     }
     
     // MARK: - Drag and Drop Support

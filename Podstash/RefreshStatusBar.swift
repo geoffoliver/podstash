@@ -39,21 +39,23 @@ struct RefreshStatusBar: View {
                 // Completion state
                 Image(systemName: "checkmark.circle.fill")
                     .foregroundStyle(.green)
-                    .imageScale(.small)
-                
+                    .imageScale(.large)
+
                 Text(message)
-                    .font(.caption)
+                    .font(.appBody)
                     .fontWeight(.medium)
-                
+
                 Spacer()
-                
+
                 // Dismiss button
                 Button(action: {
                     onDismiss?()
                 }) {
                     Image(systemName: "xmark.circle.fill")
                         .foregroundStyle(.secondary)
-                        .imageScale(.small)
+                        .imageScale(.large)
+                        .frame(minWidth: tapTargetSize, minHeight: tapTargetSize)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .help("Dismiss")
@@ -61,45 +63,46 @@ struct RefreshStatusBar: View {
                 // Refreshing state
                 ProgressView()
                     .controlSize(.small)
-                    .scaleEffect(0.8)
-                
+
                 // Status text
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 8) {
                         Text("Refreshing Feeds")
-                            .font(.caption)
+                            .font(.appBody)
                             .fontWeight(.medium)
-                        
+
                         if let progress = progress {
                             Text("(\(progress.current)/\(progress.total))")
-                                .font(.caption)
+                                .font(.appBody)
                                 .foregroundStyle(.secondary)
                         }
                     }
-                    
+
                     if let title = currentPodcastTitle {
                         Text(title)
-                            .font(.caption2)
+                            .font(.appFootnote)
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
                             .truncationMode(.tail)
                     }
                 }
-                
+
                 Spacer()
-                
+
                 // Cancel button
                 Button(action: onCancel) {
                     Image(systemName: "xmark.circle.fill")
                         .foregroundStyle(.secondary)
-                        .imageScale(.small)
+                        .imageScale(.large)
+                        .frame(minWidth: tapTargetSize, minHeight: tapTargetSize)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .help("Cancel Refresh")
             }
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
         .background(.regularMaterial)
         .overlay(
             Rectangle()
@@ -107,6 +110,17 @@ struct RefreshStatusBar: View {
                 .foregroundStyle(.separator),
             alignment: .top
         )
+    }
+
+    // A 44pt minimum keeps the cancel/dismiss button reachable on iOS; the bar's
+    // own padding already grows to fit it, so the "subtle" look survives on macOS
+    // where a pointer doesn't need nearly as much forgiveness.
+    private var tapTargetSize: CGFloat {
+        #if os(iOS)
+        44
+        #else
+        24
+        #endif
     }
 }
 

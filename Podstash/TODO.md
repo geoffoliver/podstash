@@ -27,7 +27,7 @@
 - [ ] UI enhancement - "cancel" button for feed refreshing is very small. make actual button with "cancel" label
 - [ ] UI enhancement - "sidebar icon" option should just be "icon option" on iOS, and icon sizes should be larger - use "medium" macOS size for "small" on iOS, "large" macOS size for "medium" on iOS, and then pick a proportional size for "large" on iOS.
 - [ ] UI enhancement - settings is kind of a mess. for example, "Download _ most recent episode" setting is at top, but should be with "Auto-download..." setting, and also not be enabled/displayed/whatever when the "Auto-download..." option is not enabled. The whole thing needs a bit of a reorgnization and maybe a bit of functionality tweaks.
-- [ ] UI enhancement - remove number from start of queue items
+- [x] UI enhancement - remove number from start of queue items
 - [ ] UI enhancement - hide iCloud stuff until it can be implemented
 - [ ] UI enhancement - add Airplay button to Desktop transport controls
 - [ ] UI enhancement - episode detail dialog needs bottom padding - audio file URL bumps right against edge

@@ -430,99 +430,91 @@ struct QueueEpisodeRow: View {
     
     private var rowContent: some View {
         HStack(spacing: 12) {
-                // Queue position indicator
-                if let position = episode.queuePosition {
-                    Text("\(position + 1)")
-                        .font(.appCaption)
-                        .fontWeight(.bold)
-                        .foregroundStyle(.secondary)
-                        .frame(width: 30, alignment: .trailing)
+            // Episode artwork or podcast artwork
+            if let podcast = episode.podcast,
+               let artworkURL = podcast.artworkURL,
+               let url = URL(string: artworkURL) {
+                CachedAsyncImage(url: url) { image in
+                    image
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                } placeholder: {
+                    Color.gray.opacity(0.2)
                 }
-                
-                // Episode artwork or podcast artwork
-                if let podcast = episode.podcast,
-                   let artworkURL = podcast.artworkURL,
-                   let url = URL(string: artworkURL) {
-                    CachedAsyncImage(url: url) { image in
-                        image
-                            .resizable()
-                            .aspectRatio(contentMode: .fill)
-                    } placeholder: {
-                        Color.gray.opacity(0.2)
-                    }
-                    .frame(width: 50, height: 50)
-                    .cornerRadius(8)
-                } else {
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(Color.gray.opacity(0.2))
-                        .frame(width: 50, height: 50)
-                        .overlay(
-                            Image(systemName: "music.note")
-                                .foregroundStyle(.secondary)
-                        )
-                }
-                
-                // Episode info
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack {
-                        Text(episode.title)
-                            .font(.appSubheadline)
-                            .fontWeight(.medium)
-                            .lineLimit(2)
+                .frame(width: 60, height: 60)
+                .cornerRadius(8)
+            } else {
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(Color.gray.opacity(0.2))
+                    .frame(width: 60, height: 60)
+                    .overlay(
+                        Image(systemName: "music.note")
+                            .foregroundStyle(.secondary)
+                    )
+            }
 
-                        if isCurrentlyPlaying && isPlaying {
-                            Image(systemName: "speaker.wave.2.fill")
-                                .font(.appCaption)
+            // Episode info
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    Text(episode.title)
+                        .font(.headline)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+
+                    if isCurrentlyPlaying && isPlaying {
+                        Image(systemName: "speaker.wave.2.fill")
+                            .font(.footnote)
+                            .foregroundStyle(.blue)
+                    }
+                }
+
+                if let podcast = episode.podcast {
+                    Text(podcast.title)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+
+                HStack(spacing: 4) {
+                    Text(episode.publishDate, style: .date)
+                        .font(.footnote)
+
+                    if let duration = episode.duration {
+                        Text("•")
+                        Text(formatDuration(duration))
+                            .font(.footnote)
+                    }
+
+                    // Show progress if partially played
+                    if episode.playbackPosition > 0 {
+                        Text("•")
+                        if let duration = episode.duration, duration > 0 {
+                            let percent = Int((episode.playbackPosition / duration) * 100)
+                            Text("\(percent)%")
+                                .font(.footnote)
                                 .foregroundStyle(.blue)
                         }
                     }
-
-                    if let podcast = episode.podcast {
-                        Text(podcast.title)
-                            .font(.appFootnote)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                    }
-
-                    HStack(spacing: 4) {
-                        Text(episode.publishDate, style: .date)
-                            .font(.appCaption)
-
-                        if let duration = episode.duration {
-                            Text("•")
-                            Text(formatDuration(duration))
-                                .font(.appCaption)
-                        }
-
-                        // Show progress if partially played
-                        if episode.playbackPosition > 0 {
-                            Text("•")
-                            if let duration = episode.duration, duration > 0 {
-                                let percent = Int((episode.playbackPosition / duration) * 100)
-                                Text("\(percent)%")
-                                    .font(.appCaption)
-                                    .foregroundStyle(.blue)
-                            }
-                        }
-                    }
                 }
-                
-                Spacer()
-
-                // Info button
-                Button {
-                    onShowInfo(episode)
-                } label: {
-                    Image(systemName: "info.circle")
-                        .foregroundStyle(.secondary)
-                        .font(.title3)
-                        .frame(minWidth: 44, minHeight: 44)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .help("Show episode details")
+                .foregroundStyle(.secondary)
             }
-            .padding(.vertical, 4)
+
+            Spacer()
+
+            // Info button
+            Button {
+                onShowInfo(episode)
+            } label: {
+                Image(systemName: "info.circle")
+                    .foregroundStyle(.secondary)
+                    .font(.title3)
+                    .frame(minWidth: 44, minHeight: 44)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help("Show episode details")
+        }
+        .padding(.vertical, 4)
     }
     
     private func formatDuration(_ duration: TimeInterval) -> String {

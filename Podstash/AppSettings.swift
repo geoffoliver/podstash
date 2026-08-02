@@ -52,22 +52,41 @@ enum SidebarIconSize: String, CaseIterable, Identifiable {
     
     var id: String { rawValue }
     
-    /// Icon size in points (matching macOS Finder sidebar: 16, 24, 32)
+    /// Icon size in points. macOS matches Finder's sidebar (16/24/32). iOS shifts
+    /// up a full tier: row density that reads fine with a mouse on desktop looks
+    /// and feels cramped as a touch target on a phone.
     var points: CGFloat {
+        #if os(iOS)
+        switch self {
+        case .small: return 24
+        case .medium: return 32
+        case .large: return 40
+        }
+        #else
         switch self {
         case .small: return 16
         case .medium: return 24
         case .large: return 32
         }
+        #endif
     }
-    
-    /// Font size for sidebar text (matching macOS scaling)
+
+    /// Font size for sidebar text. macOS matches Finder's own compact scale;
+    /// iOS uses sizes closer to the system's standard list row text.
     var fontSize: CGFloat {
+        #if os(iOS)
+        switch self {
+        case .small: return 17
+        case .medium: return 20
+        case .large: return 24
+        }
+        #else
         switch self {
         case .small: return 11
         case .medium: return 13
         case .large: return 15
         }
+        #endif
     }
 }
 

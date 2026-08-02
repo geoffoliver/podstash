@@ -603,7 +603,7 @@ struct QueueRowView: View {
             // Queue count badge
             if queueCount > 0 {
                 Text("\(queueCount)")
-                    .font(.caption)
+                    .font(.appFootnote)
                     .foregroundStyle(.white)
                     .padding(.horizontal, 8)
                     .padding(.vertical, 2)
@@ -611,7 +611,7 @@ struct QueueRowView: View {
                     .cornerRadius(10)
             }
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, 6)
     }
 }
 
@@ -649,7 +649,7 @@ struct PodcastRowView: View {
             // Downloaded & unplayed badge
             if downloadedUnplayedCount > 0 {
                 Text("\(downloadedUnplayedCount)")
-                    .font(.caption)
+                    .font(.appFootnote)
                     .foregroundStyle(.white)
                     .padding(.horizontal, 8)
                     .padding(.vertical, 2)
@@ -657,9 +657,9 @@ struct PodcastRowView: View {
                     .cornerRadius(10)
             }
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, 6)
     }
-    
+
     private var podcastPlaceholder: some View {
         ZStack {
             LinearGradient(

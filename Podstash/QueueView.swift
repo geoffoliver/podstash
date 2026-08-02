@@ -22,13 +22,27 @@ struct QueueView: View {
     @State private var multiSelection = Set<UUID>()
     @State private var showingRemoveAlert = false
     @State private var episodeForInfoSheet: Episode?
+    @State private var searchText = ""
     @FocusState private var isFocused: Bool
     #if !os(macOS)
     @State private var editMode: EditMode = .inactive
     #endif
-    
-    // Removed the computed property - using @Query directly above
-    
+
+    private var isSearching: Bool {
+        !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    // Reordering (drag/drop on macOS, edit-mode drag on iOS) is disabled while this
+    // is non-empty, since queuePosition indices from a filtered subset don't map
+    // onto the full queue's ordering.
+    private var displayedEpisodes: [Episode] {
+        guard isSearching else { return queuedEpisodes }
+        return queuedEpisodes.filter { episode in
+            episode.title.localizedCaseInsensitiveContains(searchText)
+                || (episode.podcast?.title.localizedCaseInsensitiveContains(searchText) ?? false)
+        }
+    }
+
     var body: some View {
         Group {
             #if os(macOS)
@@ -50,9 +64,22 @@ struct QueueView: View {
                             .multilineTextAlignment(.center)
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else if isSearching && displayedEpisodes.isEmpty {
+                    VStack(spacing: 16) {
+                        Image(systemName: "magnifyingglass")
+                            .font(.system(size: 48))
+                            .foregroundStyle(.secondary)
+                        Text("No Results")
+                            .font(.title2)
+                            .fontWeight(.semibold)
+                        Text("No queued episodes match \"\(searchText)\"")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
                     QueueTableView(
-                        episodes: queuedEpisodes,
+                        episodes: displayedEpisodes,
                         selection: $multiSelection,
                         onDoubleClick: { episode in
                             audioPlayer.play(episode: episode)
@@ -62,7 +89,7 @@ struct QueueView: View {
                             for episode in episodes {
                                 episode.queuePosition = nil
                             }
-                            
+
                             // Single save
                             try? modelContext.save()
                             multiSelection.removeAll()
@@ -74,13 +101,13 @@ struct QueueView: View {
                                 episode.queuePosition = nil
                                 episode.playbackPosition = 0
                             }
-                            
+
                             // Clear selection immediately for instant UI feedback
                             multiSelection.removeAll()
-                            
+
                             // Save synchronously - required for SwiftData
                             try? modelContext.save()
-                            
+
                             // If current episode was marked, play next
                             if let currentID = audioPlayer.currentEpisode?.id,
                                episodes.contains(where: { $0.id == currentID }) {
@@ -88,6 +115,9 @@ struct QueueView: View {
                             }
                         },
                         onMove: { indices, destination in
+                            // Reordering during a filtered search would map indices
+                            // onto the wrong episodes, so ignore it while searching.
+                            guard !isSearching else { return }
                             moveEpisodes(from: indices, to: destination)
                         },
                         onShowInfo: { episode in
@@ -99,6 +129,7 @@ struct QueueView: View {
                 }
             }
             .navigationTitle("Queue")
+            .searchable(text: $searchText, prompt: "Search Queue")
             .focused($isFocused)
             .onAppear {
                 isFocused = true
@@ -145,11 +176,11 @@ struct QueueView: View {
                     Image(systemName: "text.line.first.and.arrowtriangle.forward")
                         .font(.system(size: 48))
                         .foregroundStyle(.secondary)
-                    
+
                     Text("Queue is Empty")
                         .font(.title2)
                         .fontWeight(.semibold)
-                    
+
                     Text("Add episodes to your queue from any podcast")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
@@ -157,8 +188,25 @@ struct QueueView: View {
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 40)
+            } else if isSearching && displayedEpisodes.isEmpty {
+                VStack(spacing: 16) {
+                    Image(systemName: "magnifyingglass")
+                        .font(.system(size: 48))
+                        .foregroundStyle(.secondary)
+
+                    Text("No Results")
+                        .font(.title2)
+                        .fontWeight(.semibold)
+
+                    Text("No queued episodes match \"\(searchText)\"")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 40)
             } else {
-                ForEach(queuedEpisodes) { episode in
+                ForEach(displayedEpisodes) { episode in
                     QueueEpisodeRow(episode: episode, onShowInfo: { episodeForInfoSheet = $0 })
                         .tag(episode.id)
                         .environmentObject(audioPlayer)
@@ -225,11 +273,15 @@ struct QueueView: View {
                         }
                 }
                 .onMove { indices, destination in
+                    // Reordering during a filtered search would map indices onto
+                    // the wrong episodes, so ignore it while searching.
+                    guard !isSearching else { return }
                     moveEpisodes(from: indices, to: destination)
                 }
             }
         }
         .navigationTitle("Queue")
+        .searchable(text: $searchText, prompt: "Search Queue")
         .focused($isFocused)
         .onAppear {
             isFocused = true

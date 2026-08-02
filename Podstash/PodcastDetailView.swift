@@ -17,24 +17,40 @@ struct PodcastDetailView: View {
     @State private var showingUnsubscribeAlert = false
     @State private var selectedTab: EpisodeFilter = .unplayed
     @State private var episodeForInfoSheet: Episode?
+    @State private var searchText = ""
     @Environment(\.dismiss) private var dismiss
-    
+
     enum EpisodeFilter {
         case unplayed, all
     }
-    
+
     // Pre-sort episodes ONCE, not on every render
     private var sortedEpisodes: [Episode] {
         podcast.episodes.sorted(by: { $0.publishDate > $1.publishDate })
     }
-    
+
+    private var isSearching: Bool {
+        !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
     private var filteredEpisodes: [Episode] {
-        switch selectedTab {
-        case .unplayed:
-            // Only show unplayed episodes that are downloaded
-            return sortedEpisodes.filter { !$0.isPlayed && $0.isDownloaded }
-        case .all:
-            return sortedEpisodes
+        // Searching always looks across every episode, regardless of which tab is
+        // selected - the tab picker is just a default view, not a search scope.
+        let episodes = isSearching ? sortedEpisodes : {
+            switch selectedTab {
+            case .unplayed:
+                // Only show unplayed episodes that are downloaded
+                return sortedEpisodes.filter { !$0.isPlayed && $0.isDownloaded }
+            case .all:
+                return sortedEpisodes
+            }
+        }()
+
+        guard isSearching else { return episodes }
+
+        return episodes.filter { episode in
+            episode.title.localizedCaseInsensitiveContains(searchText)
+                || (episode.episodeDescription?.localizedCaseInsensitiveContains(searchText) ?? false)
         }
     }
     
@@ -71,14 +87,30 @@ struct PodcastDetailView: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
-                // Tab picker
+                // Tab picker - disabled while searching since search always looks
+                // across all episodes regardless of which tab is selected.
                 Picker("Filter", selection: $selectedTab) {
                     Text("Unplayed (\(unplayedDownloadedCount))").tag(EpisodeFilter.unplayed)
                     Text("All (\(sortedEpisodes.count))").tag(EpisodeFilter.all)
                 }
                 .pickerStyle(.segmented)
                 .padding()
-                
+                .disabled(isSearching)
+
+                if isSearching && filteredEpisodes.isEmpty {
+                    VStack(spacing: 16) {
+                        Image(systemName: "magnifyingglass")
+                            .font(.system(size: 48))
+                            .foregroundStyle(.secondary)
+                        Text("No Results")
+                            .font(.headline)
+                            .foregroundStyle(.secondary)
+                        Text("No episodes match \"\(searchText)\"")
+                            .font(.subheadline)
+                            .foregroundStyle(.tertiary)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else {
                 // Use List instead of ScrollView + ForEach for better performance (virtualization)
                 List {
                     ForEach(filteredEpisodes) { episode in
@@ -190,9 +222,14 @@ struct PodcastDetailView: View {
                     }
                 }
                 .listStyle(.plain)
+                }
             }
         }
         .navigationTitle(podcast.title)
+        // Explicit .toolbar placement (rather than .automatic): this view has no
+        // other toolbar items to anchor to, and without one .automatic falls back
+        // to an inline drawer field that doesn't match the window's toolbar chrome.
+        .searchable(text: $searchText, placement: .toolbar, prompt: "Search Episodes")
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif

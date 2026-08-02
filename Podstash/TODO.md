@@ -31,16 +31,15 @@
 - [x] UI enhancement - hide iCloud stuff until it can be implemented
 - [x] UI enhancement - add Airplay button to Desktop transport controls
 - [x] UI enhancement - episode detail dialog needs bottom padding - audio file URL bumps right against edge
+- [x] search feature (standard placement (top/right on desktop, bottom on ios))
+  - [x] episodes in podcast detail view (always searches "all" tab)
+  - [x] queue
 - [ ] sync - enroll in paid Apple Developer Program, enable CloudKit capability, flip `cloudKitEntitlementsConfigured` in PodstashApp.swift to sync data between devices
 
 # Maybe
 
-- [ ] search feature
-  - [ ] episodes in subscribed feeds
-  - [ ] queue
-  - [ ] sidebar
-  - [ ] something else?
 - [ ] can this play videos?
 - [ ] "downloads" window/view/whatever - maybe we can just use the queue for this? show progress circle like on podcast detail?
 - [ ] "window" menu flashes different content when app is playing - shows extra options for maximizing/fullscreening window
 - [ ] macOS queue drag/drop ghost is a plain blue bar with title only - could match the real row look instead (artwork thumbnail, rounded corners, stacked title/podcast text)
+- [ ] macOS "Search Episodes" field (podcast detail) has a lighter background than "Search Queue" (queue view) - same `.searchable()` usage but they render with different bezel colors. Ruled out: toolbar item presence, explicit vs automatic placement, focus state. Suspect it's tied to podcast detail using a real SwiftUI `List` vs queue's NSTableView wrapper - try swapping the episode List to ScrollView/LazyVStack to test.

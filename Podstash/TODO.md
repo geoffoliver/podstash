@@ -10,13 +10,16 @@
 - [x] "Add All Unplayed" in queue adds *ALL* the unplayed items, not just the downloaded unplayed items, which is what it should do
 
 
-- [ ] UI bug (desktop) - User can close main window and there is no way to get it back
-- [ ] UI bug (desktop) - Right click works, but control+click does not (it should show context menus. it's basic macOS functionality!)
-- [ ] UI bug - episode detail dialog dropdown button, shortcut for all items appear to be return/enter -- get rid of shortcuts for this menu
-- [ ] UI bug (desktop) - "Queue" item in sidebar is weird. Click directly on it results in two background colors, one spans full width of sidebar and is not as vibrant/bright, other is correct (not full width, rounded corners) and is very bright blue.
-- [ ] UI bug (iOS) - "now playing" view, tapping anywhere opens audio file in browser, and that is very weird.
+- [x] UI bug (desktop) - User can close main window and there is no way to get it back
+- [x] UI bug (desktop) - Right click works, but control+click does not (it should show context menus. it's basic macOS functionality!)
+- [x] UI bug - episode detail dialog dropdown button, shortcut for all items appear to be return/enter -- get rid of shortcuts for this menu
+- [x] UI bug (desktop) - "Queue" item in sidebar is weird. Click directly on it results in two background colors, one spans full width of sidebar and is not as vibrant/bright, other is correct (not full width, rounded corners) and is very bright blue.
+- [x] UI bug (iOS) - "episode detail" sheet, tapping anywhere opens audio file in browser, and that is very weird.
 - [x] UI bug (desktop) - "More" button on podcast description  breaks whole view - window and sidebar contents disappear!
+- [x] UI bug (desktop) - "Queue" sidebar item is included with "select all" (cmd+a) action, and it should not be.
 
+- [ ] Bug - Downloading/re-downloading an episode should mark it as unplayed.
+- [ ] UI bug (desktop) - Sometimes on initial play, progress scrubber is too wide (goes all the way to right edge and probably far outside of it)
 
 - [ ] UI enhancement - text is *very* small on macOS and iOS.
 - [ ] UI enhancement - "cancel" button for feed refreshing is very small. make actual button with "cancel" label

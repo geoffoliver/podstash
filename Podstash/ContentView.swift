@@ -296,8 +296,9 @@ struct PodcastListView: View {
     private static let queueTag = UUID(uuidString: "00000000-0000-0000-0000-000000000001")!
 
     // The Queue row is tagged so it participates in real List selection (see queueTag above),
-    // but it must never be treated as a podcast for counting/deletion purposes - e.g. Cmd+A
-    // (Select All) or a Shift+click range on macOS can legitimately include it in multiSelection.
+    // but it must never be treated as a podcast for counting/deletion purposes. It's also
+    // stripped out of multi-item selections entirely (see onChange(of: multiSelection) below)
+    // so Cmd+A / Select All only ever grabs podcasts, never Queue.
     private var selectedPodcastIDs: Set<UUID> {
         multiSelection.subtracting([Self.queueTag])
     }
@@ -313,7 +314,7 @@ struct PodcastListView: View {
         List(selection: $multiSelection) {
             // Queue section at top
             Section {
-                QueueRowView(queueCount: queueCount, isSelected: showingQueue, iconSize: settings.sidebarIconSizeEnum.points, fontSize: settings.sidebarIconSizeEnum.fontSize)
+                QueueRowView(queueCount: queueCount, iconSize: settings.sidebarIconSizeEnum.points, fontSize: settings.sidebarIconSizeEnum.fontSize)
                     .tag(Self.queueTag)
                     .contentShape(Rectangle())
                     .onTapGesture {
@@ -425,7 +426,11 @@ struct PodcastListView: View {
         #endif
         .onChange(of: multiSelection) { newSelection in
             // Update selectedPodcast when single selection changes
-            if newSelection == [Self.queueTag] {
+            if newSelection.count > 1, newSelection.contains(Self.queueTag) {
+                // Queue got swept into a multi-item selection (Cmd+A, Shift+click range) -
+                // it should only ever be selected on its own via a direct click.
+                multiSelection.remove(Self.queueTag)
+            } else if newSelection == [Self.queueTag] {
                 showingQueue = true
                 selectedPodcast = nil
                 #if !os(macOS)
@@ -569,7 +574,6 @@ struct PodcastListView: View {
 
 struct QueueRowView: View {
     let queueCount: Int
-    let isSelected: Bool
     let iconSize: CGFloat
     let fontSize: CGFloat
     
@@ -607,7 +611,6 @@ struct QueueRowView: View {
             }
         }
         .padding(.vertical, 4)
-        .listRowBackground(isSelected ? Color.accentColor.opacity(0.2) : Color.clear)
     }
 }
 
@@ -1061,7 +1064,11 @@ struct EpisodeDetailView: View {
     
     var body: some View {
         NavigationStack {
-            List {
+            // Plain ScrollView, not List: this sheet is one static block of content (no
+            // repeated rows), and wrapping a single row containing a Link in a List makes
+            // iOS treat the WHOLE row as the link's tap target - tapping anywhere in the
+            // sheet opened the audio file's URL in the browser instead of just the link text.
+            ScrollView {
                 VStack(spacing: 24) {
                     // Artwork
                     if let artworkURL = episode.artworkURL ?? episode.podcast?.artworkURL,
@@ -1168,18 +1175,13 @@ struct EpisodeDetailView: View {
                                                 .font(.caption)
                                                 .foregroundStyle(.secondary)
                                         }
-                                        
-                                        GeometryReader { geometry in
-                                            ZStack(alignment: .leading) {
-                                                RoundedRectangle(cornerRadius: 4)
-                                                    .fill(Color.gray.opacity(0.2))
-                                                
-                                                RoundedRectangle(cornerRadius: 4)
-                                                    .fill(Color.accentColor)
-                                                    .frame(width: geometry.size.width * CGFloat(episode.playbackPosition / duration))
-                                            }
-                                        }
-                                        .frame(height: 8)
+
+                                        // A GeometryReader-based bar relied on List handing
+                                        // each row a well-defined width top-down; outside a
+                                        // List that proposal can go ambiguous, and the NaN
+                                        // width it produced blanked out this entire sheet.
+                                        // ProgressView doesn't have that failure mode.
+                                        ProgressView(value: episode.playbackPosition, total: duration)
                                     }
                                     .padding(.top, 8)
                                 }
@@ -1226,11 +1228,8 @@ struct EpisodeDetailView: View {
                     }
                 }
                 .frame(maxWidth: .infinity)
-                .listRowSeparator(.hidden)
-                .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 16, trailing: 16))
+                .padding(EdgeInsets(top: 0, leading: 16, bottom: 16, trailing: 16))
             }
-            .listStyle(.plain)
-            .environment(\.defaultMinListRowHeight, 0)
             .contentMargins(.top, 0, for: .scrollContent)
             .navigationTitle("Episode Details")
 #if !os(macOS)
@@ -1243,7 +1242,11 @@ struct EpisodeDetailView: View {
                     }
                 }
                 
-                ToolbarItem(placement: .primaryAction) {
+                // .primaryAction implies "the default action of this screen" on macOS, which
+                // makes every item inside this overflow Menu inherit the Return key as its
+                // shortcut (shown next to each row). This menu isn't a single default action,
+                // so use .automatic instead - same trailing position, no inherited shortcut.
+                ToolbarItem(placement: .automatic) {
                     Menu {
                         // Play button
                         Button {
@@ -1355,21 +1358,36 @@ struct EpisodeDetailView: View {
 
 struct HTMLText: View {
     let html: String
-    
+    @State private var attributedString: AttributedString?
+
     var body: some View {
-        if let attributedString = htmlToAttributedString(html) {
-            Text(AttributedString(attributedString))
-                .font(.body)
-                .foregroundStyle(.secondary)
-        } else {
-            // Fallback to plain text with HTML stripped
-            Text(html.stripHTMLTags())
-                .font(.body)
-                .foregroundStyle(.secondary)
+        Group {
+            if let attributedString {
+                Text(attributedString)
+            } else {
+                // Fallback to plain text with HTML stripped, shown until parsing finishes
+                Text(html.stripHTMLTags())
+            }
+        }
+        .font(.body)
+        .foregroundStyle(.secondary)
+        // NSAttributedString's HTML document type parser spins up a hidden WebKit layout
+        // pass internally. Calling it synchronously from `body` (as this used to) reenters
+        // SwiftUI's render graph mid-evaluation, which produced "AttributeGraph: cycle
+        // detected" errors severe enough to blank out the whole screen this view was on.
+        // Computing it in a task and publishing the result via @State keeps HTML parsing
+        // out of the render graph entirely.
+        .task(id: html) {
+            attributedString = Self.parseHTML(html)
         }
     }
-    
-    private func htmlToAttributedString(_ html: String) -> NSAttributedString? {
+
+    private static func parseHTML(_ html: String) -> AttributedString? {
+        guard let ns = htmlToAttributedString(html) else { return nil }
+        return AttributedString(ns)
+    }
+
+    private static func htmlToAttributedString(_ html: String) -> NSAttributedString? {
         // Wrap in a basic HTML document with styling
         let styledHTML =
 """

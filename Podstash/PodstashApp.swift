@@ -434,14 +434,60 @@ class OPMLFeedParser: NSObject, XMLParserDelegate {
 class MenuCoordinator {
     static let shared = MenuCoordinator()
     weak var audioPlayer: AudioPlayerManager?
-    
+    var openWindow: OpenWindowAction?
+
     private init() {}
+
+    // WindowGroup allows multiple simultaneous instances, so a bare openWindow(id:) would
+    // spawn a duplicate if the main window is already open - bring the existing one forward
+    // instead, and only open a new one if it was actually closed.
+    func showMainWindow() {
+        if let existing = NSApp.windows.first(where: { $0.identifier?.rawValue == "main" }) {
+            existing.makeKeyAndOrderFront(nil)
+        } else {
+            openWindow?(id: "main")
+        }
+        NSApp.activate(ignoringOtherApps: true)
+    }
 }
 
-// App delegate to configure menu behavior  
+// App delegate to configure menu behavior
 class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
-        // Nothing needed here for now
+        // Control+click didn't reliably show context menus (only actual right-click did),
+        // even though AppKit is supposed to translate a control-modified left click into a
+        // right click automatically. Do that translation ourselves so both gestures work
+        // everywhere in the app - this is basic macOS functionality users expect.
+        NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown) { event in
+            guard event.modifierFlags.contains(.control), let window = event.window else {
+                return event
+            }
+            if let rightMouseDown = NSEvent.mouseEvent(
+                with: .rightMouseDown,
+                location: event.locationInWindow,
+                modifierFlags: event.modifierFlags,
+                timestamp: event.timestamp,
+                windowNumber: event.windowNumber,
+                context: nil,
+                eventNumber: event.eventNumber,
+                clickCount: event.clickCount,
+                pressure: event.pressure
+            ) {
+                window.sendEvent(rightMouseDown)
+                return nil
+            }
+            return event
+        }
+    }
+
+    // WindowGroup's default "New Window" command (Cmd+N) is replaced by "Add Podcast by
+    // URL...", so once the user closes the last window there's otherwise no way to get it
+    // back short of relaunching. Reopen it when the Dock icon is clicked with no windows open.
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        if !flag {
+            MenuCoordinator.shared.showMainWindow()
+        }
+        return true
     }
 }
 #endif
@@ -460,7 +506,11 @@ struct PodstashApp: App {
     @StateObject private var downloadManager = DownloadManager()
     
     @State private var autoRefreshManager: AutoRefreshManager?
-    
+
+    #if os(macOS)
+    @Environment(\.openWindow) private var openWindow
+    #endif
+
     var sharedModelContainer: ModelContainer = {
         let schema = Schema([
             Podcast.self,
@@ -493,91 +543,128 @@ struct PodstashApp: App {
         }
     }()
     
+    @ViewBuilder
+    private var mainContent: some View {
+        ContentView()
+            .environmentObject(addPodcastCoordinator)
+            .environmentObject(opmlCoordinator)
+            .environmentObject(refreshCoordinator)
+            .environmentObject(audioPlayer)
+            .environmentObject(downloadManager)
+            .environmentObject(settings)
+            .onAppear {
+                let context = sharedModelContainer.mainContext
+                addPodcastCoordinator.setModelContext(context)
+                addPodcastCoordinator.setSettings(settings)
+                opmlCoordinator.setModelContext(context)
+                refreshCoordinator.setModelContext(context)
+                refreshCoordinator.setSettings(settings)
+                refreshCoordinator.setDownloadManager(downloadManager)
+                audioPlayer.setModelContext(context)
+                audioPlayer.setSettings(settings)
+                downloadManager.setModelContext(context)
+
+                // Set up callback to refresh feeds after adding a podcast
+                addPodcastCoordinator.triggerRefreshAfterAdding = { podcast in
+                    refreshCoordinator.refreshFeed(for: podcast)
+                }
+
+                // Set up callback to refresh feeds after OPML import
+                opmlCoordinator.triggerRefreshAfterImport = {
+                    refreshCoordinator.refreshAllFeeds()
+                }
+
+                // Initialize and start auto-refresh
+                Task { @MainActor in
+                    if autoRefreshManager == nil {
+                        autoRefreshManager = AutoRefreshManager(settings: settings, refreshCoordinator: refreshCoordinator)
+                        autoRefreshManager?.startAutoRefresh()
+                    }
+                }
+
+                #if os(macOS)
+                // Register audio player for menu validation
+                MenuCoordinator.shared.audioPlayer = audioPlayer
+                // Register openWindow so the Window menu / Dock-reopen can bring back a closed main window
+                MenuCoordinator.shared.openWindow = openWindow
+                #endif
+            }
+            .sheet(isPresented: $addPodcastCoordinator.isPresented) {
+                AddPodcastSheet(coordinator: addPodcastCoordinator)
+            }
+    }
+
+    @CommandsBuilder
+    private var fileCommands: some Commands {
+        CommandGroup(replacing: .newItem) {
+            Button("Add Podcast by URL…") {
+                addPodcastCoordinator.showDialog()
+            }
+            .keyboardShortcut("n", modifiers: .command)
+
+            Button("Import OPML…") {
+                opmlCoordinator.importOPML()
+            }
+            .keyboardShortcut("i", modifiers: .command)
+
+            Divider()
+
+            Button("Refresh All Feeds") {
+                refreshCoordinator.refreshAllFeeds()
+            }
+            .keyboardShortcut("r", modifiers: .command)
+            .disabled(refreshCoordinator.isRefreshing)
+        }
+    }
+
+    #if os(macOS)
+    @CommandsBuilder
+    private var windowCommands: some Commands {
+        CommandGroup(before: .windowList) {
+            // Lets the main window be reopened from the Window menu after being closed,
+            // matching how "Mini Player" already works.
+            Button("Main Window") {
+                MenuCoordinator.shared.showMainWindow()
+            }
+
+            Divider()
+
+            Button("Mini Player") {
+                MenuCoordinator.shared.audioPlayer?.showMiniPlayer()
+            }
+            .keyboardShortcut("m", modifiers: [.command, .shift])
+
+            Divider()
+        }
+    }
+    #endif
+
     var body: some Scene {
-        WindowGroup {
-            ContentView()
-                .environmentObject(addPodcastCoordinator)
-                .environmentObject(opmlCoordinator)
-                .environmentObject(refreshCoordinator)
-                .environmentObject(audioPlayer)
-                .environmentObject(downloadManager)
-                .environmentObject(settings)
-                .onAppear {
-                    let context = sharedModelContainer.mainContext
-                    addPodcastCoordinator.setModelContext(context)
-                    addPodcastCoordinator.setSettings(settings)
-                    opmlCoordinator.setModelContext(context)
-                    refreshCoordinator.setModelContext(context)
-                    refreshCoordinator.setSettings(settings)
-                    refreshCoordinator.setDownloadManager(downloadManager)
-                    audioPlayer.setModelContext(context)
-                    audioPlayer.setSettings(settings)
-                    downloadManager.setModelContext(context)
-                    
-                    // Set up callback to refresh feeds after adding a podcast
-                    addPodcastCoordinator.triggerRefreshAfterAdding = { podcast in
-                        refreshCoordinator.refreshFeed(for: podcast)
-                    }
-                    
-                    // Set up callback to refresh feeds after OPML import
-                    opmlCoordinator.triggerRefreshAfterImport = {
-                        refreshCoordinator.refreshAllFeeds()
-                    }
-                    
-                    // Initialize and start auto-refresh
-                    Task { @MainActor in
-                        if autoRefreshManager == nil {
-                            autoRefreshManager = AutoRefreshManager(settings: settings, refreshCoordinator: refreshCoordinator)
-                            autoRefreshManager?.startAutoRefresh()
-                        }
-                    }
-                    
-                    #if os(macOS)
-                    // Register audio player for menu validation
-                    MenuCoordinator.shared.audioPlayer = audioPlayer
-                    #endif
-                }
-                .sheet(isPresented: $addPodcastCoordinator.isPresented) {
-                    AddPodcastSheet(coordinator: addPodcastCoordinator)
-                }
+        #if os(macOS)
+        // WindowGroup, not a singleton Window: closing the one open window of a singleton
+        // Window scene tears the whole scene down and quits the app (learned that the hard
+        // way). WindowGroup survives with zero windows open, and "Main Window" below
+        // (openWindow(id:)) brings it back - it just also has to guard against spawning a
+        // second instance if one's already open, since WindowGroup allows multiple.
+        WindowGroup(id: "main") {
+            mainContent
         }
         .modelContainer(sharedModelContainer)
         .commands {
-            CommandGroup(replacing: .newItem) {
-                Button("Add Podcast by URL…") {
-                    addPodcastCoordinator.showDialog()
-                }
-                .keyboardShortcut("n", modifiers: .command)
-                
-                Button("Import OPML…") {
-                    opmlCoordinator.importOPML()
-                }
-                .keyboardShortcut("i", modifiers: .command)
-                
-                Divider()
-                
-                Button("Refresh All Feeds") {
-                    refreshCoordinator.refreshAllFeeds()
-                }
-                .keyboardShortcut("r", modifiers: .command)
-                .disabled(refreshCoordinator.isRefreshing)
-            }
-            
-            #if os(macOS)
-            CommandGroup(before: .windowList) {
-                Button("Mini Player") {
-                    MenuCoordinator.shared.audioPlayer?.showMiniPlayer()
-                }
-                .keyboardShortcut("m", modifiers: [.command, .shift])
-
-                Divider()
-            }
-            #endif
+            fileCommands
+            windowCommands
         }
-        
-        #if os(macOS)
+
         Settings {
             SettingsView(settings: settings, autoRefreshManager: autoRefreshManager)
+        }
+        #else
+        WindowGroup {
+            mainContent
+        }
+        .modelContainer(sharedModelContainer)
+        .commands {
+            fileCommands
         }
         #endif
     }

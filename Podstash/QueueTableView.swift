@@ -292,10 +292,49 @@ extension QueueTableView.Coordinator: NSMenuDelegate {
     
     func tableView(_ tableView: NSTableView, pasteboardWriterForRow row: Int) -> NSPasteboardWriting? {
         guard row >= 0, row < episodes.count else { return nil }
-        
+
         let pasteboardItem = NSPasteboardItem()
         pasteboardItem.setString(String(row), forType: .string)
         return pasteboardItem
+    }
+
+    // AppKit's default drag image for view-based table rows is only
+    // partially opaque, so a selected row's white text can end up nearly
+    // invisible over whatever's underneath. Rather than trying to recapture
+    // the row's SwiftUI-backed NSHostingView (cacheDisplay on it turned out
+    // to not yield a reliably-opaque bitmap), draw a simple opaque pill with
+    // the episode title directly, guaranteeing full opacity.
+    func tableView(_ tableView: NSTableView, updateDraggingItemsForDrag draggingInfo: NSDraggingInfo) {
+        draggingInfo.enumerateDraggingItems(options: [], for: tableView, classes: [NSPasteboardItem.self], searchOptions: [:]) { draggingItem, _, _ in
+            guard let pasteboardItem = draggingItem.item as? NSPasteboardItem,
+                  let rowString = pasteboardItem.string(forType: .string),
+                  let row = Int(rowString),
+                  row >= 0, row < self.episodes.count else { return }
+
+            let episode = self.episodes[row]
+            let size = draggingItem.draggingFrame.size
+            guard size.width > 0, size.height > 0 else { return }
+
+            let image = NSImage(size: size)
+            image.lockFocus()
+
+            NSColor.selectedContentBackgroundColor.setFill()
+            NSBezierPath(rect: NSRect(origin: .zero, size: size)).fill()
+
+            let attributes: [NSAttributedString.Key: Any] = [
+                .font: NSFont.systemFont(ofSize: 13, weight: .medium),
+                .foregroundColor: NSColor.white
+            ]
+            let textRect = NSRect(x: 16, y: (size.height - 18) / 2, width: size.width - 32, height: 18)
+            (episode.title as NSString).draw(in: textRect, withAttributes: attributes)
+
+            image.unlockFocus()
+
+            // setDraggingFrame(_:contents:) sets the image directly, unlike
+            // imageComponentsProvider which gets AppKit's automatic drag
+            // translucency baked on top regardless of the image's own alpha.
+            draggingItem.setDraggingFrame(draggingItem.draggingFrame, contents: image)
+        }
     }
     
     func tableView(_ tableView: NSTableView, validateDrop info: NSDraggingInfo, proposedRow row: Int, proposedDropOperation dropOperation: NSTableView.DropOperation) -> NSDragOperation {
@@ -319,22 +358,15 @@ extension QueueTableView.Coordinator: NSMenuDelegate {
         }
         
         guard !oldIndices.isEmpty else { return false }
-        
+
         // Sort indices to handle multiple selections properly
         oldIndices.sort()
-        
-        var newRow = row
-        
-        // Adjust destination for items being dragged from before the drop location
-        for index in oldIndices {
-            if index < row {
-                newRow -= 1
-            }
-        }
-        
-        // Call the parent's onMove callback
+
+        // `row` is already in the same "original index space" that
+        // Array.move(fromOffsets:toOffset:) expects (it performs its own
+        // adjustment for removed items internally), so pass it through as-is.
         let indexSet = IndexSet(oldIndices)
-        parent.onMove(indexSet, newRow)
+        parent.onMove(indexSet, row)
         
         return true
     }

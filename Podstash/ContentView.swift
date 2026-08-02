@@ -978,7 +978,7 @@ struct TransportControlsBar: View {
                             RoundedRectangle(cornerRadius: 2)
                                 .fill(Color.accentColor)
                                 .frame(
-                                    width: geometry.size.width * CGFloat(audioPlayer.currentTime / max(audioPlayer.duration, 1)),
+                                    width: geometry.size.width * CGFloat(playbackProgress),
                                     height: 4
                                 )
                         }
@@ -1041,12 +1041,20 @@ struct TransportControlsBar: View {
         let hours = Int(time) / 3600
         let minutes = (Int(time) % 3600) / 60
         let seconds = Int(time) % 60
-        
+
         if hours > 0 {
             return String(format: "%d:%02d:%02d", hours, minutes, seconds)
         } else {
             return String(format: "%d:%02d", minutes, seconds)
         }
+    }
+
+    // `duration` starts at 0 and is only populated asynchronously once the
+    // player item's duration resolves, so guard against that window to avoid
+    // a momentary full-width flash of the progress bar.
+    private var playbackProgress: Double {
+        guard audioPlayer.duration > 0 else { return 0 }
+        return min(audioPlayer.currentTime / audioPlayer.duration, 1)
     }
 }
 

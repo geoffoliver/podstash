@@ -1,0 +1,109 @@
+name: Release macOS build
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+env:
+  PROJECT: Podstash.xcodeproj
+  SCHEME: Podstash
+  TEAM_ID: 8F5SLDK3C7
+  PROVISIONING_PROFILE_NAME: "Mac Team Direct Provisioning Profile: me.geoffoliver.Podstash"
+
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Import Developer ID certificate into a temporary keychain
+        env:
+          MACOS_CERTIFICATE_P12: ${{ secrets.MACOS_CERTIFICATE_P12 }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+        run: |
+          set -euo pipefail
+          KEYCHAIN_PATH="$RUNNER_TEMP/podstash-signing.keychain-db"
+          KEYCHAIN_PASSWORD="$(openssl rand -base64 24)"
+          CERT_PATH="$RUNNER_TEMP/certificate.p12"
+
+          echo -n "$MACOS_CERTIFICATE_P12" | base64 --decode -o "$CERT_PATH"
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security import "$CERT_PATH" -P "$MACOS_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          EXISTING_KEYCHAINS="$(security list-keychains -d user | sed 's/[" ]//g')"
+          security list-keychains -d user -s "$KEYCHAIN_PATH" $EXISTING_KEYCHAINS
+
+          rm -f "$CERT_PATH"
+          echo "KEYCHAIN_PATH=$KEYCHAIN_PATH" >> "$GITHUB_ENV"
+
+      - name: Install provisioning profile
+        env:
+          MACOS_PROVISIONING_PROFILE: ${{ secrets.MACOS_PROVISIONING_PROFILE }}
+        run: |
+          set -euo pipefail
+          PROFILE_DIR="$HOME/Library/MobileDevice/Provisioning Profiles"
+          mkdir -p "$PROFILE_DIR"
+          echo -n "$MACOS_PROVISIONING_PROFILE" | base64 --decode -o "$PROFILE_DIR/podstash-devid.provisionprofile"
+
+      - name: Archive (signed with Developer ID)
+        run: |
+          set -euo pipefail
+          xcodebuild archive \
+            -project "$PROJECT" \
+            -scheme "$SCHEME" \
+            -configuration Release \
+            -destination "generic/platform=macOS" \
+            -archivePath "$RUNNER_TEMP/macOS.xcarchive" \
+            CODE_SIGN_STYLE=Manual \
+            CODE_SIGN_IDENTITY="Developer ID Application" \
+            PROVISIONING_PROFILE_SPECIFIER="$PROVISIONING_PROFILE_NAME" \
+            DEVELOPMENT_TEAM="$TEAM_ID"
+
+      - name: Notarize and staple
+        env:
+          NOTARY_APPLE_ID: ${{ secrets.NOTARY_APPLE_ID }}
+          NOTARY_PASSWORD: ${{ secrets.NOTARY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          MAC_APP="$(find "$RUNNER_TEMP/macOS.xcarchive/Products/Applications" -maxdepth 1 -name "*.app" | head -n 1)"
+          NOTARIZE_ZIP="$RUNNER_TEMP/Podstash-notarize.zip"
+
+          ditto -c -k --keepParent "$MAC_APP" "$NOTARIZE_ZIP"
+
+          xcrun notarytool submit "$NOTARIZE_ZIP" \
+            --apple-id "$NOTARY_APPLE_ID" \
+            --team-id "$TEAM_ID" \
+            --password "$NOTARY_PASSWORD" \
+            --wait
+
+          xcrun stapler staple "$MAC_APP"
+
+          mkdir -p dist
+          ditto -c -k --keepParent "$MAC_APP" "dist/Podstash.app.zip"
+
+      - name: Clean up keychain
+        if: always()
+        run: security delete-keychain "$KEYCHAIN_PATH" || true
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Podstash-macOS
+          path: dist/Podstash.app.zip
+
+      - name: Publish GitHub release
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          gh release create "${{ github.ref_name }}" \
+            dist/Podstash.app.zip \
+            --title "${{ github.ref_name }}" \
+            --generate-notes \
+            --notes "macOS build below is Developer ID signed and notarized — no Gatekeeper warnings. Unzip and drag Podstash.app to /Applications."

@@ -38,8 +38,8 @@
 
 # Maybe
 
-- [ ] can this play videos?
 - [ ] "downloads" window/view/whatever - maybe we can just use the queue for this? show progress circle like on podcast detail?
+- [ ] can this play videos?
 - [ ] "window" menu flashes different content when app is playing - shows extra options for maximizing/fullscreening window
 - [ ] macOS queue drag/drop ghost is a plain blue bar with title only - could match the real row look instead (artwork thumbnail, rounded corners, stacked title/podcast text)
 - [ ] macOS "Search Episodes" field (podcast detail) has a lighter background than "Search Queue" (queue view) - same `.searchable()` usage but they render with different bezel colors. Ruled out: toolbar item presence, explicit vs automatic placement, focus state. Suspect it's tied to podcast detail using a real SwiftUI `List` vs queue's NSTableView wrapper - try swapping the episode List to ScrollView/LazyVStack to test.

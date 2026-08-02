@@ -41,8 +41,11 @@
 - [x] Default settings change - Auto-delete played episodes: true; Auto-download new episodes: true; Download [1] most recent episode per refresh;
 - [x] Bug - Storage reporting 0 episodes/0MB download, but I do have files downloaded
 - [x] Github release
+- [x] Github Actions CI - `.github/workflows/release.yml` builds, Developer ID-signs, notarizes, and publishes a macOS release automatically on `git push origin vX.Y.Z`. iOS is not built in CI (dev-signed only, not publicly installable).
 - [ ] Bug - Search not visible on iOS (phone) when an item is playing/paused.
 - [ ] Github "pages" page - one page, screenshots for desktop and mobile, light and dark mode, download badges (point to github releases for now - point to AppStore once that is working).
+- [ ] Readme
+- [ ] Docs
 - [ ] Tests?
 - [ ] AppStore submission
 

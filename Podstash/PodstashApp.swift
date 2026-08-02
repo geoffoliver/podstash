@@ -20,20 +20,15 @@ class AddPodcastCoordinator: ObservableObject {
     @Published var showSuccessMessage: Bool = false
     
     private var modelContext: ModelContext?
-    private var settings: AppSettings?
     private var validationTask: Task<Void, Never>?
-    
+
     // Callback to trigger refresh after adding
     var triggerRefreshAfterAdding: ((Podcast) -> Void)?
-    
+
     func setModelContext(_ context: ModelContext) {
         self.modelContext = context
     }
-    
-    func setSettings(_ settings: AppSettings) {
-        self.settings = settings
-    }
-    
+
     func showDialog() {
         feedURL = ""
         validationMessage = nil
@@ -160,23 +155,19 @@ class AddPodcastCoordinator: ObservableObject {
     }
     
     private func updateNewPodcast(_ podcast: Podcast, with parsedPodcast: ParsedPodcast) async {
-        guard let modelContext = modelContext,
-              let settings = settings else { return }
-        
+        guard let modelContext = modelContext else { return }
+
         // Update podcast metadata
         podcast.podcastDescription = parsedPodcast.description
         podcast.artworkURL = parsedPodcast.artworkURL
         podcast.author = parsedPodcast.author
         podcast.websiteURL = parsedPodcast.websiteURL
         podcast.lastUpdated = Date()
-        
+
         // Sort episodes by publish date (most recent first)
         let sortedEpisodes = parsedPodcast.episodes.sorted { $0.publishDate > $1.publishDate }
-        
-        // Only add the configured number of most recent episodes
-        let episodesToAdd = sortedEpisodes.prefix(settings.maxEpisodesToDownload)
-        
-        for parsedEpisode in episodesToAdd {
+
+        for parsedEpisode in sortedEpisodes {
             let episode = Episode(
                 title: parsedEpisode.title,
                 episodeDescription: parsedEpisode.description,
@@ -555,7 +546,6 @@ struct PodstashApp: App {
             .onAppear {
                 let context = sharedModelContainer.mainContext
                 addPodcastCoordinator.setModelContext(context)
-                addPodcastCoordinator.setSettings(settings)
                 opmlCoordinator.setModelContext(context)
                 refreshCoordinator.setModelContext(context)
                 refreshCoordinator.setSettings(settings)

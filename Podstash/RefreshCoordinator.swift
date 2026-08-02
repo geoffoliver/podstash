@@ -101,7 +101,10 @@ class RefreshCoordinator: ObservableObject {
         guard !Task.isCancelled else {
             return // Cancellation is already handled by cancelRefresh()
         }
-        
+
+        // Apply retention/auto-delete settings now that new episodes are in
+        EpisodeCleanupManager(modelContext: modelContext, settings: settings).cleanupEpisodes()
+
         // Calculate results
         let successCount = results.values.filter { result in
             if case .success = result { return true }

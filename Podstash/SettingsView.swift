@@ -7,22 +7,75 @@
 
 import SwiftUI
 
+#if os(macOS)
+/// Shared label-column width so every macOS settings tab lines up its controls
+/// at the same x position, matching classic Mac preference-pane layout (e.g.
+/// Downcast) rather than each tab auto-sizing its own column independently.
+private let settingsLabelColumnWidth: CGFloat = 210
+
+/// A "label: control" row for the macOS settings panes. The label is right-aligned
+/// in a fixed-width column so rows line up across tabs; leave it empty for a
+/// bare checkbox-style control that should still start at the shared column.
+private struct SettingsFieldRow<Control: View>: View {
+    let label: String
+    @ViewBuilder var control: () -> Control
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 8) {
+            Text(label)
+                .frame(width: settingsLabelColumnWidth, alignment: .trailing)
+            control()
+            Spacer(minLength: 0)
+        }
+    }
+}
+
+/// A checkbox row: label right-aligned in the shared column, bare checkbox after it.
+private struct SettingsCheckboxRow: View {
+    let label: String
+    @Binding var isOn: Bool
+
+    var body: some View {
+        SettingsFieldRow(label: label) {
+            Toggle("", isOn: $isOn)
+                .labelsHidden()
+                .toggleStyle(.checkbox)
+        }
+    }
+}
+
+/// Free-form content (buttons, notes) that shouldn't be indented into the label
+/// column — left-aligned at the form's margin, matching Downcast's own notes/buttons.
+private struct SettingsFreeformRow<Content: View>: View {
+    @ViewBuilder var content: () -> Content
+
+    var body: some View {
+        HStack {
+            Spacer(minLength: 0).frame(width: settingsLabelColumnWidth + 8)
+            content()
+            Spacer(minLength: 0)
+        }
+    }
+}
+#endif
+
 struct SettingsView: View {
     @ObservedObject var settings: AppSettings
     var autoRefreshManager: AutoRefreshManager?
-    
+
     var body: some View {
         #if os(macOS)
         TabView {
-            Form {
+            VStack(alignment: .leading, spacing: 18) {
                 GeneralSettingsView(settings: settings)
             }
-            .formStyle(.grouped)
+            .padding(24)
+            .fixedSize(horizontal: false, vertical: true)
             .tabItem {
                 Label("General", systemImage: "gear")
             }
 
-            Form {
+            VStack(alignment: .leading, spacing: 18) {
                 if let manager = autoRefreshManager {
                     FeedSettingsView(settings: settings)
                         .environmentObject(manager)
@@ -30,43 +83,38 @@ struct SettingsView: View {
                     FeedSettingsView(settings: settings)
                 }
             }
-            .formStyle(.grouped)
+            .padding(24)
+            .fixedSize(horizontal: false, vertical: true)
             .tabItem {
                 Label("Feeds", systemImage: "antenna.radiowaves.left.and.right")
             }
 
-            Form {
+            VStack(alignment: .leading, spacing: 18) {
                 EpisodeSettingsView(settings: settings)
             }
-            .formStyle(.grouped)
+            .padding(24)
+            .fixedSize(horizontal: false, vertical: true)
             .tabItem {
                 Label("Episodes", systemImage: "list.bullet")
             }
 
-            Form {
+            VStack(alignment: .leading, spacing: 18) {
                 PlaybackSettingsView(settings: settings)
             }
-            .formStyle(.grouped)
+            .padding(24)
+            .fixedSize(horizontal: false, vertical: true)
             .tabItem {
                 Label("Playback", systemImage: "play.circle")
             }
-
-            Form {
-                SyncSettingsView(settings: settings)
-            }
-            .formStyle(.grouped)
-            .tabItem {
-                Label("Sync", systemImage: "icloud")
-            }
         }
-        .frame(width: 500, height: 400)
+        .frame(width: 560)
         #else
         NavigationStack {
             Form {
                 Section("General") {
                     GeneralSettingsView(settings: settings)
                 }
-                
+
                 Section("Feeds") {
                     if let manager = autoRefreshManager {
                         FeedSettingsView(settings: settings)
@@ -75,17 +123,13 @@ struct SettingsView: View {
                         FeedSettingsView(settings: settings)
                     }
                 }
-                
+
                 Section("Episodes") {
                     EpisodeSettingsView(settings: settings)
                 }
-                
+
                 Section("Playback") {
                     PlaybackSettingsView(settings: settings)
-                }
-                
-                Section("Sync") {
-                    SyncSettingsView(settings: settings)
                 }
             }
             .navigationTitle("Settings")
@@ -99,41 +143,44 @@ struct SettingsView: View {
 
 struct GeneralSettingsView: View {
     @ObservedObject var settings: AppSettings
-    
+
     var body: some View {
+        #if os(macOS)
+        Group {
+            SettingsCheckboxRow(label: "Auto-refresh feeds on launch", isOn: $settings.autoRefreshOnLaunch)
+
+            SettingsFieldRow(label: "Sidebar icon size") {
+                Picker("", selection: $settings.sidebarIconSize) {
+                    ForEach(SidebarIconSize.allCases) { size in
+                        Text(size.rawValue).tag(size.rawValue)
+                    }
+                }
+                .labelsHidden()
+            }
+
+            SettingsCheckboxRow(label: "Keep Mini Player always on top", isOn: $settings.miniPlayerAlwaysOnTop)
+
+            SettingsFreeformRow {
+                Button("Reset to Defaults") {
+                    settings.resetToDefaults()
+                }
+            }
+        }
+        #else
         Group {
             Toggle("Auto-refresh feeds on launch", isOn: $settings.autoRefreshOnLaunch)
 
-            Divider()
-
-            Picker("Sidebar icon size", selection: $settings.sidebarIconSize) {
+            Picker("Icon size", selection: $settings.sidebarIconSize) {
                 ForEach(SidebarIconSize.allCases) { size in
                     Text(size.rawValue).tag(size.rawValue)
                 }
             }
 
-            Toggle("Show artwork in episode lists", isOn: $settings.showArtworkInList)
-
-            Toggle("Compact list mode", isOn: $settings.compactListMode)
-
-            Divider()
-
-            #if os(macOS)
-            Toggle("Keep Mini Player always on top", isOn: $settings.miniPlayerAlwaysOnTop)
-
-            Divider()
-            #endif
-
-            Toggle("Notify about new episodes", isOn: $settings.notifyNewEpisodes)
-
-            Toggle("Notify when downloads complete", isOn: $settings.notifyDownloadComplete)
-
-            Divider()
-
             Button("Reset to Defaults") {
                 settings.resetToDefaults()
             }
         }
+        #endif
     }
 }
 
@@ -142,8 +189,33 @@ struct GeneralSettingsView: View {
 struct FeedSettingsView: View {
     @ObservedObject var settings: AppSettings
     @EnvironmentObject var autoRefreshManager: AutoRefreshManager
-    
+
     var body: some View {
+        #if os(macOS)
+        Group {
+            SettingsFieldRow(label: "Refresh interval") {
+                Picker("", selection: $settings.refreshInterval) {
+                    ForEach(RefreshInterval.allCases) { interval in
+                        Text(interval.rawValue).tag(interval.rawValue)
+                    }
+                }
+                .labelsHidden()
+                .onChange(of: settings.refreshInterval) { _ in
+                    autoRefreshManager.updateRefreshInterval()
+                }
+            }
+
+            SettingsCheckboxRow(label: "Refresh only on Wi-Fi", isOn: $settings.refreshOnlyOnWiFi)
+
+            if settings.refreshIntervalEnum != .manual {
+                SettingsFreeformRow {
+                    Text("Feeds will refresh automatically in the background")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        #else
         Group {
             Picker("Refresh interval", selection: $settings.refreshInterval) {
                 ForEach(RefreshInterval.allCases) { interval in
@@ -164,6 +236,7 @@ struct FeedSettingsView: View {
                     .foregroundStyle(.secondary)
             }
         }
+        #endif
     }
 }
 
@@ -174,19 +247,84 @@ struct EpisodeSettingsView: View {
     @Environment(\.modelContext) private var modelContext
     @State private var storageInfo: (episodeCount: Int, downloadedCount: Int, estimatedSize: String)?
     @State private var isCleaningUp = false
-    
+
     var body: some View {
+        #if os(macOS)
         Group {
-            Stepper("Download \(settings.maxEpisodesToDownload) most recent episode\(settings.maxEpisodesToDownload == 1 ? "" : "s")",
-                   value: $settings.maxEpisodesToDownload,
-                   in: 1...100)
+            SettingsFieldRow(label: "Keep episodes") {
+                Picker("", selection: $settings.episodeRetentionPolicy) {
+                    ForEach(EpisodeRetentionPolicy.allCases) { policy in
+                        Text(policy.rawValue).tag(policy.rawValue)
+                    }
+                }
+                .labelsHidden()
+            }
 
-            Text("When refreshing feeds, only the most recent \(settings.maxEpisodesToDownload) episode\(settings.maxEpisodesToDownload == 1 ? "" : "s") will be downloaded.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            if settings.episodeRetentionPolicyEnum == .mostRecent {
+                SettingsFieldRow(label: "Episodes to keep") {
+                    Stepper("\(settings.episodeRetentionCount) episodes",
+                           value: $settings.episodeRetentionCount,
+                           in: 1...100)
+                }
+            }
 
-            Divider()
+            SettingsCheckboxRow(label: "Auto-delete played episodes", isOn: $settings.autoDeletePlayedEpisodes)
 
+            if settings.autoDeletePlayedEpisodes {
+                SettingsFieldRow(label: "Delete after") {
+                    Stepper("\(settings.autoDeleteAfterDays) days",
+                           value: $settings.autoDeleteAfterDays,
+                           in: 1...30)
+                }
+            }
+
+            if let info = storageInfo {
+                SettingsFieldRow(label: "Storage") {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("\(info.episodeCount) episodes")
+                        Text("\(info.downloadedCount) downloaded (\(info.estimatedSize))")
+                    }
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                }
+            }
+
+            SettingsFreeformRow {
+                Button(action: {
+                    cleanUpNow()
+                }) {
+                    HStack {
+                        if isCleaningUp {
+                            ProgressView()
+                                .controlSize(.small)
+                        }
+                        Text(isCleaningUp ? "Cleaning Up..." : "Clean Up Episodes Now")
+                    }
+                }
+                .disabled(isCleaningUp)
+            }
+
+            SettingsCheckboxRow(label: "Auto-download new episodes", isOn: $settings.autoDownloadNewEpisodes)
+
+            if settings.autoDownloadNewEpisodes {
+                SettingsFieldRow(label: "Episodes per refresh") {
+                    Stepper("\(settings.maxEpisodesToDownload)",
+                           value: $settings.maxEpisodesToDownload,
+                           in: 1...100)
+                }
+
+                SettingsFreeformRow {
+                    Text("When new episodes are found, only the most recent \(settings.maxEpisodesToDownload) episode\(settings.maxEpisodesToDownload == 1 ? "" : "s") will be downloaded automatically.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .onAppear {
+            loadStorageInfo()
+        }
+        #else
+        Group {
             Picker("Keep episodes", selection: $settings.episodeRetentionPolicy) {
                 ForEach(EpisodeRetentionPolicy.allCases) { policy in
                     Text(policy.rawValue).tag(policy.rawValue)
@@ -199,8 +337,6 @@ struct EpisodeSettingsView: View {
                        in: 1...100)
             }
 
-            Divider()
-
             Toggle("Auto-delete played episodes", isOn: $settings.autoDeletePlayedEpisodes)
 
             if settings.autoDeletePlayedEpisodes {
@@ -208,8 +344,6 @@ struct EpisodeSettingsView: View {
                        value: $settings.autoDeleteAfterDays,
                        in: 1...30)
             }
-
-            Divider()
 
             // Storage Info Display
             if let info = storageInfo {
@@ -239,37 +373,36 @@ struct EpisodeSettingsView: View {
             }
             .disabled(isCleaningUp)
 
-            Divider()
-
             Toggle("Auto-download new episodes", isOn: $settings.autoDownloadNewEpisodes)
 
             if settings.autoDownloadNewEpisodes {
-                Toggle("Download only on Wi-Fi", isOn: $settings.downloadOnlyOnWiFi)
+                Stepper("Download \(settings.maxEpisodesToDownload) most recent episode\(settings.maxEpisodesToDownload == 1 ? "" : "s") per refresh",
+                       value: $settings.maxEpisodesToDownload,
+                       in: 1...100)
 
-                Picker("Download quality", selection: $settings.downloadQuality) {
-                    ForEach(DownloadQuality.allCases) { quality in
-                        Text(quality.rawValue).tag(quality.rawValue)
-                    }
-                }
+                Text("When new episodes are found, only the most recent \(settings.maxEpisodesToDownload) episode\(settings.maxEpisodesToDownload == 1 ? "" : "s") will be downloaded automatically.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
         }
         .onAppear {
             loadStorageInfo()
         }
+        #endif
     }
-    
+
     private func loadStorageInfo() {
         let cleanup = EpisodeCleanupManager(modelContext: modelContext, settings: settings)
         storageInfo = cleanup.getStorageInfo()
     }
-    
+
     private func cleanUpNow() {
         isCleaningUp = true
-        
+
         Task {
             let cleanup = EpisodeCleanupManager(modelContext: modelContext, settings: settings)
             cleanup.cleanupEpisodes()
-            
+
             // Reload storage info after cleanup
             await MainActor.run {
                 loadStorageInfo()
@@ -283,8 +416,38 @@ struct EpisodeSettingsView: View {
 
 struct PlaybackSettingsView: View {
     @ObservedObject var settings: AppSettings
-    
+
     var body: some View {
+        #if os(macOS)
+        Group {
+            SettingsFieldRow(label: "Playback speed") {
+                Picker("", selection: $settings.defaultPlaybackSpeed) {
+                    Text("0.5x").tag(Double(0.5))
+                    Text("0.75x").tag(Double(0.75))
+                    Text("1.0x (Normal)").tag(Double(1.0))
+                    Text("1.25x").tag(Double(1.25))
+                    Text("1.5x").tag(Double(1.5))
+                    Text("1.75x").tag(Double(1.75))
+                    Text("2.0x").tag(Double(2.0))
+                }
+                .labelsHidden()
+            }
+
+            SettingsFieldRow(label: "Skip forward") {
+                Stepper("\(settings.skipForwardInterval)s",
+                       value: $settings.skipForwardInterval,
+                       in: 5...120,
+                       step: 5)
+            }
+
+            SettingsFieldRow(label: "Skip backward") {
+                Stepper("\(settings.skipBackwardInterval)s",
+                       value: $settings.skipBackwardInterval,
+                       in: 5...60,
+                       step: 5)
+            }
+        }
+        #else
         Group {
             Picker("Default playback speed", selection: $settings.defaultPlaybackSpeed) {
                 Text("0.5x").tag(Double(0.5))
@@ -296,10 +459,6 @@ struct PlaybackSettingsView: View {
                 Text("2.0x").tag(Double(2.0))
             }
 
-            Toggle("Remember playback speed per podcast", isOn: $settings.rememberPlaybackSpeed)
-
-            Divider()
-
             Stepper("Skip forward: \(settings.skipForwardInterval)s",
                    value: $settings.skipForwardInterval,
                    in: 5...120,
@@ -309,44 +468,8 @@ struct PlaybackSettingsView: View {
                    value: $settings.skipBackwardInterval,
                    in: 5...60,
                    step: 5)
-
-            Divider()
-
-            Toggle("Continue playback across devices", isOn: $settings.continuePlaybackAcrossDevices)
-                .disabled(!settings.iCloudSyncEnabled)
-
-            if !settings.iCloudSyncEnabled {
-                Text("Enable iCloud sync to use this feature")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
         }
-    }
-}
-
-// MARK: - Sync Settings
-
-struct SyncSettingsView: View {
-    @ObservedObject var settings: AppSettings
-    
-    var body: some View {
-        Group {
-            Toggle("Enable iCloud sync", isOn: $settings.iCloudSyncEnabled)
-                .disabled(true)
-
-            if settings.iCloudSyncEnabled {
-                Toggle("Sync playback progress", isOn: $settings.syncPlaybackProgress)
-                    .disabled(true)
-
-                Toggle("Sync subscriptions", isOn: $settings.syncSubscriptions)
-                    .disabled(true)
-            }
-
-            Text("iCloud sync isn't available in this build yet - it requires a paid Apple Developer Program membership, which this app isn't currently signed with. All data is stored locally on this device for now.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .padding(.top, 8)
-        }
+        #endif
     }
 }
 

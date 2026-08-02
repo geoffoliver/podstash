@@ -37,14 +37,6 @@ enum EpisodeRetentionPolicy: String, CaseIterable, Identifiable {
     var id: String { rawValue }
 }
 
-enum DownloadQuality: String, CaseIterable, Identifiable {
-    case low = "Low (Faster downloads)"
-    case medium = "Medium (Balanced)"
-    case high = "High (Best quality)"
-    
-    var id: String { rawValue }
-}
-
 enum SidebarIconSize: String, CaseIterable, Identifiable {
     case small = "Small"
     case medium = "Medium"
@@ -104,29 +96,20 @@ class AppSettings: ObservableObject {
     @AppStorage("autoDeleteAfterDays") var autoDeleteAfterDays: Int = 7
     
     // MARK: - Download Settings
-    @AppStorage("downloadQuality") var downloadQuality: String = DownloadQuality.medium.rawValue
     @AppStorage("autoDownloadNewEpisodes") var autoDownloadNewEpisodes: Bool = false
-    @AppStorage("downloadOnlyOnWiFi") var downloadOnlyOnWiFi: Bool = true
-    
+
     // MARK: - Playback Settings
     @AppStorage("defaultPlaybackSpeed") var defaultPlaybackSpeed: Double = 1.0
     @AppStorage("skipForwardInterval") var skipForwardInterval: Int = 30
     @AppStorage("skipBackwardInterval") var skipBackwardInterval: Int = 15
-    @AppStorage("rememberPlaybackSpeed") var rememberPlaybackSpeed: Bool = true
     @AppStorage("continuePlaybackAcrossDevices") var continuePlaybackAcrossDevices: Bool = true
-    
+
     // MARK: - iCloud Settings
     @AppStorage("iCloudSyncEnabled") var iCloudSyncEnabled: Bool = true
     @AppStorage("syncPlaybackProgress") var syncPlaybackProgress: Bool = true
     @AppStorage("syncSubscriptions") var syncSubscriptions: Bool = true
-    
-    // MARK: - Notifications
-    @AppStorage("notifyNewEpisodes") var notifyNewEpisodes: Bool = true
-    @AppStorage("notifyDownloadComplete") var notifyDownloadComplete: Bool = false
-    
+
     // MARK: - Appearance
-    @AppStorage("showArtworkInList") var showArtworkInList: Bool = true
-    @AppStorage("compactListMode") var compactListMode: Bool = false
     @AppStorage("sidebarIconSize") var sidebarIconSize: String = SidebarIconSize.medium.rawValue
     @AppStorage("miniPlayerAlwaysOnTop") var miniPlayerAlwaysOnTop: Bool = true
     
@@ -138,10 +121,6 @@ class AppSettings: ObservableObject {
     
     var episodeRetentionPolicyEnum: EpisodeRetentionPolicy {
         EpisodeRetentionPolicy(rawValue: episodeRetentionPolicy) ?? .unplayedOnly
-    }
-    
-    var downloadQualityEnum: DownloadQuality {
-        DownloadQuality(rawValue: downloadQuality) ?? .medium
     }
     
     var sidebarIconSizeEnum: SidebarIconSize {
@@ -159,25 +138,17 @@ class AppSettings: ObservableObject {
         autoDeletePlayedEpisodes = false
         autoDeleteAfterDays = 7
         
-        downloadQuality = DownloadQuality.medium.rawValue
         autoDownloadNewEpisodes = false
-        downloadOnlyOnWiFi = true
-        
+
         defaultPlaybackSpeed = 1.0
         skipForwardInterval = 30
         skipBackwardInterval = 15
-        rememberPlaybackSpeed = true
         continuePlaybackAcrossDevices = true
-        
+
         iCloudSyncEnabled = true
         syncPlaybackProgress = true
         syncSubscriptions = true
-        
-        notifyNewEpisodes = true
-        notifyDownloadComplete = false
-        
-        showArtworkInList = true
-        compactListMode = false
+
         sidebarIconSize = SidebarIconSize.medium.rawValue
     }
 }

@@ -10,6 +10,7 @@ env:
   PROJECT: Podstash.xcodeproj
   SCHEME: Podstash
   TEAM_ID: 8F5SLDK3C7
+  PROVISIONING_PROFILE_UUID: d3ccd346-172e-4a17-9b7b-fbba3a0ac8e4
 
 jobs:
   build:
@@ -48,7 +49,7 @@ jobs:
           set -euo pipefail
           PROFILE_DIR="$HOME/Library/MobileDevice/Provisioning Profiles"
           mkdir -p "$PROFILE_DIR"
-          echo -n "$MACOS_PROVISIONING_PROFILE" | base64 --decode -o "$PROFILE_DIR/podstash-devid.provisionprofile"
+          echo -n "$MACOS_PROVISIONING_PROFILE" | base64 --decode -o "$PROFILE_DIR/$PROVISIONING_PROFILE_UUID.provisionprofile"
 
       - name: Archive (signed with Developer ID)
         run: |
@@ -59,7 +60,9 @@ jobs:
             -configuration Release \
             -destination "generic/platform=macOS" \
             -archivePath "$RUNNER_TEMP/macOS.xcarchive" \
+            CODE_SIGN_STYLE=Manual \
             CODE_SIGN_IDENTITY="Developer ID Application" \
+            PROVISIONING_PROFILE_SPECIFIER="$PROVISIONING_PROFILE_UUID" \
             DEVELOPMENT_TEAM="$TEAM_ID"
 
       - name: Notarize and staple

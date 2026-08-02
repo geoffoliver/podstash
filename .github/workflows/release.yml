@@ -10,7 +10,6 @@ env:
   PROJECT: Podstash.xcodeproj
   SCHEME: Podstash
   TEAM_ID: 8F5SLDK3C7
-  PROVISIONING_PROFILE_NAME: "Mac Team Direct Provisioning Profile: me.geoffoliver.Podstash"
 
 jobs:
   build:
@@ -60,9 +59,7 @@ jobs:
             -configuration Release \
             -destination "generic/platform=macOS" \
             -archivePath "$RUNNER_TEMP/macOS.xcarchive" \
-            CODE_SIGN_STYLE=Manual \
             CODE_SIGN_IDENTITY="Developer ID Application" \
-            PROVISIONING_PROFILE_SPECIFIER="$PROVISIONING_PROFILE_NAME" \
             DEVELOPMENT_TEAM="$TEAM_ID"
 
       - name: Notarize and staple

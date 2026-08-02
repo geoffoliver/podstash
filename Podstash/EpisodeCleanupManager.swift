@@ -47,10 +47,11 @@ class EpisodeCleanupManager {
                 episode.isPlayed
             }
         )
-        
+
         guard let episodes = try? modelContext.fetch(descriptor) else { return }
-        
+
         for episode in episodes {
+            deleteDownloadedFileIfNeeded(for: episode)
             modelContext.delete(episode)
         }
     }
@@ -78,14 +79,7 @@ class EpisodeCleanupManager {
         }
         
         for episode in oldEpisodes {
-            // Only delete if downloaded file exists
-            if episode.isDownloaded {
-                // TODO: Delete actual file from disk
-                episode.isDownloaded = false
-                episode.downloadedFilename = nil
-            }
-            
-            // Optionally delete the episode record itself
+            deleteDownloadedFileIfNeeded(for: episode)
             modelContext.delete(episode)
         }
     }
@@ -105,12 +99,21 @@ class EpisodeCleanupManager {
             for episode in episodesToDelete {
                 // Don't delete unplayed episodes unless auto-delete is enabled
                 if episode.isPlayed || settings.autoDeletePlayedEpisodes {
+                    deleteDownloadedFileIfNeeded(for: episode)
                     modelContext.delete(episode)
                 }
             }
         }
     }
-    
+
+    /// Removes a downloaded episode's audio file from disk, if present, before its `Episode`
+    /// record is deleted - otherwise the file is orphaned (still on disk, but no longer
+    /// reachable or counted since the record that tracked it is gone).
+    private func deleteDownloadedFileIfNeeded(for episode: Episode) {
+        guard episode.isDownloaded, let filename = episode.downloadedFilename else { return }
+        try? FileManager.default.removeItem(at: DownloadManager.localFileURL(forStoredFilename: filename))
+    }
+
     /// Get storage usage information
     func getStorageInfo() -> (episodeCount: Int, downloadedCount: Int, estimatedSize: String) {
         let descriptor = FetchDescriptor<Episode>()

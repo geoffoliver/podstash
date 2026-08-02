@@ -38,7 +38,7 @@
 - [x] UI enhancement - Change music note icon on "nothing is playing" view. Not sure what, but music note makes no sense because podcasts aren't music
 - [ ] Enhancement - Export OPML of subscribed feeds
 - [ ] Default settings change - Auto-delete played episodes: true; Auto-download new episodes: true; Download [1] most recent episode per refresh;
-- [ ] Bug - Storage reporting 0 episodes/0MB download, but I do have files downloaded
+- [x] Bug - Storage reporting 0 episodes/0MB download, but I do have files downloaded
 
 # Maybe
 

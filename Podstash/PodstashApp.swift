@@ -681,6 +681,7 @@ struct PodstashApp: App {
         Settings {
             SettingsView(settings: settings, autoRefreshManager: autoRefreshManager)
         }
+        .modelContainer(sharedModelContainer)
         #else
         WindowGroup {
             mainContent

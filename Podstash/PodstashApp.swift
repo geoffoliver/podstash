@@ -478,8 +478,27 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         if !flag {
             MenuCoordinator.shared.showMainWindow()
         }
-        return true
+        // We already handled reopening ourselves above - returning true here would also let
+        // AppKit perform its own default reopen behavior on top of that, spawning a second window.
+        return false
     }
+}
+
+// Stamps the real NSWindow.identifier of the WindowGroup-created window with "main" so
+// MenuCoordinator.showMainWindow() can actually find it again. SwiftUI's own generated
+// identifier for a `WindowGroup(id: "main")` window is an internal restoration ID, not the
+// literal string "main", so without this the existing-window check below never matches and
+// every call spawns a fresh window instead of reusing one.
+private struct MainWindowIdentifierAccessor: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        DispatchQueue.main.async {
+            view.window?.identifier = NSUserInterfaceItemIdentifier("main")
+        }
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {}
 }
 #endif
 
@@ -582,6 +601,9 @@ struct PodstashApp: App {
             .sheet(isPresented: $addPodcastCoordinator.isPresented) {
                 AddPodcastSheet(coordinator: addPodcastCoordinator)
             }
+            #if os(macOS)
+            .background(MainWindowIdentifierAccessor())
+            #endif
     }
 
     @CommandsBuilder

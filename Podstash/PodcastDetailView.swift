@@ -59,6 +59,82 @@ struct PodcastDetailView: View {
     }
     
     var body: some View {
+        content
+            .navigationTitle(podcast.title)
+            #if os(macOS)
+            // Explicit .toolbar placement (rather than .automatic): this view has no
+            // other toolbar items to anchor to, and without one .automatic falls back
+            // to an inline drawer field that doesn't match the window's toolbar chrome.
+            .searchable(text: $searchText, placement: .toolbar, prompt: "Search Episodes")
+            #else
+            // displayMode: .automatic (not .always) - .always forces the drawer to stay
+            // expanded, which fights .searchToolbarBehavior(.minimize) below and stops it
+            // from collapsing.
+            .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .automatic), prompt: "Search Episodes")
+            // .minimize: collapses to a small icon in the nav bar until tapped, instead of
+            // always reserving a full row below the title that pushes content down.
+            .searchToolbarBehavior(.minimize)
+            .navigationBarTitleDisplayMode(.inline)
+            #endif
+            .alert("Unsubscribe from Podcast?", isPresented: $showingUnsubscribeAlert) {
+                Button("Cancel", role: .cancel) { }
+                Button("Unsubscribe", role: .destructive) {
+                    unsubscribe()
+                }
+            } message: {
+                Text("Are you sure you want to unsubscribe from \"\(podcast.title)\"? This will delete all downloaded episodes.")
+            }
+            .sheet(item: $episodeForInfoSheet) { episode in
+                EpisodeDetailView(episode: episode)
+            }
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        #if os(iOS)
+        // Header and tab picker live inside the same List as the episodes (rather than a
+        // fixed VStack above a separate List) so the nav bar can track this scroll view's
+        // offset - that's what lets the search field collapse to an icon and reveal on
+        // drag-down, matching QueueView, instead of always sitting visible below the title.
+        List {
+            PodcastHeaderView(
+                podcast: podcast,
+                onRefresh: { refreshCoordinator.refreshSingleFeed(podcast) },
+                onUnsubscribe: { showingUnsubscribeAlert = true }
+            )
+            .listRowInsets(EdgeInsets())
+            .listRowSeparator(.hidden)
+
+            if podcast.episodes.isEmpty {
+                emptyEpisodesView
+                    .listRowInsets(EdgeInsets())
+                    .listRowSeparator(.hidden)
+            } else {
+                // Tab picker - disabled while searching since search always looks
+                // across all episodes regardless of which tab is selected.
+                Picker("Filter", selection: $selectedTab) {
+                    Text("Unplayed (\(unplayedDownloadedCount))").tag(EpisodeFilter.unplayed)
+                    Text("All (\(sortedEpisodes.count))").tag(EpisodeFilter.all)
+                }
+                .pickerStyle(.segmented)
+                .padding()
+                .disabled(isSearching)
+                .listRowInsets(EdgeInsets())
+                .listRowSeparator(.hidden)
+
+                if isSearching && filteredEpisodes.isEmpty {
+                    noResultsView
+                        .listRowInsets(EdgeInsets())
+                        .listRowSeparator(.hidden)
+                } else {
+                    ForEach(filteredEpisodes) { episode in
+                        episodeRow(episode)
+                    }
+                }
+            }
+        }
+        .listStyle(.plain)
+        #else
         VStack(spacing: 0) {
             // Header with artwork and info
             PodcastHeaderView(
@@ -70,22 +146,9 @@ struct PodcastDetailView: View {
                     showingUnsubscribeAlert = true
                 }
             )
-            
+
             if podcast.episodes.isEmpty {
-                VStack(spacing: 16) {
-                    Text("No episodes yet")
-                        .font(.headline)
-                        .foregroundStyle(.secondary)
-                    Text("Refresh this podcast to download episodes")
-                        .font(.subheadline)
-                        .foregroundStyle(.tertiary)
-                    
-                    Button("Refresh Now") {
-                        refreshCoordinator.refreshSingleFeed(podcast)
-                    }
-                    .buttonStyle(.borderedProminent)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                emptyEpisodesView
             } else {
                 // Tab picker - disabled while searching since search always looks
                 // across all episodes regardless of which tab is selected.
@@ -98,154 +161,164 @@ struct PodcastDetailView: View {
                 .disabled(isSearching)
 
                 if isSearching && filteredEpisodes.isEmpty {
-                    VStack(spacing: 16) {
-                        Image(systemName: "magnifyingglass")
-                            .font(.system(size: 48))
-                            .foregroundStyle(.secondary)
-                        Text("No Results")
-                            .font(.headline)
-                            .foregroundStyle(.secondary)
-                        Text("No episodes match \"\(searchText)\"")
-                            .font(.subheadline)
-                            .foregroundStyle(.tertiary)
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    noResultsView
                 } else {
                 // Use List instead of ScrollView + ForEach for better performance (virtualization)
                 List {
                     ForEach(filteredEpisodes) { episode in
-                        HStack(spacing: 12) {
-                            Button {
-                                audioPlayer.play(episode: episode)
-                            } label: {
-                                EpisodeRowView(episode: episode, onShowInfo: { episodeForInfoSheet = $0 })
-                            }
-                            .buttonStyle(.plain)
-                            
-                            // Download button at the end of the row
-                            if episode.isDownloaded {
-                                Button {
-                                    downloadManager.deleteDownload(episode)
-                                } label: {
-                                    Image(systemName: "checkmark.circle.fill")
-                                        .foregroundStyle(.green)
-                                        .imageScale(.large)
-                                        .frame(minWidth: 44, minHeight: 44)
-                                        .contentShape(Rectangle())
-                                }
-                                .buttonStyle(.plain)
-                                .help("Episode downloaded - tap to delete")
-                            } else if downloadManager.isDownloading(episode) {
-                                Button {
-                                    downloadManager.cancelDownload(episode)
-                                } label: {
-                                    ZStack {
-                                        CircularProgressView(progress: downloadManager.downloadProgress(for: episode) ?? 0.0)
-                                            .frame(width: 24, height: 24)
-
-                                        Image(systemName: "xmark")
-                                            .font(.system(size: 10, weight: .bold))
-                                            .foregroundStyle(.secondary)
-                                    }
-                                    .frame(minWidth: 44, minHeight: 44)
-                                    .contentShape(Rectangle())
-                                }
-                                .buttonStyle(.plain)
-                                .help("Downloading - tap to cancel")
-                            } else {
-                                Button {
-                                    downloadManager.downloadEpisode(episode)
-                                } label: {
-                                    Image(systemName: "arrow.down.circle")
-                                        .foregroundStyle(.blue)
-                                        .imageScale(.large)
-                                        .frame(minWidth: 44, minHeight: 44)
-                                        .contentShape(Rectangle())
-                                }
-                                .buttonStyle(.plain)
-                                .help("Download episode")
-                            }
-                        }
-                        .contextMenu {
-                            Button {
-                                audioPlayer.play(episode: episode)
-                            } label: {
-                                Label("Play", systemImage: "play.fill")
-                            }
-
-                            Button {
-                                addToQueue(episode)
-                            } label: {
-                                Label(episode.queuePosition != nil ? "Remove from Queue" : "Add to Queue", 
-                                      systemImage: episode.queuePosition != nil ? "text.badge.minus" : "text.badge.plus")
-                            }
-                            
-                            Divider()
-                            
-                            // Download context menu items
-                            if episode.isDownloaded {
-                                Button(role: .destructive) {
-                                    downloadManager.deleteDownload(episode)
-                                } label: {
-                                    Label("Delete Download", systemImage: "trash")
-                                }
-                            } else if downloadManager.isDownloading(episode) {
-                                Button(role: .destructive) {
-                                    downloadManager.cancelDownload(episode)
-                                } label: {
-                                    Label("Cancel Download", systemImage: "xmark.circle")
-                                }
-                            } else {
-                                Button {
-                                    downloadManager.downloadEpisode(episode)
-                                } label: {
-                                    Label("Download Episode", systemImage: "arrow.down.circle")
-                                }
-                            }
-                            
-                            Divider()
-                            
-                            if !episode.isPlayed {
-                                Button {
-                                    markAsPlayed(episode)
-                                } label: {
-                                    Label("Mark as Played", systemImage: "checkmark.circle")
-                                }
-                            } else {
-                                Button {
-                                    markAsUnplayed(episode)
-                                } label: {
-                                    Label("Mark as Unplayed", systemImage: "circle")
-                                }
-                            }
-                        }
+                        episodeRow(episode)
                     }
                 }
                 .listStyle(.plain)
                 }
             }
         }
-        .navigationTitle(podcast.title)
-        // Explicit .toolbar placement (rather than .automatic): this view has no
-        // other toolbar items to anchor to, and without one .automatic falls back
-        // to an inline drawer field that doesn't match the window's toolbar chrome.
-        .searchable(text: $searchText, placement: .toolbar, prompt: "Search Episodes")
-        #if os(iOS)
-        .navigationBarTitleDisplayMode(.inline)
         #endif
-        .alert("Unsubscribe from Podcast?", isPresented: $showingUnsubscribeAlert) {
-            Button("Cancel", role: .cancel) { }
-            Button("Unsubscribe", role: .destructive) {
-                unsubscribe()
+    }
+
+    private var emptyEpisodesView: some View {
+        VStack(spacing: 16) {
+            Text("No episodes yet")
+                .font(.headline)
+                .foregroundStyle(.secondary)
+            Text("Refresh this podcast to download episodes")
+                .font(.subheadline)
+                .foregroundStyle(.tertiary)
+
+            Button("Refresh Now") {
+                refreshCoordinator.refreshSingleFeed(podcast)
             }
-        } message: {
-            Text("Are you sure you want to unsubscribe from \"\(podcast.title)\"? This will delete all downloaded episodes.")
+            .buttonStyle(.borderedProminent)
         }
-        .sheet(item: $episodeForInfoSheet) { episode in
-            EpisodeDetailView(episode: episode)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(.vertical, 40)
+    }
+
+    private var noResultsView: some View {
+        VStack(spacing: 16) {
+            Image(systemName: "magnifyingglass")
+                .font(.system(size: 48))
+                .foregroundStyle(.secondary)
+            Text("No Results")
+                .font(.headline)
+                .foregroundStyle(.secondary)
+            Text("No episodes match \"\(searchText)\"")
+                .font(.subheadline)
+                .foregroundStyle(.tertiary)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(.vertical, 40)
+    }
+
+    @ViewBuilder
+    private func episodeRow(_ episode: Episode) -> some View {
+        HStack(spacing: 12) {
+            Button {
+                audioPlayer.play(episode: episode)
+            } label: {
+                EpisodeRowView(episode: episode, onShowInfo: { episodeForInfoSheet = $0 })
+            }
+            .buttonStyle(.plain)
+
+            // Download button at the end of the row
+            if episode.isDownloaded {
+                Button {
+                    downloadManager.deleteDownload(episode)
+                } label: {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundStyle(.green)
+                        .imageScale(.large)
+                        .frame(minWidth: 44, minHeight: 44)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help("Episode downloaded - tap to delete")
+            } else if downloadManager.isDownloading(episode) {
+                Button {
+                    downloadManager.cancelDownload(episode)
+                } label: {
+                    ZStack {
+                        CircularProgressView(progress: downloadManager.downloadProgress(for: episode) ?? 0.0)
+                            .frame(width: 24, height: 24)
+
+                        Image(systemName: "xmark")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundStyle(.secondary)
+                    }
+                    .frame(minWidth: 44, minHeight: 44)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help("Downloading - tap to cancel")
+            } else {
+                Button {
+                    downloadManager.downloadEpisode(episode)
+                } label: {
+                    Image(systemName: "arrow.down.circle")
+                        .foregroundStyle(.blue)
+                        .imageScale(.large)
+                        .frame(minWidth: 44, minHeight: 44)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help("Download episode")
+            }
+        }
+        .contextMenu {
+            Button {
+                audioPlayer.play(episode: episode)
+            } label: {
+                Label("Play", systemImage: "play.fill")
+            }
+
+            Button {
+                addToQueue(episode)
+            } label: {
+                Label(episode.queuePosition != nil ? "Remove from Queue" : "Add to Queue",
+                      systemImage: episode.queuePosition != nil ? "text.badge.minus" : "text.badge.plus")
+            }
+
+            Divider()
+
+            // Download context menu items
+            if episode.isDownloaded {
+                Button(role: .destructive) {
+                    downloadManager.deleteDownload(episode)
+                } label: {
+                    Label("Delete Download", systemImage: "trash")
+                }
+            } else if downloadManager.isDownloading(episode) {
+                Button(role: .destructive) {
+                    downloadManager.cancelDownload(episode)
+                } label: {
+                    Label("Cancel Download", systemImage: "xmark.circle")
+                }
+            } else {
+                Button {
+                    downloadManager.downloadEpisode(episode)
+                } label: {
+                    Label("Download Episode", systemImage: "arrow.down.circle")
+                }
+            }
+
+            Divider()
+
+            if !episode.isPlayed {
+                Button {
+                    markAsPlayed(episode)
+                } label: {
+                    Label("Mark as Played", systemImage: "checkmark.circle")
+                }
+            } else {
+                Button {
+                    markAsUnplayed(episode)
+                } label: {
+                    Label("Mark as Unplayed", systemImage: "circle")
+                }
+            }
         }
     }
-    
+
     private func unsubscribe() {
         if let currentEpisode = audioPlayer.currentEpisode,
            podcast.episodes.contains(where: { $0.id == currentEpisode.id }) {

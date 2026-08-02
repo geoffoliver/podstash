@@ -42,11 +42,12 @@
 - [x] Bug - Storage reporting 0 episodes/0MB download, but I do have files downloaded
 - [x] Github release
 - [x] Github Actions CI - `.github/workflows/release.yml` builds, Developer ID-signs, notarizes, and publishes a macOS release automatically on `git push origin vX.Y.Z`. iOS is not built in CI (dev-signed only, not publicly installable).
-- [ ] Bug - Search not visible on iOS (phone) when an item is playing/paused.
+- [x] Bug - Search not visible on iOS (phone) when an item is playing/paused.
 - [ ] Github "pages" page - one page, screenshots for desktop and mobile, light and dark mode, download badges (point to github releases for now - point to AppStore once that is working).
 - [ ] Readme
 - [ ] Docs
 - [ ] Tests?
+- [ ] TestFlight distribution
 - [ ] AppStore submission
 
 # Maybe
@@ -56,3 +57,4 @@
 - [ ] "window" menu flashes different content when app is playing - shows extra options for maximizing/fullscreening window
 - [ ] macOS queue drag/drop ghost is a plain blue bar with title only - could match the real row look instead (artwork thumbnail, rounded corners, stacked title/podcast text)
 - [ ] macOS "Search Episodes" field (podcast detail) has a lighter background than "Search Queue" (queue view) - same `.searchable()` usage but they render with different bezel colors. Ruled out: toolbar item presence, explicit vs automatic placement, focus state. Suspect it's tied to podcast detail using a real SwiftUI `List` vs queue's NSTableView wrapper - try swapping the episode List to ScrollView/LazyVStack to test.
+- [ ] UI enhancement (iOS) - podcast detail view's search field is always visible right below the title, unlike Queue's "drag down to reveal" search. The header (artwork/description) and Unplayed/All picker sit in a fixed VStack above a separate List, rather than inside the same scrollable container as the episode list, so the nav bar can't track scroll position to drive the reveal behavior. Fixing this means folding the header + picker into the episode List itself (e.g. as a Section), which would also let them scroll off-screen - worth doing anyway since the header eats a lot of vertical space on iPhone.

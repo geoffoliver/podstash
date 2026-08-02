@@ -281,7 +281,18 @@ struct QueueView: View {
             }
         }
         .navigationTitle("Queue")
-        .searchable(text: $searchText, prompt: "Search Queue")
+        // .navigationBarDrawer placement (rather than automatic): iOS 26 otherwise docks the
+        // search field to the bottom of the screen, where it collides with CompactPlayerBar's
+        // safeAreaInset and ends up hidden behind it whenever an episode is playing/paused.
+        // displayMode: .automatic (not .always) - .always forces the drawer to stay expanded,
+        // which fights .searchToolbarBehavior(.minimize) below and stops it from collapsing.
+        .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .automatic), prompt: "Search Queue")
+        // .minimize: collapses to a small icon in the nav bar until tapped, instead of always
+        // reserving a full row below the title that pushes/hides content underneath it.
+        .searchToolbarBehavior(.minimize)
+        // Matches PodcastDetailView's inline title, which doesn't exhibit the search
+        // drawer's visibility getting tied to large-title scroll/collapse state.
+        .navigationBarTitleDisplayMode(.inline)
         .focused($isFocused)
         .onAppear {
             isFocused = true
@@ -298,7 +309,7 @@ struct QueueView: View {
                     } label: {
                         Label("Add All Unplayed", systemImage: "plus.circle")
                     }
-                    
+
                     Button {
                         clearQueue()
                     } label: {

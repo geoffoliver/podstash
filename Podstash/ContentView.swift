@@ -188,7 +188,7 @@ struct ContentView: View {
                     )
                     .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
-                
+
                 if audioPlayer.currentEpisode != nil {
                     CompactPlayerBar()
                         .environmentObject(audioPlayer)

@@ -339,13 +339,15 @@ struct EpisodeSettingsView: View {
                 }
             }
 
-            SettingsCheckboxRow(label: "Auto-delete played episodes", isOn: $settings.autoDeletePlayedEpisodes)
+            if settings.episodeRetentionPolicyEnum == .all {
+                SettingsCheckboxRow(label: "Auto-delete played episodes", isOn: $settings.autoDeletePlayedEpisodes)
 
-            if settings.autoDeletePlayedEpisodes {
-                SettingsFieldRow(label: "Delete after") {
-                    Stepper("\(settings.autoDeleteAfterDays) days",
-                           value: $settings.autoDeleteAfterDays,
-                           in: 1...30)
+                if settings.autoDeletePlayedEpisodes {
+                    SettingsFieldRow(label: "Delete after") {
+                        Stepper("\(settings.autoDeleteAfterDays) days",
+                               value: $settings.autoDeleteAfterDays,
+                               in: 1...30)
+                    }
                 }
             }
 
@@ -408,12 +410,14 @@ struct EpisodeSettingsView: View {
                        in: 1...100)
             }
 
-            Toggle("Auto-delete played episodes", isOn: $settings.autoDeletePlayedEpisodes)
+            if settings.episodeRetentionPolicyEnum == .all {
+                Toggle("Auto-delete played episodes", isOn: $settings.autoDeletePlayedEpisodes)
 
-            if settings.autoDeletePlayedEpisodes {
-                Stepper("Delete after \(settings.autoDeleteAfterDays) days",
-                       value: $settings.autoDeleteAfterDays,
-                       in: 1...30)
+                if settings.autoDeletePlayedEpisodes {
+                    Stepper("Delete after \(settings.autoDeleteAfterDays) days",
+                           value: $settings.autoDeleteAfterDays,
+                           in: 1...30)
+                }
             }
 
             // Storage Info Display

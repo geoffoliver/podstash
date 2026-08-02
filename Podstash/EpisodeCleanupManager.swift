@@ -93,15 +93,14 @@ class EpisodeCleanupManager {
             // Sort episodes by publish date (newest first)
             let sortedEpisodes = podcast.episodes.sorted { $0.publishDate > $1.publishDate }
             
-            // Keep the first 'count' episodes, delete the rest
-            let episodesToDelete = Array(sortedEpisodes.dropFirst(count))
-            
+            // Keep the first 'count' episodes, delete the rest. Only played episodes are
+            // removed here - unplayed ones are never auto-deleted, matching the other
+            // retention policies (see AppSettings.episodeRetentionPolicy).
+            let episodesToDelete = Array(sortedEpisodes.dropFirst(count)).filter { $0.isPlayed }
+
             for episode in episodesToDelete {
-                // Don't delete unplayed episodes unless auto-delete is enabled
-                if episode.isPlayed || settings.autoDeletePlayedEpisodes {
-                    deleteDownloadedFileIfNeeded(for: episode)
-                    modelContext.delete(episode)
-                }
+                deleteDownloadedFileIfNeeded(for: episode)
+                modelContext.delete(episode)
             }
         }
     }

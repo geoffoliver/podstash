@@ -174,7 +174,8 @@ class AudioPlayerManager: ObservableObject {
         // Clear stale artwork from the previous episode so it doesn't linger until the new one loads
         MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
         
-        guard let url = URL(string: episode.audioURL) else {
+        let url = localFileURL(for: episode) ?? URL(string: episode.audioURL)
+        guard let url else {
             print("Invalid audio URL: \(episode.audioURL)")
             return
         }
@@ -224,6 +225,18 @@ class AudioPlayerManager: ObservableObject {
         loadNowPlayingArtwork()
     }
     
+    // Prefer a downloaded local file over streaming, falling back to nil (streaming) if the
+    // file is missing so a stale/deleted download doesn't silently break playback.
+    private func localFileURL(for episode: Episode) -> URL? {
+        guard episode.isDownloaded,
+              let fileURLString = episode.downloadedFileURL,
+              let url = URL(string: fileURLString),
+              FileManager.default.fileExists(atPath: url.path) else {
+            return nil
+        }
+        return url
+    }
+
     func resume() {
         player?.play()
         // CRITICAL: Force immediate UI update by using objectWillChange

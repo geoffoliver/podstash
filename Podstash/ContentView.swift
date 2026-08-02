@@ -881,6 +881,7 @@ struct PodcastEpisodeListView: View {
     }
 }
 
+#if os(macOS)
 private struct AirPlayRoutePickerView: NSViewRepresentable {
     func makeNSView(context: Context) -> AVRoutePickerView {
         let view = AVRoutePickerView()
@@ -1080,6 +1081,7 @@ struct TransportControlsBar: View {
         return min(audioPlayer.currentTime / audioPlayer.duration, 1)
     }
 }
+#endif
 
 // MARK: - Episode Detail View
 

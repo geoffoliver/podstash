@@ -282,15 +282,17 @@ struct QueueView: View {
     
     private func markSelectedAsPlayed() {
         let episodesToMark = queuedEpisodes.filter { multiSelection.contains($0.id) }
-        
-        for episode in episodesToMark {
-            episode.isPlayed = true
-            episode.queuePosition = nil
-            episode.playbackPosition = 0
+
+        withAnimation {
+            for episode in episodesToMark {
+                episode.isPlayed = true
+                episode.queuePosition = nil
+                episode.playbackPosition = 0
+            }
+
+            // Single save - no reindexing
+            try? modelContext.save()
         }
-        
-        // Single save - no reindexing
-        try? modelContext.save()
         multiSelection.removeAll()
         
         // If current episode was marked, play next
@@ -319,13 +321,15 @@ struct QueueView: View {
     }
     
     private func markAsPlayed(_ episode: Episode) {
-        episode.isPlayed = true
-        episode.queuePosition = nil
-        episode.playbackPosition = 0
-        
-        // Single save - no reindexing
-        try? modelContext.save()
-        
+        withAnimation {
+            episode.isPlayed = true
+            episode.queuePosition = nil
+            episode.playbackPosition = 0
+
+            // Single save - no reindexing
+            try? modelContext.save()
+        }
+
         // If this was the currently playing episode, play next
         if audioPlayer.currentEpisode?.id == episode.id {
             playNextInQueue()

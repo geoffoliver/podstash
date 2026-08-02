@@ -182,27 +182,13 @@ struct QueueTableView: NSViewRepresentable {
         
         func tableView(_ tableView: NSTableView, rowActionsForRow row: Int, edge: NSTableView.RowActionEdge) -> [NSTableViewRowAction] {
             guard row >= 0, row < episodes.count else { return [] }
-            
-            // Only show actions on trailing edge (swipe from right to left)
+
+            // AppKit only ever invokes this for `.trailing` in practice --
+            // `.leading` swipe-to-reveal does not fire via trackpad, so both
+            // actions have to live on the trailing (right-swipe) edge.
             guard edge == .trailing else { return [] }
-            
-            let episode = episodes[row]
-            
-            // Mark as Played action (regular)
-            let markPlayedAction = NSTableViewRowAction(
-                style: .regular,
-                title: ""
-            ) { [weak self] action, row in
-                guard let self = self, row < self.episodes.count else { return }
-                let episode = self.episodes[row]
-                self.parent.onMarkPlayed([episode])
-            }
-            markPlayedAction.backgroundColor = .systemBlue
-            if let checkImage = NSImage(systemSymbolName: "checkmark", accessibilityDescription: "Mark Played") {
-                markPlayedAction.image = checkImage
-            }
-            
-            // Remove from Queue action (destructive, like Mail's delete)
+
+            // Remove from Queue action (destructive, like Mail's delete).
             let removeAction = NSTableViewRowAction(
                 style: .destructive,
                 title: ""
@@ -215,8 +201,25 @@ struct QueueTableView: NSViewRepresentable {
             if let trashImage = NSImage(systemSymbolName: "trash.fill", accessibilityDescription: "Delete") {
                 removeAction.image = trashImage
             }
-            
-            // Return actions in order: first appears closest to edge
+
+            // Mark as Played action (regular), matching the blue tint used
+            // for the equivalent swipe action in the podcast sidebar list.
+            let markPlayedAction = NSTableViewRowAction(
+                style: .regular,
+                title: ""
+            ) { [weak self] action, row in
+                guard let self = self, row < self.episodes.count else { return }
+                let episode = self.episodes[row]
+                self.parent.onMarkPlayed([episode])
+            }
+            markPlayedAction.backgroundColor = .systemBlue
+            if let checkImage = NSImage(systemSymbolName: "checkmark", accessibilityDescription: "Mark Played") {
+                markPlayedAction.image = checkImage
+            }
+
+            // The LAST action in this array ends up closest to the edge, so
+            // Remove is listed last to sit at the edge (full swipe = delete),
+            // matching the sidebar's trash-at-the-edge convention.
             return [markPlayedAction, removeAction]
         }
         

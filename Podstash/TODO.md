@@ -29,7 +29,7 @@
 - [x] UI enhancement - settings is kind of a mess. for example, "Download _ most recent episode" setting is at top, but should be with "Auto-download..." setting, and also not be enabled/displayed/whatever when the "Auto-download..." option is not enabled. The whole thing needs a bit of a reorgnization and maybe a bit of functionality tweaks.
 - [x] UI enhancement - remove number from start of queue items
 - [x] UI enhancement - hide iCloud stuff until it can be implemented
-- [ ] UI enhancement - add Airplay button to Desktop transport controls
+- [x] UI enhancement - add Airplay button to Desktop transport controls
 - [x] UI enhancement - episode detail dialog needs bottom padding - audio file URL bumps right against edge
 - [ ] sync - enroll in paid Apple Developer Program, enable CloudKit capability, flip `cloudKitEntitlementsConfigured` in PodstashApp.swift to sync data between devices
 

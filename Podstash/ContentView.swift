@@ -9,6 +9,7 @@ import SwiftUI
 import Combine
 import SwiftData
 import UniformTypeIdentifiers
+import AVKit
 
 extension UTType {
     static var opml: UTType {
@@ -880,6 +881,16 @@ struct PodcastEpisodeListView: View {
     }
 }
 
+private struct AirPlayRoutePickerView: NSViewRepresentable {
+    func makeNSView(context: Context) -> AVRoutePickerView {
+        let view = AVRoutePickerView()
+        view.isRoutePickerButtonBordered = false
+        return view
+    }
+
+    func updateNSView(_ nsView: AVRoutePickerView, context: Context) {}
+}
+
 struct TransportControlsBar: View {
     @EnvironmentObject var audioPlayer: AudioPlayerManager
     
@@ -1038,6 +1049,10 @@ struct TransportControlsBar: View {
                 }
                 .menuStyle(.borderlessButton)
                 .frame(width: 70)
+
+                AirPlayRoutePickerView()
+                    .frame(width: 24, height: 24)
+                    .help("AirPlay")
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 8)

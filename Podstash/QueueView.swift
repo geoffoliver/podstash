@@ -357,10 +357,10 @@ struct QueueView: View {
     }
     
     private func addAllUnplayedToQueue() {
-        // Fetch unplayed episodes that aren't in queue
+        // Fetch downloaded, unplayed episodes that aren't in queue
         let descriptor = FetchDescriptor<Episode>(
             predicate: #Predicate { episode in
-                !episode.isPlayed && episode.queuePosition == nil
+                !episode.isPlayed && episode.isDownloaded && episode.queuePosition == nil
             },
             sortBy: [SortDescriptor(\.publishDate)] // Oldest first
         )

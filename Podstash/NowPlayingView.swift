@@ -6,6 +6,32 @@
 //
 
 import SwiftUI
+import AVKit
+
+#if os(iOS) || os(tvOS)
+struct AirPlayButton: UIViewRepresentable {
+    func makeUIView(context: Context) -> AVRoutePickerView {
+        let routePickerView = AVRoutePickerView()
+        routePickerView.tintColor = .label
+        routePickerView.prioritizesVideoDevices = false
+        return routePickerView
+    }
+
+    func updateUIView(_ uiView: AVRoutePickerView, context: Context) {}
+}
+#elseif os(macOS)
+struct AirPlayButton: NSViewRepresentable {
+    func makeNSView(context: Context) -> AVRoutePickerView {
+        AVRoutePickerView()
+    }
+
+    func updateNSView(_ nsView: AVRoutePickerView, context: Context) {}
+}
+#else
+struct AirPlayButton: View {
+    var body: some View { EmptyView() }
+}
+#endif
 
 struct NowPlayingView: View {
     @EnvironmentObject var audioPlayer: AudioPlayerManager
@@ -13,21 +39,48 @@ struct NowPlayingView: View {
     var body: some View {
         if let episode = audioPlayer.currentEpisode {
             VStack(spacing: 20) {
-                #if os(macOS)
                 HStack {
                     Spacer()
+                    #if os(macOS)
                     Button {
                         audioPlayer.showMiniPlayer()
                     } label: {
                         Label("Mini Player", systemImage: "pip.enter")
                     }
                     .help("Open mini player window")
-                    .padding()
+                    #endif
+                    AirPlayButton()
+                        .frame(width: 28, height: 28)
                 }
-                #endif
-                
+                .padding()
+
                 Spacer()
-                
+
+                // Episode artwork
+                if let artworkURL = episode.artworkURL ?? episode.podcast?.artworkURL,
+                   let url = URL(string: artworkURL) {
+                    CachedAsyncImage(url: url) { image in
+                        image
+                            .resizable()
+                            .aspectRatio(contentMode: .fill)
+                    } placeholder: {
+                        Color.gray.opacity(0.2)
+                    }
+                    .frame(width: 250, height: 250)
+                    .cornerRadius(12)
+                    .shadow(radius: 8)
+                    .id(episode.id)
+                } else {
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(Color.gray.opacity(0.2))
+                        .frame(width: 250, height: 250)
+                        .overlay(
+                            Image(systemName: "music.note")
+                                .font(.system(size: 48))
+                                .foregroundStyle(.secondary)
+                        )
+                }
+
                 // Episode Info
                 VStack(spacing: 8) {
                     Text(episode.title)
@@ -166,17 +219,41 @@ struct NowPlayingView: View {
 
 struct CompactPlayerBar: View {
     @EnvironmentObject var audioPlayer: AudioPlayerManager
-    
+    @State private var showingNowPlaying = false
+
     var body: some View {
         if let episode = audioPlayer.currentEpisode {
             HStack(spacing: 12) {
+                // Episode artwork thumbnail
+                if let artworkURL = episode.artworkURL ?? episode.podcast?.artworkURL,
+                   let url = URL(string: artworkURL) {
+                    CachedAsyncImage(url: url) { image in
+                        image
+                            .resizable()
+                            .aspectRatio(contentMode: .fill)
+                    } placeholder: {
+                        Color.gray.opacity(0.2)
+                    }
+                    .frame(width: 40, height: 40)
+                    .cornerRadius(6)
+                    .id(episode.id)
+                } else {
+                    RoundedRectangle(cornerRadius: 6)
+                        .fill(Color.gray.opacity(0.2))
+                        .frame(width: 40, height: 40)
+                        .overlay(
+                            Image(systemName: "music.note")
+                                .foregroundStyle(.secondary)
+                        )
+                }
+
                 // Episode Info
                 VStack(alignment: .leading, spacing: 2) {
                     Text(episode.title)
                         .font(.subheadline)
                         .fontWeight(.medium)
                         .lineLimit(1)
-                    
+
                     if let podcast = episode.podcast {
                         Text(podcast.title)
                             .font(.caption)
@@ -184,9 +261,13 @@ struct CompactPlayerBar: View {
                             .lineLimit(1)
                     }
                 }
-                
+
                 Spacer()
-                
+
+                // AirPlay Button
+                AirPlayButton()
+                    .frame(width: 24, height: 24)
+
                 // Play/Pause Button
                 Button {
                     audioPlayer.togglePlayPause()
@@ -198,6 +279,23 @@ struct CompactPlayerBar: View {
             }
             .padding()
             .background(.regularMaterial)
+            .contentShape(Rectangle())
+            .onTapGesture {
+                showingNowPlaying = true
+            }
+            .sheet(isPresented: $showingNowPlaying) {
+                NavigationStack {
+                    NowPlayingView()
+                        .environmentObject(audioPlayer)
+                        .toolbar {
+                            ToolbarItem(placement: .cancellationAction) {
+                                Button("Done") {
+                                    showingNowPlaying = false
+                                }
+                            }
+                        }
+                }
+            }
         }
     }
 }

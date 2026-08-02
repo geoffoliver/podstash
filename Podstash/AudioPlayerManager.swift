@@ -122,7 +122,19 @@ class AudioPlayerManager: ObservableObject {
     // MARK: - Initialization
     
     init() {
+        configureAudioSession()
         setupRemoteCommands()
+    }
+
+    private func configureAudioSession() {
+        #if !os(macOS)
+        do {
+            try AVAudioSession.sharedInstance().setCategory(.playback, mode: .default)
+            try AVAudioSession.sharedInstance().setActive(true)
+        } catch {
+            print("Failed to configure audio session: \(error)")
+        }
+        #endif
     }
     
     func setModelContext(_ context: ModelContext) {
@@ -158,6 +170,9 @@ class AudioPlayerManager: ObservableObject {
         // Setup new episode
         currentEpisode = episode
         lastSavedPosition = episode.playbackPosition // Reset the save tracking
+
+        // Clear stale artwork from the previous episode so it doesn't linger until the new one loads
+        MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
         
         guard let url = URL(string: episode.audioURL) else {
             print("Invalid audio URL: \(episode.audioURL)")
@@ -372,26 +387,26 @@ class AudioPlayerManager: ObservableObject {
             return
         }
         
-        var nowPlayingInfo = [String: Any]()
-        
+        // Start from existing info so a previously-loaded artwork isn't dropped
+        var nowPlayingInfo = MPNowPlayingInfoCenter.default().nowPlayingInfo ?? [:]
+
         // Episode title
         nowPlayingInfo[MPMediaItemPropertyTitle] = episode.title
-        
+
         // Podcast name as artist/album
         if let podcast = episode.podcast {
             nowPlayingInfo[MPMediaItemPropertyArtist] = podcast.title
             nowPlayingInfo[MPMediaItemPropertyAlbumTitle] = podcast.title
         }
-        
+
         // Playback info
         nowPlayingInfo[MPMediaItemPropertyPlaybackDuration] = duration
         nowPlayingInfo[MPNowPlayingInfoPropertyElapsedPlaybackTime] = currentTime
         nowPlayingInfo[MPNowPlayingInfoPropertyPlaybackRate] = isPlaying ? Double(playbackRate) : 0.0
-        
-        // CRITICAL FIX: Don't download artwork every time this is called!
-        // Just set the info we have. Artwork should be loaded once at the start.
-        // If artwork was previously loaded, it should still be in the info center.
-        
+
+        // Artwork is loaded once per episode by loadNowPlayingArtwork() and merged in;
+        // preserving the existing dict here (rather than rebuilding from scratch) keeps it.
+
         MPNowPlayingInfoCenter.default().nowPlayingInfo = nowPlayingInfo
     }
     
@@ -490,14 +505,19 @@ class AudioPlayerManager: ObservableObject {
             // even when paused, which helps UI responsiveness for play/pause button state
             if abs(newTime - self.currentTime) >= 0.5 {
                 self.currentTime = newTime
+
+                // Keep Control Center / lock screen elapsed time in sync while playing
+                if self.isPlaying {
+                    self.updateNowPlayingInfo()
+                }
             }
-            
+
             // Update duration only once, not on every tick
             if self.duration == 0,
                let duration = self.player?.currentItem?.duration.seconds,
                !duration.isNaN && !duration.isInfinite {
                 self.duration = duration
-                
+
                 // Update episode duration if not set
                 if let episode = self.currentEpisode,
                    episode.duration == nil || episode.duration == 0 {

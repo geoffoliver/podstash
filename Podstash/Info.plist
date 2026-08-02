@@ -11,5 +11,9 @@
 	<true/>
 	<key>OSAScriptingDefinition</key>
 	<string>Podstash.sdef</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>audio</string>
+	</array>
 </dict>
 </plist>

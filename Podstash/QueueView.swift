@@ -514,6 +514,7 @@ struct QueueEpisodeRow: View {
             .buttonStyle(.plain)
             .help("Show episode details")
         }
+        .padding(.horizontal, 16)
         .padding(.vertical, 4)
     }
     

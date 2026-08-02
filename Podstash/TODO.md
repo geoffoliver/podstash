@@ -18,7 +18,7 @@
 - [x] UI bug (desktop) - "More" button on podcast description  breaks whole view - window and sidebar contents disappear!
 - [x] UI bug (desktop) - "Queue" sidebar item is included with "select all" (cmd+a) action, and it should not be.
 
-- [ ] Bug - Downloading/re-downloading an episode should mark it as unplayed.
+- [x] Bug - Downloading/re-downloading an episode should mark it as unplayed. Or at the very least give users the ability to mark an episode as unplayed.
 - [ ] UI bug (desktop) - Sometimes on initial play, progress scrubber is too wide (goes all the way to right edge and probably far outside of it)
 
 - [ ] UI enhancement - text is *very* small on macOS and iOS.

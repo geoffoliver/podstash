@@ -173,6 +173,12 @@ struct PodcastDetailView: View {
                                 } label: {
                                     Label("Mark as Played", systemImage: "checkmark.circle")
                                 }
+                            } else {
+                                Button {
+                                    markAsUnplayed(episode)
+                                } label: {
+                                    Label("Mark as Unplayed", systemImage: "circle")
+                                }
                             }
                         }
                     }
@@ -232,6 +238,11 @@ struct PodcastDetailView: View {
         episode.isPlayed = true
         episode.queuePosition = nil
         episode.playbackPosition = 0
+        try? modelContext.save()
+    }
+
+    private func markAsUnplayed(_ episode: Episode) {
+        episode.isPlayed = false
         try? modelContext.save()
     }
 }

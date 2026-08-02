@@ -796,11 +796,12 @@ struct AddPodcastSheet: View {
                 .padding([.horizontal, .bottom])
             }
         }
-        .frame(width: 420)
+        .frame(maxWidth: 420)
         .padding(24)
         .background(.regularMaterial)
         .cornerRadius(16)
         .shadow(radius: 20)
+        .padding(.horizontal, 20)
     }
 }
 

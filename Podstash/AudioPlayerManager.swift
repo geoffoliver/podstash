@@ -229,9 +229,11 @@ class AudioPlayerManager: ObservableObject {
     // file is missing so a stale/deleted download doesn't silently break playback.
     private func localFileURL(for episode: Episode) -> URL? {
         guard episode.isDownloaded,
-              let fileURLString = episode.downloadedFileURL,
-              let url = URL(string: fileURLString),
-              FileManager.default.fileExists(atPath: url.path) else {
+              let filename = episode.downloadedFilename else {
+            return nil
+        }
+        let url = DownloadManager.localFileURL(forStoredFilename: filename)
+        guard FileManager.default.fileExists(atPath: url.path) else {
             return nil
         }
         return url

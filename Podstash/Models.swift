@@ -10,18 +10,30 @@ import SwiftData
 
 @Model
 final class Podcast {
-    var id: UUID
-    var title: String
-    var feedURL: String
+    // CloudKit mirroring requires every non-optional property to carry a default value on
+    // the declaration itself (an init parameter default isn't enough), and to-one
+    // relationships to be optional - see Episode.podcast below.
+    var id: UUID = UUID()
+    var title: String = ""
+    var feedURL: String = ""
     var websiteURL: String?
     var podcastDescription: String?
     var artworkURL: String?
     var author: String?
-    var subscriptionDate: Date
+    var subscriptionDate: Date = Date()
     var lastUpdated: Date?
     
+    // CloudKit mirroring requires relationships to be Optional even when they're to-many, so
+    // the actual persisted relationship is `episodesStorage`; `episodes` below is a plain
+    // computed convenience wrapper so every existing call site can keep treating it as a
+    // non-optional array.
     @Relationship(deleteRule: .cascade, inverse: \Episode.podcast)
-    var episodes: [Episode] = []
+    var episodesStorage: [Episode]? = []
+
+    var episodes: [Episode] {
+        get { episodesStorage ?? [] }
+        set { episodesStorage = newValue }
+    }
     
     init(
         id: UUID = UUID(),
@@ -48,18 +60,23 @@ final class Podcast {
 
 @Model
 final class Episode {
-    var id: UUID
-    var title: String
+    var id: UUID = UUID()
+    var title: String = ""
     var episodeDescription: String?
-    var audioURL: String
+    var audioURL: String = ""
     var duration: TimeInterval?
-    var publishDate: Date
+    var publishDate: Date = Date()
     var artworkURL: String?
-    var isPlayed: Bool
-    var playbackPosition: TimeInterval
+    var isPlayed: Bool = false
+    var playbackPosition: TimeInterval = 0
     var lastPlayedDate: Date?  // Track when user last played this episode
-    var isDownloaded: Bool  // For future offline support
-    var downloadedFileURL: String?  // Local file path if downloaded
+    var isDownloaded: Bool = false  // For future offline support
+    // Filename only (e.g. "<episode-id>.mp3"), not an absolute path - resolved to this
+    // device's local Downloads folder via DownloadManager.localFileURL(forStoredFilename:).
+    // Since this field syncs via iCloud, an absolute path from another device's container
+    // would be meaningless here; the filename is deterministic (derived from episode.id) so
+    // every device resolves it the same way once it has the file.
+    var downloadedFilename: String?
     var queuePosition: Int?  // Position in queue, nil if not in queue
     
     var podcast: Podcast?
@@ -76,7 +93,7 @@ final class Episode {
         playbackPosition: TimeInterval = 0,
         lastPlayedDate: Date? = nil,
         isDownloaded: Bool = false,
-        downloadedFileURL: String? = nil,
+        downloadedFilename: String? = nil,
         queuePosition: Int? = nil
     ) {
         self.id = id
@@ -90,7 +107,7 @@ final class Episode {
         self.playbackPosition = playbackPosition
         self.lastPlayedDate = lastPlayedDate
         self.isDownloaded = isDownloaded
-        self.downloadedFileURL = downloadedFileURL
+        self.downloadedFilename = downloadedFilename
         self.queuePosition = queuePosition
     }
 }

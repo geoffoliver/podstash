@@ -82,7 +82,7 @@ class EpisodeCleanupManager {
             if episode.isDownloaded {
                 // TODO: Delete actual file from disk
                 episode.isDownloaded = false
-                episode.downloadedFileURL = nil
+                episode.downloadedFilename = nil
             }
             
             // Optionally delete the episode record itself

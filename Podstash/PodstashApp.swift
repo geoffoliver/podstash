@@ -527,13 +527,12 @@ struct PodstashApp: App {
             Episode.self,
         ])
         
-        // CloudKit requires a paid Apple Developer Program membership (the com.apple.developer.icloud-*
-        // entitlements can't be provisioned on a free/personal team) and Podstash.entitlements currently
-        // has no iCloud container configured. Requesting .automatic without that entitlement still makes
-        // SwiftData enable Core Data's persistent history tracking, but nothing ever consumes/trims it since
-        // sync can never complete - the history tables grow unbounded and every modelContext.save() gets
-        // slower over time. Flip this once real iCloud entitlements are added.
-        let cloudKitEntitlementsConfigured = false
+        // Podstash.entitlements now has the iCloud/CloudKit container (iCloud.me.geoffoliver.Podstash)
+        // configured under the paid Apple Developer Program team, so it's safe to request CloudKit
+        // mirroring. (Requesting .automatic without that entitlement made SwiftData enable Core Data's
+        // persistent history tracking with nothing to ever consume/trim it, growing the history tables
+        // unbounded - that's why this used to be hardcoded off.)
+        let cloudKitEntitlementsConfigured = true
 
         // Respect the user's iCloud sync preference (defaults to true, matching AppSettings.iCloudSyncEnabled).
         // Read directly from UserDefaults since this runs before AppSettings is constructed.
@@ -572,6 +571,10 @@ struct PodstashApp: App {
                 audioPlayer.setModelContext(context)
                 audioPlayer.setSettings(settings)
                 downloadManager.setModelContext(context)
+
+                // Pick up any episodes downloaded on other devices via iCloud sync that
+                // aren't on disk here yet.
+                downloadManager.syncFollowMeDownloads(settings: settings)
 
                 // Set up callback to refresh feeds after adding a podcast
                 addPodcastCoordinator.triggerRefreshAfterAdding = { podcast in

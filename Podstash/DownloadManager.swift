@@ -26,43 +26,80 @@ final class DownloadManager: NSObject, ObservableObject {
     func setModelContext(_ context: ModelContext) {
         self.modelContext = context
     }
-    
+
     func isDownloading(_ episode: Episode) -> Bool {
         return activeDownloads[episode.id] != nil
     }
-    
+
     func downloadProgress(for episode: Episode) -> Double? {
         return activeDownloads[episode.id]
     }
-    
+
+    /// Directory downloaded episode audio lives in on this device.
+    static var downloadsDirectory: URL {
+        let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        return documentsPath.appendingPathComponent("Downloads", isDirectory: true)
+    }
+
+    /// Resolves a filename stored in `Episode.downloadedFilename` to this device's local file
+    /// URL. Only the filename syncs via iCloud (it's deterministic, derived from the episode's
+    /// id) - never an absolute path, since each device's container path is different.
+    static func localFileURL(forStoredFilename filename: String) -> URL {
+        downloadsDirectory.appendingPathComponent(filename)
+    }
+
     func downloadEpisode(_ episode: Episode) {
         guard !isDownloading(episode) else { return }
-        guard !episode.isDownloaded else { return }
+
+        // `isDownloaded` reflects whether *any* device has the file, since it syncs via
+        // iCloud. Only skip the download if the bytes are actually present on this device.
+        if episode.isDownloaded,
+           let filename = episode.downloadedFilename,
+           FileManager.default.fileExists(atPath: DownloadManager.localFileURL(forStoredFilename: filename).path) {
+            return
+        }
+
         guard let url = URL(string: episode.audioURL) else { return }
-        
+
         let task = urlSession.downloadTask(with: url)
         downloadTasks[episode.id] = task
         activeDownloads[episode.id] = 0.0
         task.resume()
     }
-    
+
     func cancelDownload(_ episode: Episode) {
         guard let task = downloadTasks[episode.id] else { return }
         task.cancel()
         downloadTasks.removeValue(forKey: episode.id)
         activeDownloads.removeValue(forKey: episode.id)
     }
-    
+
     func deleteDownload(_ episode: Episode) {
         guard episode.isDownloaded else { return }
-        guard let fileURLString = episode.downloadedFileURL else { return }
-        guard let fileURL = URL(string: fileURLString) else { return }
-        
-        try? FileManager.default.removeItem(at: fileURL)
-        
+        guard let filename = episode.downloadedFilename else { return }
+
+        try? FileManager.default.removeItem(at: DownloadManager.localFileURL(forStoredFilename: filename))
+
         episode.isDownloaded = false
-        episode.downloadedFileURL = nil
+        episode.downloadedFilename = nil
         try? modelContext?.save()
+    }
+
+    /// Finds episodes marked downloaded via iCloud sync from another device whose file isn't
+    /// actually present here yet, and starts downloading them locally - so "downloaded"
+    /// follows you across devices instead of silently falling back to streaming.
+    func syncFollowMeDownloads(settings: AppSettings) {
+        guard settings.iCloudSyncEnabled else { return }
+        guard let modelContext else { return }
+
+        let descriptor = FetchDescriptor<Episode>(
+            predicate: #Predicate { $0.isDownloaded }
+        )
+        guard let episodes = try? modelContext.fetch(descriptor) else { return }
+
+        for episode in episodes {
+            downloadEpisode(episode)
+        }
     }
     
     private func saveDownloadedFile(from tempURL: URL, for episodeID: UUID) {
@@ -84,23 +121,22 @@ final class DownloadManager: NSObject, ObservableObject {
         }
         
         // Create downloads directory
-        let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
-        let downloadsPath = documentsPath.appendingPathComponent("Downloads", isDirectory: true)
-        
         do {
-            try FileManager.default.createDirectory(at: downloadsPath, withIntermediateDirectories: true)
+            try FileManager.default.createDirectory(at: DownloadManager.downloadsDirectory, withIntermediateDirectories: true)
         } catch {
             print("Failed to create downloads directory: \(error)")
             return
         }
-        
+
         // Generate unique filename. Derive the extension from the episode's audio URL,
         // not tempURL - tempURL's extension comes from URLSession's own internal temp
         // file naming (e.g. "CFNetworkDownload_XXXXXX.tmp"), not the actual audio format.
+        // The filename is deterministic (episode id + extension) so every device that
+        // downloads this episode independently lands on the same name.
         let audioURLExtension = URL(string: episode.audioURL)?.pathExtension ?? ""
         let fileExtension = audioURLExtension.isEmpty ? "mp3" : audioURLExtension
         let fileName = "\(episodeID.uuidString).\(fileExtension)"
-        let destinationURL = downloadsPath.appendingPathComponent(fileName)
+        let destinationURL = DownloadManager.localFileURL(forStoredFilename: fileName)
         
         // Move or copy file to final destination
         do {
@@ -117,9 +153,10 @@ final class DownloadManager: NSObject, ObservableObject {
                 try FileManager.default.copyItem(at: tempURL, to: destinationURL)
             }
             
-            // Update episode
+            // Update episode - store just the filename, not an absolute path, since this
+            // syncs via iCloud and only the filename is meaningful on another device.
             episode.isDownloaded = true
-            episode.downloadedFileURL = destinationURL.absoluteString
+            episode.downloadedFilename = fileName
             
             // Add to queue if not already in queue
             if episode.queuePosition == nil {

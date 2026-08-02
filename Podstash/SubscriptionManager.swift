@@ -65,9 +65,8 @@ class SubscriptionManager {
     func unsubscribe(podcasts: [Podcast]) -> Bool {
         for podcast in podcasts {
             for episode in podcast.episodes {
-                if let downloadedFileURLString = episode.downloadedFileURL,
-                   let downloadedFileURL = URL(string: downloadedFileURLString) {
-                    try? FileManager.default.removeItem(at: downloadedFileURL)
+                if let filename = episode.downloadedFilename {
+                    try? FileManager.default.removeItem(at: DownloadManager.localFileURL(forStoredFilename: filename))
                 }
             }
             modelContext.delete(podcast)

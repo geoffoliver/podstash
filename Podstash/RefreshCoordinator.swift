@@ -105,6 +105,9 @@ class RefreshCoordinator: ObservableObject {
         // Apply retention/auto-delete settings now that new episodes are in
         EpisodeCleanupManager(modelContext: modelContext, settings: settings).cleanupEpisodes()
 
+        // Also pick up anything downloaded on other devices via iCloud sync since the last refresh.
+        downloadManager?.syncFollowMeDownloads(settings: settings)
+
         // Calculate results
         let successCount = results.values.filter { result in
             if case .success = result { return true }

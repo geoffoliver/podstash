@@ -34,7 +34,7 @@
 - [x] search feature (standard placement (top/right on desktop, bottom on ios))
   - [x] episodes in podcast detail view (always searches "all" tab)
   - [x] queue
-- [ ] sync - enroll in paid Apple Developer Program, enable CloudKit capability, flip `cloudKitEntitlementsConfigured` in PodstashApp.swift to sync data between devices
+- [x] sync - enroll in paid Apple Developer Program, enable CloudKit capability, flip `cloudKitEntitlementsConfigured` in PodstashApp.swift to sync data between devices
 - [ ] UI enhancement - Change music note icon on "nothing is playing" view. Not sure what, but music note makes no sense because podcasts aren't music
 - [ ] Enhancement - Export OPML of subscribed feeds
 

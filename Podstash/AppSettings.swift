@@ -92,11 +92,11 @@ class AppSettings: ObservableObject {
     @AppStorage("maxEpisodesToDownload") var maxEpisodesToDownload: Int = 1
     @AppStorage("episodeRetentionPolicy") var episodeRetentionPolicy: String = EpisodeRetentionPolicy.unplayedOnly.rawValue
     @AppStorage("episodeRetentionCount") var episodeRetentionCount: Int = 10
-    @AppStorage("autoDeletePlayedEpisodes") var autoDeletePlayedEpisodes: Bool = false
+    @AppStorage("autoDeletePlayedEpisodes") var autoDeletePlayedEpisodes: Bool = true
     @AppStorage("autoDeleteAfterDays") var autoDeleteAfterDays: Int = 7
-    
+
     // MARK: - Download Settings
-    @AppStorage("autoDownloadNewEpisodes") var autoDownloadNewEpisodes: Bool = false
+    @AppStorage("autoDownloadNewEpisodes") var autoDownloadNewEpisodes: Bool = true
 
     // MARK: - Playback Settings
     @AppStorage("defaultPlaybackSpeed") var defaultPlaybackSpeed: Double = 1.0
@@ -135,10 +135,10 @@ class AppSettings: ObservableObject {
         maxEpisodesToDownload = 1
         episodeRetentionPolicy = EpisodeRetentionPolicy.unplayedOnly.rawValue
         episodeRetentionCount = 10
-        autoDeletePlayedEpisodes = false
+        autoDeletePlayedEpisodes = true
         autoDeleteAfterDays = 7
-        
-        autoDownloadNewEpisodes = false
+
+        autoDownloadNewEpisodes = true
 
         defaultPlaybackSpeed = 1.0
         skipForwardInterval = 30

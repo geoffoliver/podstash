@@ -51,6 +51,41 @@ jobs:
           mkdir -p "$PROFILE_DIR"
           echo -n "$MACOS_PROVISIONING_PROFILE" | base64 --decode -o "$PROFILE_DIR/$PROVISIONING_PROFILE_UUID.provisionprofile"
 
+      - name: Register AppleScript dictionary stub
+        run: |
+          set -euo pipefail
+          # The "Compile AppleScript Resources" build phase compiles scripts that
+          # reference `tell application id "me.geoffoliver.Podstash"` using custom
+          # terminology from Podstash.sdef. osacompile resolves that dictionary via
+          # Launch Services, which requires *some* app with that bundle ID to be
+          # registered. On a dev machine that's satisfied by earlier local builds;
+          # on a clean runner nothing is registered, so register a minimal stub.
+          STUB="$RUNNER_TEMP/PodstashDictionaryStub.app"
+          mkdir -p "$STUB/Contents/MacOS" "$STUB/Contents/Resources"
+          cp "Podstash/Podstash.sdef" "$STUB/Contents/Resources/Podstash.sdef"
+          printf '#!/bin/sh\nexit 0\n' > "$STUB/Contents/MacOS/Podstash"
+          chmod +x "$STUB/Contents/MacOS/Podstash"
+          cat > "$STUB/Contents/Info.plist" <<PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+              <key>CFBundleExecutable</key>
+              <string>Podstash</string>
+              <key>CFBundleIdentifier</key>
+              <string>me.geoffoliver.Podstash</string>
+              <key>CFBundlePackageType</key>
+              <string>APPL</string>
+              <key>NSAppleScriptEnabled</key>
+              <true/>
+              <key>OSAScriptingDefinition</key>
+              <string>Podstash.sdef</string>
+          </dict>
+          </plist>
+          PLIST
+
+          /System/Library/Frameworks/CoreServices.framework/Versions/A/Frameworks/LaunchServices.framework/Versions/A/Support/lsregister -f "$STUB"
+
       - name: Archive (signed with Developer ID)
         run: |
           set -euo pipefail

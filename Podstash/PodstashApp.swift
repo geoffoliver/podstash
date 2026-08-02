@@ -716,7 +716,7 @@ struct AddPodcastSheet: View {
                     
                     if let message = coordinator.validationMessage {
                         Label(message, systemImage: "exclamationmark.triangle.fill")
-                            .font(.caption)
+                            .font(.footnote)
                             .foregroundStyle(.red)
                     }
                 }

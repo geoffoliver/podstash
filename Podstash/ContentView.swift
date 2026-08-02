@@ -576,7 +576,8 @@ struct QueueRowView: View {
     let queueCount: Int
     let iconSize: CGFloat
     let fontSize: CGFloat
-    
+    @ScaledMetric(relativeTo: .body) private var dynamicTypeScale: CGFloat = 1.0
+
     var body: some View {
         HStack(spacing: 12) {
             // Icon matching the podcast artwork size
@@ -595,7 +596,7 @@ struct QueueRowView: View {
             .cornerRadius(6)
             
             Text("Queue")
-                .font(.system(size: fontSize))
+                .font(.system(size: fontSize * dynamicTypeScale))
             
             Spacer()
             
@@ -619,7 +620,8 @@ struct PodcastRowView: View {
     let iconSize: CGFloat
     let fontSize: CGFloat
     let downloadedUnplayedCount: Int
-    
+    @ScaledMetric(relativeTo: .body) private var dynamicTypeScale: CGFloat = 1.0
+
     var body: some View {
         HStack(spacing: 12) {
             // Podcast artwork thumbnail
@@ -640,7 +642,7 @@ struct PodcastRowView: View {
             }
             
             Text(podcast.title)
-                .font(.system(size: fontSize))
+                .font(.system(size: fontSize * dynamicTypeScale))
             
             Spacer()
             
@@ -746,24 +748,24 @@ struct EpisodeRowView: View {
                 
                 if let description = strippedDescription {
                     Text(description)
-                        .font(.caption)
+                        .font(.appBody)
                         .foregroundStyle(.secondary)
                         .lineLimit(3)
                 }
-                
+
                 HStack {
                     Text(episode.publishDate, style: .date)
-                        .font(.caption2)
+                        .font(.appCaption)
                         .foregroundStyle(.tertiary)
-                    
+
                     if let duration = episode.duration {
                         Text("•")
                             .foregroundStyle(.tertiary)
                         Text(formatDuration(duration))
-                            .font(.caption2)
+                            .font(.appCaption)
                             .foregroundStyle(.tertiary)
                     }
-                    
+
                     // Show progress if partially played
                     if episode.playbackPosition > 0 && !episode.isPlayed {
                         Text("•")
@@ -771,7 +773,7 @@ struct EpisodeRowView: View {
                         if let duration = episode.duration, duration > 0 {
                             let percent = Int((episode.playbackPosition / duration) * 100)
                             Text("\(percent)% played")
-                                .font(.caption2)
+                                .font(.appCaption)
                                 .foregroundStyle(.blue)
                         }
                     }
@@ -794,6 +796,8 @@ struct EpisodeRowView: View {
                 Image(systemName: "info.circle")
                     .foregroundStyle(.secondary)
                     .font(.title3)
+                    .frame(minWidth: 44, minHeight: 44)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .help("Show episode details")
@@ -860,7 +864,7 @@ struct PodcastEpisodeListView: View {
                             .font(.headline)
                         if let description = podcast.podcastDescription {
                             Text(description)
-                                .font(.caption)
+                                .font(.footnote)
                                 .foregroundStyle(.secondary)
                                 .lineLimit(2)
                         }
@@ -913,22 +917,22 @@ struct TransportControlsBar: View {
                 VStack(alignment: .leading, spacing: 2) {
                     if let episode = audioPlayer.currentEpisode {
                         Text(episode.title)
-                            .font(.subheadline)
+                            .font(.appSubheadline)
                             .fontWeight(.medium)
                             .lineLimit(1)
-                        
+
                         if let podcast = episode.podcast {
                             Text(podcast.title)
-                                .font(.caption)
+                                .font(.appFootnote)
                                 .foregroundStyle(.secondary)
                                 .lineLimit(1)
                         }
                     }
                 }
                 .frame(width: 200, alignment: .leading)
-                
+
                 Spacer()
-                
+
                 // Playback controls
                 HStack(spacing: 20) {
                     // Skip backward
@@ -936,27 +940,31 @@ struct TransportControlsBar: View {
                         audioPlayer.skipBackward()
                     } label: {
                         Image(systemName: "gobackward.15")
-                            .font(.title3)
+                            .font(.system(size: 20))
+                            .frame(minWidth: 32, minHeight: 32)
+                            .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
                     .help("Skip backward 15 seconds")
-                    
+
                     // Play/Pause
                     Button {
                         audioPlayer.togglePlayPause()
                     } label: {
                         Image(systemName: audioPlayer.isPlaying ? "pause.circle.fill" : "play.circle.fill")
-                            .font(.system(size: 32))
+                            .font(.system(size: 40))
                     }
                     .buttonStyle(.plain)
                     .help(audioPlayer.isPlaying ? "Pause" : "Play")
-                    
+
                     // Skip forward
                     Button {
                         audioPlayer.skipForward()
                     } label: {
                         Image(systemName: "goforward.30")
-                            .font(.title3)
+                            .font(.system(size: 20))
+                            .frame(minWidth: 32, minHeight: 32)
+                            .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
                     .help("Skip forward 30 seconds")
@@ -992,20 +1000,20 @@ struct TransportControlsBar: View {
                     // Time labels
                     HStack {
                         Text(formatTime(audioPlayer.currentTime))
-                            .font(.caption2)
+                            .font(.appCaption)
                             .monospacedDigit()
                             .foregroundStyle(.secondary)
-                        
+
                         Spacer()
-                        
+
                         Text(formatTime(audioPlayer.duration))
-                            .font(.caption2)
+                            .font(.appCaption)
                             .monospacedDigit()
                             .foregroundStyle(.secondary)
                     }
                 }
                 .frame(width: 200)
-                
+
                 // Playback speed menu
                 Menu {
                     ForEach([0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0], id: \.self) { speed in
@@ -1025,7 +1033,7 @@ struct TransportControlsBar: View {
                         Image(systemName: "gauge")
                         Text("\(audioPlayer.playbackRate, specifier: "%.2f")x")
                     }
-                    .font(.caption)
+                    .font(.appFootnote)
                     .foregroundStyle(.secondary)
                 }
                 .menuStyle(.borderlessButton)
@@ -1122,9 +1130,9 @@ struct EpisodeDetailView: View {
                                 } icon: {
                                     Image(systemName: "calendar")
                                 }
-                                .font(.caption)
+                                .font(.appFootnote)
                                 .foregroundStyle(.secondary)
-                                
+
                                 // Duration
                                 if let duration = episode.duration {
                                     Label {
@@ -1132,36 +1140,36 @@ struct EpisodeDetailView: View {
                                     } icon: {
                                         Image(systemName: "clock")
                                     }
-                                    .font(.caption)
+                                    .font(.appFootnote)
                                     .foregroundStyle(.secondary)
                                 }
                             }
-                            
+
                             // Status badges
                             HStack(spacing: 12) {
                                 if episode.isDownloaded {
                                     Label("Downloaded", systemImage: "arrow.down.circle.fill")
-                                        .font(.caption)
+                                        .font(.appFootnote)
                                         .foregroundStyle(.white)
                                         .padding(.horizontal, 12)
                                         .padding(.vertical, 6)
                                         .background(Color.green)
                                         .cornerRadius(12)
                                 }
-                                
+
                                 if episode.isPlayed {
                                     Label("Played", systemImage: "checkmark.circle.fill")
-                                        .font(.caption)
+                                        .font(.appFootnote)
                                         .foregroundStyle(.white)
                                         .padding(.horizontal, 12)
                                         .padding(.vertical, 6)
                                         .background(Color.blue)
                                         .cornerRadius(12)
                                 }
-                                
+
                                 if episode.queuePosition != nil {
                                     Label("In Queue", systemImage: "text.line.first.and.arrowtriangle.forward")
-                                        .font(.caption)
+                                        .font(.appFootnote)
                                         .foregroundStyle(.white)
                                         .padding(.horizontal, 12)
                                         .padding(.vertical, 6)
@@ -1169,18 +1177,18 @@ struct EpisodeDetailView: View {
                                         .cornerRadius(12)
                                 }
                             }
-                            
+
                             // Progress
                             if episode.playbackPosition > 0 && !episode.isPlayed {
                                 if let duration = episode.duration, duration > 0 {
                                     VStack(spacing: 4) {
                                         HStack {
                                             Text("Progress")
-                                                .font(.caption)
+                                                .font(.appFootnote)
                                                 .foregroundStyle(.secondary)
                                             Spacer()
                                             Text("\(Int((episode.playbackPosition / duration) * 100))%")
-                                                .font(.caption)
+                                                .font(.appFootnote)
                                                 .foregroundStyle(.secondary)
                                         }
 
@@ -1227,7 +1235,7 @@ struct EpisodeDetailView: View {
                                             .lineLimit(1)
                                             .truncationMode(.middle)
                                     }
-                                    .font(.caption)
+                                    .font(.appBody)
                                 }
                             }
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -1367,6 +1375,11 @@ struct EpisodeDetailView: View {
 struct HTMLText: View {
     let html: String
     @State private var attributedString: AttributedString?
+    // The HTML parser below bakes an explicit font-size into every text run, which
+    // bypasses the `.font(.body)` modifier's Dynamic Type scaling entirely. Scaling
+    // the baked-in size by this factor keeps the rendered text responsive to the
+    // user's text-size setting instead of being permanently pinned at 16px.
+    @ScaledMetric(relativeTo: .body) private var dynamicTypeScale: CGFloat = 1.0
 
     var body: some View {
         Group {
@@ -1385,17 +1398,17 @@ struct HTMLText: View {
         // detected" errors severe enough to blank out the whole screen this view was on.
         // Computing it in a task and publishing the result via @State keeps HTML parsing
         // out of the render graph entirely.
-        .task(id: html) {
-            attributedString = Self.parseHTML(html)
+        .task(id: "\(html)|\(dynamicTypeScale)") {
+            attributedString = Self.parseHTML(html, scale: dynamicTypeScale)
         }
     }
 
-    private static func parseHTML(_ html: String) -> AttributedString? {
-        guard let ns = htmlToAttributedString(html) else { return nil }
+    private static func parseHTML(_ html: String, scale: CGFloat) -> AttributedString? {
+        guard let ns = htmlToAttributedString(html, scale: scale) else { return nil }
         return AttributedString(ns)
     }
 
-    private static func htmlToAttributedString(_ html: String) -> NSAttributedString? {
+    private static func htmlToAttributedString(_ html: String, scale: CGFloat) -> NSAttributedString? {
         // Wrap in a basic HTML document with styling
         let styledHTML =
 """
@@ -1404,7 +1417,7 @@ struct HTMLText: View {
     <style>
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
-            font-size: 16px;
+            font-size: \(17 * scale)px;
             line-height: 1.5;
             color: #8e8e93;
         }

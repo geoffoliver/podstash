@@ -21,7 +21,8 @@
 - [x] Bug - Downloading/re-downloading an episode should mark it as unplayed. Or at the very least give users the ability to mark an episode as unplayed.
 - [x] UI bug (desktop) - Sometimes on initial play, progress scrubber is too wide (goes all the way to right edge and probably far outside of it)
 
-- [ ] UI enhancement - text is *very* small on macOS and iOS.
+- [x] UI enhancement - text is *very* small on macOS and iOS.
+- [ ] UI enhancement - figure out what "compact list mode" does
 - [ ] UI enhancement - delay between double clicking and episode actually starting to play. Verify that we are playing local files rather than streaming when local files are available.
 - [ ] UI enhancement - "cancel" button for feed refreshing is very small. make actual button with "cancel" label
 - [ ] UI enhancement - "sidebar icon" option should just be "icon option" on iOS, and icon sizes should be larger - use "medium" macOS size for "small" on iOS, "large" macOS size for "medium" on iOS, and then pick a proportional size for "large" on iOS.
@@ -34,7 +35,11 @@
 
 # Maybe
 
-- [ ] search feature - search episodes in subscribed feeds
+- [ ] search feature
+  - [ ] episodes in subscribed feeds
+  - [ ] queue
+  - [ ] sidebar
+  - [ ] something else?
 - [ ] can this play videos?
 - [ ] "downloads" window/view/whatever - maybe we can just use the queue for this? show progress circle like on podcast detail?
 - [ ] "window" menu flashes different content when app is playing - shows extra options for maximizing/fullscreening window

@@ -98,23 +98,27 @@ struct PodcastDetailView: View {
                                     Image(systemName: "checkmark.circle.fill")
                                         .foregroundStyle(.green)
                                         .imageScale(.large)
+                                        .frame(minWidth: 44, minHeight: 44)
+                                        .contentShape(Rectangle())
                                 }
                                 .buttonStyle(.plain)
                                 .help("Episode downloaded - tap to delete")
                             } else if downloadManager.isDownloading(episode) {
-                                ZStack {
-                                    CircularProgressView(progress: downloadManager.downloadProgress(for: episode) ?? 0.0)
-                                        .frame(width: 24, height: 24)
-                                    
-                                    Button {
-                                        downloadManager.cancelDownload(episode)
-                                    } label: {
+                                Button {
+                                    downloadManager.cancelDownload(episode)
+                                } label: {
+                                    ZStack {
+                                        CircularProgressView(progress: downloadManager.downloadProgress(for: episode) ?? 0.0)
+                                            .frame(width: 24, height: 24)
+
                                         Image(systemName: "xmark")
                                             .font(.system(size: 10, weight: .bold))
                                             .foregroundStyle(.secondary)
                                     }
-                                    .buttonStyle(.plain)
+                                    .frame(minWidth: 44, minHeight: 44)
+                                    .contentShape(Rectangle())
                                 }
+                                .buttonStyle(.plain)
                                 .help("Downloading - tap to cancel")
                             } else {
                                 Button {
@@ -123,6 +127,8 @@ struct PodcastDetailView: View {
                                     Image(systemName: "arrow.down.circle")
                                         .foregroundStyle(.blue)
                                         .imageScale(.large)
+                                        .frame(minWidth: 44, minHeight: 44)
+                                        .contentShape(Rectangle())
                                 }
                                 .buttonStyle(.plain)
                                 .help("Download episode")
@@ -298,7 +304,7 @@ struct PodcastHeaderView: View {
 
                         if let author = podcast.author {
                             Text(author)
-                                .font(.subheadline)
+                                .font(.appBody)
                                 .foregroundStyle(.secondary)
                         }
                     }
@@ -311,12 +317,12 @@ struct PodcastHeaderView: View {
                     // Metadata row
                     HStack(spacing: 12) {
                         Label("\(podcast.episodes.count)", systemImage: "list.bullet")
-                            .font(.caption2)
+                            .font(.appFootnote)
                             .foregroundStyle(.secondary)
 
                         if let lastUpdated = podcast.lastUpdated {
                             Text(formattedLastUpdated(lastUpdated))
-                                .font(.caption2)
+                                .font(.appFootnote)
                                 .foregroundStyle(.secondary)
                         }
 
@@ -324,7 +330,7 @@ struct PodcastHeaderView: View {
                         if let websiteURL = podcast.websiteURL, let url = URL(string: websiteURL) {
                             Link(destination: url) {
                                 Label("Web", systemImage: "safari")
-                                    .font(.caption2)
+                                    .font(.appFootnote)
                             }
                         }
                     }
@@ -358,14 +364,14 @@ struct PodcastHeaderView: View {
             if isDescriptionExpanded {
                 ScrollView {
                     Text(description)
-                        .font(.caption)
+                        .font(.appBody)
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .frame(maxHeight: 180)
             } else {
                 Text(description)
-                    .font(.caption)
+                    .font(.appBody)
                     .foregroundStyle(.secondary)
                     .lineLimit(3)
                     .contentShape(Rectangle())
@@ -378,8 +384,9 @@ struct PodcastHeaderView: View {
 
             if isDescriptionTruncated || isDescriptionExpanded {
                 Text(isDescriptionExpanded ? "Less" : "More")
-                    .font(.caption2.weight(.semibold))
+                    .font(.appFootnote.weight(.semibold))
                     .foregroundStyle(.blue)
+                    .padding(.vertical, 6)
                     .contentShape(Rectangle())
                     .onTapGesture {
                         withAnimation(.easeInOut(duration: 0.2)) {
@@ -415,19 +422,19 @@ struct PodcastHeaderView: View {
         HStack(spacing: 8) {
             Button(action: onRefresh) {
                 Label("Refresh", systemImage: "arrow.clockwise")
-                    .font(.caption)
+                    .font(.appBody)
                     .frame(maxWidth: isCompact ? .infinity : nil)
             }
             .buttonStyle(.bordered)
-            .controlSize(.small)
+            .controlSize(.regular)
 
             Button(action: onUnsubscribe) {
                 Label("Unsubscribe", systemImage: "xmark.circle")
-                    .font(.caption)
+                    .font(.appBody)
                     .frame(maxWidth: isCompact ? .infinity : nil)
             }
             .buttonStyle(.bordered)
-            .controlSize(.small)
+            .controlSize(.regular)
             .tint(.red)
         }
     }

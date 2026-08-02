@@ -112,20 +112,20 @@ struct NowPlayingView: View {
                     
                     HStack {
                         Text(formatTime(audioPlayer.currentTime))
-                            .font(.caption)
+                            .font(.footnote)
                             .monospacedDigit()
                             .foregroundStyle(.secondary)
-                        
+
                         Spacer()
-                        
+
                         Text(formatTime(audioPlayer.duration))
-                            .font(.caption)
+                            .font(.footnote)
                             .monospacedDigit()
                             .foregroundStyle(.secondary)
                     }
                     .padding(.horizontal)
                 }
-                
+
                 // Playback Controls
                 HStack(spacing: 40) {
                     // Skip Back 15s
@@ -134,8 +134,10 @@ struct NowPlayingView: View {
                     } label: {
                         Image(systemName: "gobackward.15")
                             .font(.title)
+                            .frame(minWidth: 44, minHeight: 44)
+                            .contentShape(Rectangle())
                     }
-                    
+
                     // Play/Pause
                     Button {
                         audioPlayer.togglePlayPause()
@@ -143,13 +145,15 @@ struct NowPlayingView: View {
                         Image(systemName: audioPlayer.isPlaying ? "pause.circle.fill" : "play.circle.fill")
                             .font(.system(size: 64))
                     }
-                    
+
                     // Skip Forward 30s
                     Button {
                         audioPlayer.skip(by: 30)
                     } label: {
                         Image(systemName: "goforward.30")
                             .font(.title)
+                            .frame(minWidth: 44, minHeight: 44)
+                            .contentShape(Rectangle())
                     }
                 }
                 .padding()
@@ -256,7 +260,7 @@ struct CompactPlayerBar: View {
 
                     if let podcast = episode.podcast {
                         Text(podcast.title)
-                            .font(.caption)
+                            .font(.footnote)
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
                     }
@@ -274,6 +278,8 @@ struct CompactPlayerBar: View {
                 } label: {
                     Image(systemName: audioPlayer.isPlaying ? "pause.fill" : "play.fill")
                         .font(.title3)
+                        .frame(minWidth: 44, minHeight: 44)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
             }

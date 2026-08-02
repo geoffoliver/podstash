@@ -433,7 +433,7 @@ struct QueueEpisodeRow: View {
                 // Queue position indicator
                 if let position = episode.queuePosition {
                     Text("\(position + 1)")
-                        .font(.caption)
+                        .font(.appCaption)
                         .fontWeight(.bold)
                         .foregroundStyle(.secondary)
                         .frame(width: 30, alignment: .trailing)
@@ -466,40 +466,41 @@ struct QueueEpisodeRow: View {
                 VStack(alignment: .leading, spacing: 4) {
                     HStack {
                         Text(episode.title)
-                            .font(.subheadline)
+                            .font(.appSubheadline)
                             .fontWeight(.medium)
                             .lineLimit(2)
-                        
+
                         if isCurrentlyPlaying && isPlaying {
                             Image(systemName: "speaker.wave.2.fill")
-                                .font(.caption2)
+                                .font(.appCaption)
                                 .foregroundStyle(.blue)
                         }
                     }
-                    
+
                     if let podcast = episode.podcast {
                         Text(podcast.title)
-                            .font(.caption)
+                            .font(.appFootnote)
+                            .foregroundStyle(.secondary)
                             .lineLimit(1)
                     }
-                    
+
                     HStack(spacing: 4) {
                         Text(episode.publishDate, style: .date)
-                            .font(.caption2)
-                        
+                            .font(.appCaption)
+
                         if let duration = episode.duration {
                             Text("•")
                             Text(formatDuration(duration))
-                                .font(.caption2)
+                                .font(.appCaption)
                         }
-                        
+
                         // Show progress if partially played
                         if episode.playbackPosition > 0 {
                             Text("•")
                             if let duration = episode.duration, duration > 0 {
                                 let percent = Int((episode.playbackPosition / duration) * 100)
                                 Text("\(percent)%")
-                                    .font(.caption2)
+                                    .font(.appCaption)
                                     .foregroundStyle(.blue)
                             }
                         }
@@ -515,10 +516,11 @@ struct QueueEpisodeRow: View {
                     Image(systemName: "info.circle")
                         .foregroundStyle(.secondary)
                         .font(.title3)
+                        .frame(minWidth: 44, minHeight: 44)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .help("Show episode details")
-                .padding(.trailing, 8)
             }
             .padding(.vertical, 4)
     }

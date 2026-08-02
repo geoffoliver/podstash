@@ -528,13 +528,11 @@ struct QueueEpisodeRow: View {
                 }
 
                 HStack(spacing: 4) {
-                    Text(episode.publishDate, style: .date)
-                        .font(.footnote)
+                    Text(episode.publishDate.formatted(date: .abbreviated, time: .omitted))
 
                     if let duration = episode.duration {
                         Text("•")
                         Text(formatDuration(duration))
-                            .font(.footnote)
                     }
 
                     // Show progress if partially played
@@ -543,11 +541,12 @@ struct QueueEpisodeRow: View {
                         if let duration = episode.duration, duration > 0 {
                             let percent = Int((episode.playbackPosition / duration) * 100)
                             Text("\(percent)%")
-                                .font(.footnote)
                                 .foregroundStyle(.blue)
                         }
                     }
                 }
+                .font(.footnote)
+                .lineLimit(1)
                 .foregroundStyle(.secondary)
             }
 

@@ -6,6 +6,8 @@
 //
 
 import SwiftUI
+import SwiftData
+import UniformTypeIdentifiers
 
 #if os(macOS)
 /// Shared label-column width so every macOS settings tab lines up its controls
@@ -189,6 +191,11 @@ struct GeneralSettingsView: View {
 struct FeedSettingsView: View {
     @ObservedObject var settings: AppSettings
     @EnvironmentObject var autoRefreshManager: AutoRefreshManager
+    @Environment(\.modelContext) private var modelContext
+
+    @State private var exportDocument: OPMLDocument?
+    @State private var isExportingOPML = false
+    @State private var exportMessage: String?
 
     var body: some View {
         #if os(macOS)
@@ -214,6 +221,23 @@ struct FeedSettingsView: View {
                         .foregroundStyle(.secondary)
                 }
             }
+
+            Divider()
+                .padding(.vertical, 2)
+
+            SettingsFreeformRow {
+                Button("Export OPML…") {
+                    exportOPML()
+                }
+            }
+
+            if let exportMessage {
+                SettingsFreeformRow {
+                    Text(exportMessage)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
         }
         #else
         Group {
@@ -235,8 +259,49 @@ struct FeedSettingsView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+
+            Button("Export OPML…") {
+                exportOPML()
+            }
+
+            if let exportMessage {
+                Text(exportMessage)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .fileExporter(isPresented: $isExportingOPML, document: exportDocument, contentType: .opml, defaultFilename: "Podstash") { result in
+            switch result {
+            case .success:
+                showExportMessage("Export complete.")
+            case .failure(let error):
+                showExportMessage("Export failed: \(error.localizedDescription)")
+            }
         }
         #endif
+    }
+
+    private func exportOPML() {
+        let descriptor = FetchDescriptor<Podcast>()
+        guard let podcasts = try? modelContext.fetch(descriptor), !podcasts.isEmpty else {
+            showExportMessage("No subscriptions to export.")
+            return
+        }
+
+        #if os(macOS)
+        OPMLExporter.presentSavePanel(podcasts: podcasts)
+        #else
+        exportDocument = OPMLDocument(text: OPMLExporter.generateOPML(from: podcasts))
+        isExportingOPML = true
+        #endif
+    }
+
+    private func showExportMessage(_ message: String) {
+        exportMessage = message
+        Task {
+            try? await Task.sleep(for: .seconds(3))
+            exportMessage = nil
+        }
     }
 }
 

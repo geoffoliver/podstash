@@ -282,4 +282,17 @@ extension String {
         
         return result
     }
+
+    /// Escape the characters XML attribute values can't contain literally, for writing out
+    /// (the inverse of `decodingBasicHTMLEntities()` above, restricted to what's required for
+    /// well-formed XML rather than the full HTML entity set).
+    func escapingForXMLAttribute() -> String {
+        var result = self
+        result = result.replacingOccurrences(of: "&", with: "&amp;")
+        result = result.replacingOccurrences(of: "\"", with: "&quot;")
+        result = result.replacingOccurrences(of: "'", with: "&apos;")
+        result = result.replacingOccurrences(of: "<", with: "&lt;")
+        result = result.replacingOccurrences(of: ">", with: "&gt;")
+        return result
+    }
 }

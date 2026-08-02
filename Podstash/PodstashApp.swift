@@ -418,6 +418,79 @@ class OPMLFeedParser: NSObject, XMLParserDelegate {
     }
 }
 
+enum OPMLExporter {
+    static func generateOPML(from podcasts: [Podcast]) -> String {
+        let sortedPodcasts = podcasts.sorted {
+            $0.title.localizedCaseInsensitiveCompare($1.title) == .orderedAscending
+        }
+
+        let outlines = sortedPodcasts.map { podcast -> String in
+            var attributes = [
+                "text=\"\(podcast.title.escapingForXMLAttribute())\"",
+                "title=\"\(podcast.title.escapingForXMLAttribute())\"",
+                "type=\"rss\"",
+                "xmlUrl=\"\(podcast.feedURL.escapingForXMLAttribute())\"",
+            ]
+            if let websiteURL = podcast.websiteURL, !websiteURL.isEmpty {
+                attributes.append("htmlUrl=\"\(websiteURL.escapingForXMLAttribute())\"")
+            }
+            return "    <outline \(attributes.joined(separator: " "))/>"
+        }.joined(separator: "\n")
+
+        return """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <opml version="2.0">
+          <head>
+            <title>Podstash Subscriptions</title>
+          </head>
+          <body>
+        \(outlines)
+          </body>
+        </opml>
+        """
+    }
+
+#if os(macOS)
+    /// Presents a save panel and writes the OPML file directly - macOS has no `.fileExporter`
+    /// equivalent to NSOpenPanel's `.fileImporter` counterpart used for import, so this mirrors
+    /// `OPMLImportCoordinator.importOPML()`'s direct-NSPanel approach instead.
+    @MainActor
+    static func presentSavePanel(podcasts: [Podcast]) {
+        let panel = NSSavePanel()
+        panel.allowedContentTypes = [.opml]
+        panel.nameFieldStringValue = "Podstash.opml"
+        panel.begin { response in
+            guard response == .OK, let url = panel.url else { return }
+            let opml = generateOPML(from: podcasts)
+            try? opml.write(to: url, atomically: true, encoding: .utf8)
+        }
+    }
+#endif
+}
+
+/// Wraps OPML text for SwiftUI's `.fileExporter`, which iOS uses in place of macOS's NSSavePanel.
+struct OPMLDocument: FileDocument {
+    static var readableContentTypes: [UTType] { [.opml] }
+
+    var text: String
+
+    init(text: String) {
+        self.text = text
+    }
+
+    init(configuration: ReadConfiguration) throws {
+        guard let data = configuration.file.regularFileContents,
+              let string = String(data: data, encoding: .utf8) else {
+            throw CocoaError(.fileReadCorruptFile)
+        }
+        text = string
+    }
+
+    func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper {
+        FileWrapper(regularFileWithContents: Data(text.utf8))
+    }
+}
+
 #if os(macOS)
 // Global reference to audio player for menu validation
 // This avoids capturing @StateObject in the commands block
@@ -629,6 +702,15 @@ struct PodstashApp: App {
                 opmlCoordinator.importOPML()
             }
             .keyboardShortcut("i", modifiers: .command)
+
+            #if os(macOS)
+            Button("Export OPML…") {
+                let descriptor = FetchDescriptor<Podcast>()
+                guard let podcasts = try? sharedModelContainer.mainContext.fetch(descriptor) else { return }
+                OPMLExporter.presentSavePanel(podcasts: podcasts)
+            }
+            .keyboardShortcut("e", modifiers: [.command, .shift])
+            #endif
 
             Divider()
 

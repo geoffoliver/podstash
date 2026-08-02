@@ -36,7 +36,8 @@
   - [x] queue
 - [x] sync - enroll in paid Apple Developer Program, enable CloudKit capability, flip `cloudKitEntitlementsConfigured` in PodstashApp.swift to sync data between devices
 - [x] UI enhancement - Change music note icon on "nothing is playing" view. Not sure what, but music note makes no sense because podcasts aren't music
-- [ ] Enhancement - Export OPML of subscribed feeds
+- [x] Enhancement - Export OPML of subscribed feeds
+- [ ] UI bug/enhancement - Setting for "Keep episodes" and "Auto-delete played episodes" are confusing. What happens if "Keep episodes" is set to "all episodes", what does "Auto-delete played episodes" do? Shouldn't it do nothing and disappear or be disabled? This is confusing.
 - [ ] Default settings change - Auto-delete played episodes: true; Auto-download new episodes: true; Download [1] most recent episode per refresh;
 - [x] Bug - Storage reporting 0 episodes/0MB download, but I do have files downloaded
 

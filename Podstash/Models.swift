@@ -117,3 +117,25 @@ final class Episode {
         self.queuePosition = queuePosition
     }
 }
+
+/// A tombstone left behind when EpisodeCleanupManager removes a played episode's row under the
+/// user's retention policy. Without this, a deleted episode has no trace left to match against,
+/// so the next feed refresh sees its guid/audioURL as "new" and resurrects it - unplayed, and
+/// re-added to the queue. FeedFetcher checks these before creating an episode; they intentionally
+/// outlive the Episode row they refer to; scoped by podcastID (not a relationship) since the
+/// point is to persist past the episode - and podcast - being gone.
+@Model
+final class DeletedEpisodeMarker {
+    var id: UUID = UUID()
+    var podcastID: UUID = UUID()
+    var guid: String?
+    var audioURL: String = ""
+    var deletedDate: Date = Date()
+
+    init(podcastID: UUID, guid: String?, audioURL: String, deletedDate: Date = Date()) {
+        self.podcastID = podcastID
+        self.guid = guid
+        self.audioURL = audioURL
+        self.deletedDate = deletedDate
+    }
+}

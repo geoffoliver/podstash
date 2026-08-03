@@ -126,6 +126,23 @@ class FeedFetcher {
             existingByAudioURL[episode.audioURL] = episode
         }
 
+        // Episodes the retention/cleanup policy already deleted (because they were played)
+        // leave no Episode row behind to match against above, so without this they'd look
+        // "new" here and get resurrected unplayed every time this feed is refreshed again.
+        let podcastID = podcast.id
+        let tombstoneDescriptor = FetchDescriptor<DeletedEpisodeMarker>(
+            predicate: #Predicate { $0.podcastID == podcastID }
+        )
+        let tombstones = (try? modelContext.fetch(tombstoneDescriptor)) ?? []
+        var deletedGUIDs: Set<String> = []
+        var deletedAudioURLs: Set<String> = []
+        for tombstone in tombstones {
+            if let guid = tombstone.guid {
+                deletedGUIDs.insert(guid)
+            }
+            deletedAudioURLs.insert(tombstone.audioURL)
+        }
+
         var newEpisodeData: [ParsedEpisode] = []
         for parsedEpisode in parsedEpisodes {
             if let guid = parsedEpisode.guid, existingByGUID[guid] != nil {
@@ -135,6 +152,12 @@ class FeedFetcher {
                 if existing.guid == nil, let guid = parsedEpisode.guid {
                     existing.guid = guid
                 }
+                continue
+            }
+            if let guid = parsedEpisode.guid, deletedGUIDs.contains(guid) {
+                continue
+            }
+            if deletedAudioURLs.contains(parsedEpisode.audioURL) {
                 continue
             }
             newEpisodeData.append(parsedEpisode)

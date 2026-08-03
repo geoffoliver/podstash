@@ -52,10 +52,11 @@ class EpisodeCleanupManager {
 
         for episode in episodes {
             deleteDownloadedFileIfNeeded(for: episode)
+            recordTombstone(for: episode)
             modelContext.delete(episode)
         }
     }
-    
+
     private func deleteOldPlayedEpisodes() {
         let cutoffDate = Calendar.current.date(
             byAdding: .day,
@@ -80,10 +81,11 @@ class EpisodeCleanupManager {
         
         for episode in oldEpisodes {
             deleteDownloadedFileIfNeeded(for: episode)
+            recordTombstone(for: episode)
             modelContext.delete(episode)
         }
     }
-    
+
     private func keepMostRecentEpisodes(count: Int) {
         // Get all podcasts
         let podcastDescriptor = FetchDescriptor<Podcast>()
@@ -100,6 +102,7 @@ class EpisodeCleanupManager {
 
             for episode in episodesToDelete {
                 deleteDownloadedFileIfNeeded(for: episode)
+                recordTombstone(for: episode)
                 modelContext.delete(episode)
             }
         }
@@ -111,6 +114,19 @@ class EpisodeCleanupManager {
     private func deleteDownloadedFileIfNeeded(for episode: Episode) {
         guard episode.isDownloaded, let filename = episode.downloadedFilename else { return }
         try? FileManager.default.removeItem(at: DownloadManager.localFileURL(forStoredFilename: filename))
+    }
+
+    /// Leaves a marker behind so FeedFetcher recognizes this episode as already-seen (and
+    /// already-played) even after this row is gone, instead of recreating it as new/unplayed
+    /// on the next refresh. See DeletedEpisodeMarker's doc comment in Models.swift.
+    private func recordTombstone(for episode: Episode) {
+        guard let podcastID = episode.podcast?.id else { return }
+        let marker = DeletedEpisodeMarker(
+            podcastID: podcastID,
+            guid: episode.guid,
+            audioURL: episode.audioURL
+        )
+        modelContext.insert(marker)
     }
 
     /// Get storage usage information

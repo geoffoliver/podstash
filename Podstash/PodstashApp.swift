@@ -172,15 +172,16 @@ class AddPodcastCoordinator: ObservableObject {
                 title: parsedEpisode.title,
                 episodeDescription: parsedEpisode.description,
                 audioURL: parsedEpisode.audioURL,
+                guid: parsedEpisode.guid,
                 duration: parsedEpisode.duration,
                 publishDate: parsedEpisode.publishDate,
                 artworkURL: parsedEpisode.artworkURL
             )
-            
+
             episode.podcast = podcast
             modelContext.insert(episode)
         }
-        
+
         try? modelContext.save()
     }
 }
@@ -599,6 +600,7 @@ struct PodstashApp: App {
         let schema = Schema([
             Podcast.self,
             Episode.self,
+            DeletedEpisodeMarker.self,
         ])
         
         // Podstash.entitlements now has the iCloud/CloudKit container (iCloud.me.geoffoliver.Podstash)

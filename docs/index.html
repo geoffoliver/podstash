@@ -1,0 +1,343 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Podstash — a fast, native podcast app for Mac, iPhone, and iPad</title>
+<meta name="description" content="Podstash is a fast, native podcast app for Mac, iPhone, and iPad. Queue-first listening, no subscriptions, no ads.">
+<link rel="icon" type="image/png" href="assets/favicon-64.png">
+<style>
+  :root {
+    --accent: #f2542d;
+    --accent-2: #ff8a3d;
+    --bg: #ffffff;
+    --bg-subtle: #f6f5f4;
+    --text: #1a1a1a;
+    --text-muted: #6b6b6b;
+    --border: #e6e3e0;
+    --card-bg: #ffffff;
+    --shadow: 0 20px 50px -20px rgba(0,0,0,0.25);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #121212;
+      --bg-subtle: #1a1a1a;
+      --text: #f2f0ee;
+      --text-muted: #9a9591;
+      --border: #2b2b2b;
+      --card-bg: #1a1a1a;
+      --shadow: 0 20px 50px -20px rgba(0,0,0,0.6);
+    }
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    overflow-x: hidden;
+  }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    line-height: 1.5;
+  }
+
+  a { color: inherit; }
+
+  .wrap {
+    max-width: 1040px;
+    margin: 0 auto;
+    padding: 0 24px;
+  }
+
+  /* Hero */
+  .hero {
+    padding: 96px 0 64px;
+    text-align: center;
+  }
+
+  .hero img.icon {
+    width: 112px;
+    height: 112px;
+    border-radius: 24px;
+    box-shadow: var(--shadow);
+    margin-bottom: 28px;
+  }
+
+  .hero h1 {
+    font-size: clamp(2.2rem, 5vw, 3.2rem);
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    margin: 0 0 14px;
+  }
+
+  .hero p.tagline {
+    font-size: clamp(1.05rem, 2vw, 1.25rem);
+    color: var(--text-muted);
+    max-width: 560px;
+    margin: 0 auto 36px;
+  }
+
+  .cta-row {
+    display: flex;
+    gap: 14px;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    padding: 13px 26px;
+    border-radius: 12px;
+    font-size: 1rem;
+    font-weight: 600;
+    text-decoration: none;
+    transition: transform 0.15s ease, opacity 0.15s ease;
+    border: 1px solid transparent;
+  }
+
+  .btn:hover { transform: translateY(-1px); }
+  .btn:active { transform: translateY(0); }
+
+  .btn-primary {
+    background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    color: #fff;
+    box-shadow: 0 10px 30px -10px rgba(242, 84, 45, 0.55);
+  }
+
+  .btn-secondary {
+    background: transparent;
+    color: var(--text);
+    border-color: var(--border);
+  }
+
+  .btn-secondary:hover { background: var(--bg-subtle); }
+
+  .btn svg { width: 18px; height: 18px; flex-shrink: 0; }
+
+  .sub-note {
+    margin-top: 16px;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+  }
+
+  /* Screenshots */
+  .screens {
+    padding: 40px 0 90px;
+  }
+
+  .theme-toggle {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 40px;
+  }
+
+  .toggle-group {
+    display: inline-flex;
+    background: var(--bg-subtle);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 4px;
+    gap: 4px;
+  }
+
+  .toggle-group button {
+    appearance: none;
+    border: none;
+    background: transparent;
+    color: var(--text-muted);
+    font-size: 0.9rem;
+    font-weight: 600;
+    padding: 8px 20px;
+    border-radius: 999px;
+    cursor: pointer;
+    font-family: inherit;
+  }
+
+  .toggle-group button.active {
+    background: var(--card-bg);
+    color: var(--text);
+    box-shadow: 0 2px 10px rgba(0,0,0,0.12);
+  }
+
+  .screens-grid {
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    gap: 32px;
+    flex-wrap: wrap;
+  }
+
+  .shot-card {
+    position: relative;
+  }
+
+  .shot-card.mac {
+    flex: 1 1 620px;
+    max-width: 660px;
+  }
+
+  .shot-card.ios {
+    flex: 0 0 220px;
+    max-width: 220px;
+  }
+
+  .shot-card img {
+    width: 100%;
+    height: auto;
+    display: block;
+    border-radius: 14px;
+    box-shadow: var(--shadow);
+    border: 1px solid var(--border);
+  }
+
+  .shot-card img[data-mode="dark"] { display: none; }
+  .theme-dark .shot-card img[data-mode="light"] { display: none; }
+  .theme-dark .shot-card img[data-mode="dark"] { display: block; }
+
+  .shot-label {
+    text-align: center;
+    margin-top: 14px;
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    font-weight: 600;
+  }
+
+  /* Features */
+  .features {
+    padding: 0 0 90px;
+  }
+
+  .features-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 28px;
+  }
+
+  .feature h3 {
+    font-size: 1.05rem;
+    margin: 0 0 8px;
+  }
+
+  .feature p {
+    margin: 0;
+    color: var(--text-muted);
+    font-size: 0.95rem;
+  }
+
+  /* Footer */
+  footer {
+    border-top: 1px solid var(--border);
+    padding: 32px 0;
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 0.85rem;
+  }
+
+  footer a {
+    text-decoration: none;
+    font-weight: 600;
+    color: var(--text-muted);
+  }
+
+  footer a:hover { color: var(--text); }
+
+  @media (max-width: 700px) {
+    .screens-grid { flex-direction: column; align-items: center; }
+    .shot-card.mac, .shot-card.ios { max-width: 92vw; flex-basis: auto; }
+  }
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="wrap">
+    <img class="icon" src="assets/icon-256.png" alt="Podstash app icon">
+    <h1>Podstash</h1>
+    <p class="tagline">A fast, native podcast app for Mac, iPhone, and iPad. Queue-first listening. No subscriptions, no ads, no nonsense.</p>
+    <div class="cta-row">
+      <a class="btn btn-primary" href="https://github.com/geoffoliver/podstash/releases/latest">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Z"/><path d="M17 12.5 12 17l-5-4.5"/><path d="M12 4v13"/></svg>
+        Download for Mac
+      </a>
+      <a class="btn btn-secondary" href="https://github.com/geoffoliver/podstash">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 .5C5.65.5.5 5.65.5 12c0 5.1 3.29 9.42 7.86 10.95.57.1.78-.25.78-.55v-2.1c-3.2.7-3.87-1.35-3.87-1.35-.53-1.34-1.29-1.7-1.29-1.7-1.05-.72.08-.71.08-.71 1.17.08 1.78 1.2 1.78 1.2 1.04 1.77 2.72 1.26 3.38.96.1-.75.4-1.26.73-1.55-2.55-.29-5.24-1.28-5.24-5.7 0-1.26.45-2.28 1.2-3.09-.12-.29-.52-1.47.11-3.06 0 0 .98-.31 3.2 1.18a11.1 11.1 0 0 1 5.83 0c2.22-1.49 3.2-1.18 3.2-1.18.63 1.59.23 2.77.11 3.06.75.81 1.2 1.83 1.2 3.09 0 4.43-2.7 5.4-5.27 5.69.42.36.78 1.07.78 2.16v3.2c0 .3.21.66.79.55A10.51 10.51 0 0 0 23.5 12C23.5 5.65 18.35.5 12 .5Z"/></svg>
+        View on GitHub
+      </a>
+    </div>
+    <p class="sub-note">macOS · Developer ID signed &amp; notarized · Requires macOS 26 or later</p>
+  </div>
+</header>
+
+<section class="screens">
+  <div class="wrap">
+    <div class="theme-toggle">
+      <div class="toggle-group" role="group" aria-label="Screenshot appearance">
+        <button type="button" class="active" data-theme-btn="light">Light</button>
+        <button type="button" data-theme-btn="dark">Dark</button>
+      </div>
+    </div>
+    <div class="screens-grid" id="screensGrid">
+      <div class="shot-card mac">
+        <img data-mode="light" src="screenshots/macos-light.png" alt="Podstash queue view on Mac with an episode playing in the mini player, light mode">
+        <img data-mode="dark" src="screenshots/macos-dark.png" alt="Podstash queue view on Mac with an episode playing in the mini player, dark mode">
+        <div class="shot-label">Mac</div>
+      </div>
+      <div class="shot-card ios">
+        <img data-mode="light" src="screenshots/ios-light.png" alt="Podstash Now Playing view on iPhone, light mode">
+        <img data-mode="dark" src="screenshots/ios-dark.png" alt="Podstash Now Playing view on iPhone, dark mode">
+        <div class="shot-label">iPhone</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="features">
+  <div class="wrap">
+    <div class="features-grid">
+      <div class="feature">
+        <h3>Queue-first</h3>
+        <p>Build a single queue across every show you follow, instead of hunting through separate feeds.</p>
+      </div>
+      <div class="feature">
+        <h3>Truly native</h3>
+        <p>Built with SwiftUI for Mac and iPhone — fast, lightweight, and at home on both platforms.</p>
+      </div>
+      <div class="feature">
+        <h3>Smart downloads</h3>
+        <p>Auto-download new episodes, auto-delete played ones, and keep only what you actually need offline.</p>
+      </div>
+      <div class="feature">
+        <h3>Your library, synced</h3>
+        <p>Subscriptions and queue stay in sync across your devices via iCloud.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <p><a href="https://github.com/geoffoliver/podstash">github.com/geoffoliver/podstash</a></p>
+  </div>
+</footer>
+
+<script>
+  document.querySelectorAll('[data-theme-btn]').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var mode = btn.getAttribute('data-theme-btn');
+      document.querySelectorAll('[data-theme-btn]').forEach(function (b) {
+        b.classList.toggle('active', b === btn);
+      });
+      document.body.classList.toggle('theme-dark', mode === 'dark');
+    });
+  });
+</script>
+
+</body>
+</html>

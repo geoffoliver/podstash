@@ -37,50 +37,46 @@ class FeedFetcher {
     /// Fetch and parse a single podcast feed, updating the podcast and adding episodes
     func fetchFeed(for podcast: Podcast, shouldSave: Bool = true) async throws {
         // Capture podcast data on main actor
-        let (feedURL, existingAudioURLs) = await MainActor.run {
+        let feedURL: URL? = await MainActor.run {
             let cleanURL = podcast.feedURL.trimmingCharacters(in: .whitespacesAndNewlines)
-            let url = URL(string: cleanURL)
-            let existingAudioURLs = Set(podcast.episodes.map { $0.audioURL })
-            return (url, existingAudioURLs)
+            return URL(string: cleanURL)
         }
-        
+
         guard let feedURL = feedURL,
               feedURL.scheme == "http" || feedURL.scheme == "https" else {
             throw FeedFetchError.invalidURL
         }
-        
+
         // Do ALL the heavy work OFF the main thread using Task.detached
         let parsedData: (ParsedPodcast, [ParsedEpisode]) = try await Task.detached {
             // Check for cancellation
             try Task.checkCancellation()
-            
+
             // Download feed data
             let (data, _) = try await URLSession.shared.data(from: feedURL)
-            
+
             try Task.checkCancellation()
-            
+
             // Parse feed
             let parser = RSSFeedParser()
             guard let parsedPodcast = parser.parse(data: data) else {
                 throw FeedFetchError.parsingFailed
             }
-            
+
             try Task.checkCancellation()
-            
+
             // Sort episodes by publish date
             let sortedEpisodes = parsedPodcast.episodes.sorted { $0.publishDate > $1.publishDate }
-            
-            // Identify new episodes
-            let newEpisodeData = sortedEpisodes.filter { !existingAudioURLs.contains($0.audioURL) }
-            
-            return (parsedPodcast, newEpisodeData)
+
+            return (parsedPodcast, sortedEpisodes)
         }.value
-        
-        // Update on main actor
+
+        // Matching parsed episodes against what's already stored happens on the main actor,
+        // where the live Episode objects live.
         await updatePodcastAndEpisodes(
             podcast: podcast,
             parsedPodcast: parsedData.0,
-            newEpisodeData: parsedData.1,
+            parsedEpisodes: parsedData.1,
             shouldSave: shouldSave
         )
     }
@@ -89,7 +85,7 @@ class FeedFetcher {
     private func updatePodcastAndEpisodes(
         podcast: Podcast,
         parsedPodcast: ParsedPodcast,
-        newEpisodeData: [ParsedEpisode],
+        parsedEpisodes: [ParsedEpisode],
         updateTimestamp: Bool = true,
         shouldSave: Bool = false
     ) async {
@@ -115,17 +111,47 @@ class FeedFetcher {
             podcast.lastUpdated = Date()
         }
         
+        // Match parsed episodes against what's already stored, preferring guid (the RSS-spec
+        // stable identifier) over audioURL. Ad-supported feeds routinely rotate tracking tokens
+        // in the enclosure URL, so audioURL alone isn't reliable - matching on it exclusively
+        // caused already-played episodes to be recreated as "new" (unplayed, requeued) whenever
+        // their URL moved. Episodes stored before guid tracking existed are backfilled here so
+        // future refreshes match on guid too.
+        var existingByGUID: [String: Episode] = [:]
+        var existingByAudioURL: [String: Episode] = [:]
+        for episode in podcast.episodes {
+            if let guid = episode.guid {
+                existingByGUID[guid] = episode
+            }
+            existingByAudioURL[episode.audioURL] = episode
+        }
+
+        var newEpisodeData: [ParsedEpisode] = []
+        for parsedEpisode in parsedEpisodes {
+            if let guid = parsedEpisode.guid, existingByGUID[guid] != nil {
+                continue
+            }
+            if let existing = existingByAudioURL[parsedEpisode.audioURL] {
+                if existing.guid == nil, let guid = parsedEpisode.guid {
+                    existing.guid = guid
+                }
+                continue
+            }
+            newEpisodeData.append(parsedEpisode)
+        }
+
         // Create new episode objects
         for parsedEpisode in newEpisodeData {
             let episode = Episode(
                 title: parsedEpisode.title,
                 episodeDescription: parsedEpisode.description,
                 audioURL: parsedEpisode.audioURL,
+                guid: parsedEpisode.guid,
                 duration: parsedEpisode.duration,
                 publishDate: parsedEpisode.publishDate,
                 artworkURL: parsedEpisode.artworkURL
             )
-            
+
             episode.podcast = podcast
             modelContext.insert(episode)
         }

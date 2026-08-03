@@ -64,6 +64,10 @@ final class Episode {
     var title: String = ""
     var episodeDescription: String?
     var audioURL: String = ""
+    // RSS <guid> - the feed's own stable identifier for this item, used (in preference to
+    // audioURL) to recognize an episode across refreshes. Nil for episodes stored before this
+    // field existed, or for feeds that omit guid; those fall back to matching by audioURL.
+    var guid: String?
     var duration: TimeInterval?
     var publishDate: Date = Date()
     var artworkURL: String?
@@ -86,6 +90,7 @@ final class Episode {
         title: String,
         episodeDescription: String? = nil,
         audioURL: String,
+        guid: String? = nil,
         duration: TimeInterval? = nil,
         publishDate: Date,
         artworkURL: String? = nil,
@@ -100,6 +105,7 @@ final class Episode {
         self.title = title
         self.episodeDescription = episodeDescription
         self.audioURL = audioURL
+        self.guid = guid
         self.duration = duration
         self.publishDate = publishDate
         self.artworkURL = artworkURL

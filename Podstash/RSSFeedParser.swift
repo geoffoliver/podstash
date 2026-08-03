@@ -20,6 +20,7 @@ struct ParsedEpisode {
     let title: String
     let description: String?
     let audioURL: String
+    let guid: String?
     let duration: TimeInterval?
     let publishDate: Date
     let artworkURL: String?
@@ -42,6 +43,7 @@ class RSSFeedParser: NSObject, XMLParserDelegate {
     private var currentEpisodeTitle = ""
     private var currentEpisodeDescription: String?
     private var currentEpisodeAudioURL: String?
+    private var currentEpisodeGUID: String?
     private var currentEpisodeDuration: TimeInterval?
     private var currentEpisodePublishDate: Date?
     private var currentEpisodeArtworkURL: String?
@@ -99,6 +101,7 @@ class RSSFeedParser: NSObject, XMLParserDelegate {
             currentEpisodeTitle = ""
             currentEpisodeDescription = nil
             currentEpisodeAudioURL = nil
+            currentEpisodeGUID = nil
             currentEpisodeDuration = nil
             currentEpisodePublishDate = nil
             currentEpisodeArtworkURL = nil
@@ -152,6 +155,7 @@ class RSSFeedParser: NSObject, XMLParserDelegate {
                         title: currentEpisodeTitle,
                         description: currentEpisodeDescription,
                         audioURL: audioURL,
+                        guid: currentEpisodeGUID,
                         duration: currentEpisodeDuration,
                         publishDate: publishDate,
                         artworkURL: currentEpisodeArtworkURL
@@ -175,6 +179,11 @@ class RSSFeedParser: NSObject, XMLParserDelegate {
                     currentEpisodeDescription = trimmedText
                 }
                 
+            case "guid":
+                if !trimmedText.isEmpty {
+                    currentEpisodeGUID = trimmedText
+                }
+
             case "pubDate":
                 currentEpisodePublishDate = dateFormatter.date(from: trimmedText) ?? Date()
                 

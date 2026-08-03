@@ -158,8 +158,10 @@ final class DownloadManager: NSObject, ObservableObject {
             episode.isDownloaded = true
             episode.downloadedFilename = fileName
             
-            // Add to queue if not already in queue
-            if episode.queuePosition == nil {
+            // Add to queue if not already in queue - but never resurrect an episode the user
+            // already marked played just because its file got redownloaded (e.g. via
+            // syncFollowMeDownloads after the local copy went missing).
+            if episode.queuePosition == nil && !episode.isPlayed {
                 // Find the highest queue position
                 let allEpisodesDescriptor = FetchDescriptor<Episode>()
                 let allEpisodes = try? modelContext.fetch(allEpisodesDescriptor)

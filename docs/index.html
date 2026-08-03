@@ -8,8 +8,8 @@
 <link rel="icon" type="image/png" href="assets/favicon-64.png">
 <style>
   :root {
-    --accent: #f2542d;
-    --accent-2: #ff8a3d;
+    --accent: #5b3fc4;
+    --accent-2: #c2678f;
     --bg: #ffffff;
     --bg-subtle: #f6f5f4;
     --text: #1a1a1a;
@@ -108,7 +108,7 @@
   .btn-primary {
     background: linear-gradient(135deg, var(--accent), var(--accent-2));
     color: #fff;
-    box-shadow: 0 10px 30px -10px rgba(242, 84, 45, 0.55);
+    box-shadow: 0 10px 30px -10px rgba(91, 63, 196, 0.55);
   }
 
   .btn-secondary {
@@ -168,24 +168,27 @@
 
   .screens-grid {
     display: flex;
-    align-items: flex-end;
+    align-items: center;
     justify-content: center;
     gap: 32px;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
   }
 
   .shot-card {
     position: relative;
+    min-width: 0;
   }
 
   .shot-card.mac {
-    flex: 1 1 620px;
-    max-width: 660px;
+    flex: 1 1 480px;
+    max-width: 560px;
+    min-width: 260px;
   }
 
   .shot-card.ios {
-    flex: 0 0 220px;
-    max-width: 220px;
+    flex: 0 1 170px;
+    max-width: 170px;
+    min-width: 100px;
   }
 
   .shot-card img {
@@ -195,18 +198,103 @@
     border-radius: 14px;
     box-shadow: var(--shadow);
     border: 1px solid var(--border);
+    cursor: zoom-in;
   }
 
   .shot-card img[data-mode="dark"] { display: none; }
   .theme-dark .shot-card img[data-mode="light"] { display: none; }
   .theme-dark .shot-card img[data-mode="dark"] { display: block; }
 
-  .shot-label {
-    text-align: center;
-    margin-top: 14px;
-    font-size: 0.85rem;
+  /* Tabbed gallery */
+  .wrap-wide {
+    max-width: 1180px;
+  }
+
+  .gallery-layout {
+    display: flex;
+    gap: 48px;
+    align-items: center;
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 24px;
+    box-shadow: var(--shadow);
+    padding: 40px;
+  }
+
+  .tab-list {
+    flex: 0 0 250px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    position: sticky;
+    top: 28px;
+  }
+
+  .tab-btn {
+    display: block;
+    width: 100%;
+    text-align: left;
+    padding: 14px 16px;
+    border-radius: 14px;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    font-family: inherit;
+  }
+
+  .tab-btn:hover { background: var(--bg-subtle); }
+  .tab-btn.active { background: var(--bg-subtle); }
+
+  .tab-btn .tab-title {
+    display: block;
+    font-weight: 700;
+    font-size: 0.98rem;
+    color: var(--text);
+    margin-bottom: 4px;
+  }
+
+  .tab-btn.active .tab-title { color: var(--accent); }
+
+  .tab-btn .tab-sub {
+    display: block;
+    font-size: 0.8rem;
+    line-height: 1.45;
     color: var(--text-muted);
-    font-weight: 600;
+  }
+
+  .tab-content {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
+
+  /* Lightbox */
+  .lightbox {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.85);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 40px;
+    z-index: 1000;
+    cursor: zoom-out;
+  }
+
+  .lightbox.active { display: flex; }
+
+  .lightbox img {
+    max-width: 100%;
+    max-height: 100%;
+    border-radius: 12px;
+    box-shadow: 0 30px 80px rgba(0,0,0,0.5);
+  }
+
+  @media (max-width: 860px) {
+    .gallery-layout { flex-direction: column; gap: 24px; padding: 24px; }
+    .tab-list { position: static; width: 100%; }
   }
 
   /* Features */
@@ -241,12 +329,21 @@
   }
 
   footer a {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
     text-decoration: none;
     font-weight: 600;
     color: var(--text-muted);
   }
 
   footer a:hover { color: var(--text); }
+
+  footer a svg {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+  }
 
   @media (max-width: 700px) {
     .screens-grid { flex-direction: column; align-items: center; }
@@ -276,27 +373,128 @@
 </header>
 
 <section class="screens">
-  <div class="wrap">
+  <div class="wrap wrap-wide">
     <div class="theme-toggle">
       <div class="toggle-group" role="group" aria-label="Screenshot appearance">
         <button type="button" class="active" data-theme-btn="light">Light</button>
         <button type="button" data-theme-btn="dark">Dark</button>
       </div>
     </div>
-    <div class="screens-grid" id="screensGrid">
-      <div class="shot-card mac">
-        <img data-mode="light" src="screenshots/macos-light.png" alt="Podstash queue view on Mac with an episode playing in the mini player, light mode">
-        <img data-mode="dark" src="screenshots/macos-dark.png" alt="Podstash queue view on Mac with an episode playing in the mini player, dark mode">
-        <div class="shot-label">Mac</div>
+
+    <div class="gallery-layout">
+      <div class="tab-list" role="tablist" aria-label="App sections">
+        <button type="button" class="tab-btn active" data-tab="queue" role="tab" aria-selected="true">
+          <span class="tab-title">Queue</span>
+          <span class="tab-sub">Every show you follow, one queue. Episodes keep playing right where the mini player leaves off.</span>
+        </button>
+        <button type="button" class="tab-btn" data-tab="nowplaying" role="tab" aria-selected="false">
+          <span class="tab-title">Now playing</span>
+          <span class="tab-sub">Full playback controls, always in reach — a persistent mini player on Mac, a dedicated screen on iPhone.</span>
+        </button>
+        <button type="button" class="tab-btn" data-tab="detail" role="tab" aria-selected="false">
+          <span class="tab-title">Podcast detail</span>
+          <span class="tab-sub">Browse a show's full episode list, filter to what's unplayed, and dig into show notes.</span>
+        </button>
+        <button type="button" class="tab-btn" data-tab="library" role="tab" aria-selected="false">
+          <span class="tab-title">Your library</span>
+          <span class="tab-sub">Every subscription at a glance, with unplayed counts front and center.</span>
+        </button>
+        <button type="button" class="tab-btn" data-tab="episode" role="tab" aria-selected="false">
+          <span class="tab-title">Episode detail</span>
+          <span class="tab-sub">Show notes, download status, and progress for any episode, one tap away.</span>
+        </button>
+        <button type="button" class="tab-btn" data-tab="settings" role="tab" aria-selected="false">
+          <span class="tab-title">Settings</span>
+          <span class="tab-sub">Fine-tune auto-downloads, cleanup, and refresh behavior — or just leave the sensible defaults.</span>
+        </button>
       </div>
-      <div class="shot-card ios">
-        <img data-mode="light" src="screenshots/ios-light.png" alt="Podstash Now Playing view on iPhone, light mode">
-        <img data-mode="dark" src="screenshots/ios-dark.png" alt="Podstash Now Playing view on iPhone, dark mode">
-        <div class="shot-label">iPhone</div>
+
+      <div class="tab-content">
+        <div class="tab-panel active" data-panel="queue">
+          <div class="screens-grid">
+            <div class="shot-card mac">
+              <img data-mode="light" src="screenshots/macos-queue-light.png" alt="Podstash queue view on Mac with an episode playing in the mini player, light mode">
+              <img data-mode="dark" src="screenshots/macos-queue-dark.png" alt="Podstash queue view on Mac with an episode playing in the mini player, dark mode">
+            </div>
+            <div class="shot-card ios">
+              <img data-mode="light" src="screenshots/ios-queue-light.png" alt="Podstash queue view on iPhone, light mode">
+              <img data-mode="dark" src="screenshots/ios-queue-dark.png" alt="Podstash queue view on iPhone, dark mode">
+            </div>
+          </div>
+        </div>
+
+        <div class="tab-panel" data-panel="nowplaying">
+          <div class="screens-grid">
+            <div class="shot-card mac">
+              <img data-mode="light" src="screenshots/macos-queue-light.png" alt="Podstash mini player on Mac, light mode">
+              <img data-mode="dark" src="screenshots/macos-queue-dark.png" alt="Podstash mini player on Mac, dark mode">
+            </div>
+            <div class="shot-card ios">
+              <img data-mode="light" src="screenshots/ios-nowplaying-light.png" alt="Podstash Now Playing view on iPhone, light mode">
+              <img data-mode="dark" src="screenshots/ios-nowplaying-dark.png" alt="Podstash Now Playing view on iPhone, dark mode">
+            </div>
+          </div>
+        </div>
+
+        <div class="tab-panel" data-panel="detail">
+          <div class="screens-grid">
+            <div class="shot-card mac">
+              <img data-mode="light" src="screenshots/macos-detail-light.png" alt="Podstash podcast detail view on Mac, light mode">
+              <img data-mode="dark" src="screenshots/macos-detail-dark.png" alt="Podstash podcast detail view on Mac, dark mode">
+            </div>
+            <div class="shot-card ios">
+              <img data-mode="light" src="screenshots/ios-detail-light.png" alt="Podstash podcast detail view on iPhone, light mode">
+              <img data-mode="dark" src="screenshots/ios-detail-dark.png" alt="Podstash podcast detail view on iPhone, dark mode">
+            </div>
+          </div>
+        </div>
+
+        <div class="tab-panel" data-panel="library">
+          <div class="screens-grid">
+            <div class="shot-card mac">
+              <img data-mode="light" src="screenshots/macos-queue-light.png" alt="Podstash sidebar showing subscribed podcasts on Mac, light mode">
+              <img data-mode="dark" src="screenshots/macos-queue-dark.png" alt="Podstash sidebar showing subscribed podcasts on Mac, dark mode">
+            </div>
+            <div class="shot-card ios">
+              <img data-mode="light" src="screenshots/ios-podcasts-light.png" alt="Podstash Podcasts library list on iPhone, light mode">
+              <img data-mode="dark" src="screenshots/ios-podcasts-dark.png" alt="Podstash Podcasts library list on iPhone, dark mode">
+            </div>
+          </div>
+        </div>
+
+        <div class="tab-panel" data-panel="episode">
+          <div class="screens-grid">
+            <div class="shot-card mac">
+              <img data-mode="light" src="screenshots/macos-episode-light.png" alt="Podstash episode detail sheet on Mac, light mode">
+              <img data-mode="dark" src="screenshots/macos-episode-dark.png" alt="Podstash episode detail sheet on Mac, dark mode">
+            </div>
+            <div class="shot-card ios">
+              <img data-mode="light" src="screenshots/ios-episode-light.png" alt="Podstash episode detail sheet on iPhone, light mode">
+              <img data-mode="dark" src="screenshots/ios-episode-dark.png" alt="Podstash episode detail sheet on iPhone, dark mode">
+            </div>
+          </div>
+        </div>
+
+        <div class="tab-panel" data-panel="settings">
+          <div class="screens-grid">
+            <div class="shot-card mac">
+              <img data-mode="light" src="screenshots/macos-settings-light.png" alt="Podstash settings window on Mac, light mode">
+              <img data-mode="dark" src="screenshots/macos-settings-dark.png" alt="Podstash settings window on Mac, dark mode">
+            </div>
+            <div class="shot-card ios">
+              <img data-mode="light" src="screenshots/ios-settings-light.png" alt="Podstash settings screen on iPhone, light mode">
+              <img data-mode="dark" src="screenshots/ios-settings-dark.png" alt="Podstash settings screen on iPhone, dark mode">
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   </div>
 </section>
+
+<div class="lightbox" id="lightbox">
+  <img id="lightboxImg" src="" alt="">
+</div>
 
 <section class="features">
   <div class="wrap">
@@ -323,11 +521,21 @@
 
 <footer>
   <div class="wrap">
-    <p><a href="https://github.com/geoffoliver/podstash">github.com/geoffoliver/podstash</a></p>
+    <p><a href="https://github.com/geoffoliver/podstash">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 .5C5.65.5.5 5.65.5 12c0 5.1 3.29 9.42 7.86 10.95.57.1.78-.25.78-.55v-2.1c-3.2.7-3.87-1.35-3.87-1.35-.53-1.34-1.29-1.7-1.29-1.7-1.05-.72.08-.71.08-.71 1.17.08 1.78 1.2 1.78 1.2 1.04 1.77 2.72 1.26 3.38.96.1-.75.4-1.26.73-1.55-2.55-.29-5.24-1.28-5.24-5.7 0-1.26.45-2.28 1.2-3.09-.12-.29-.52-1.47.11-3.06 0 0 .98-.31 3.2 1.18a11.1 11.1 0 0 1 5.83 0c2.22-1.49 3.2-1.18 3.2-1.18.63 1.59.23 2.77.11 3.06.75.81 1.2 1.83 1.2 3.09 0 4.43-2.7 5.4-5.27 5.69.42.36.78 1.07.78 2.16v3.2c0 .3.21.66.79.55A10.51 10.51 0 0 0 23.5 12C23.5 5.65 18.35.5 12 .5Z"/></svg>
+      github.com/geoffoliver/podstash
+    </a></p>
   </div>
 </footer>
 
 <script>
+  if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+    document.body.classList.add('theme-dark');
+    document.querySelectorAll('[data-theme-btn]').forEach(function (b) {
+      b.classList.toggle('active', b.getAttribute('data-theme-btn') === 'dark');
+    });
+  }
+
   document.querySelectorAll('[data-theme-btn]').forEach(function (btn) {
     btn.addEventListener('click', function () {
       var mode = btn.getAttribute('data-theme-btn');
@@ -336,6 +544,43 @@
       });
       document.body.classList.toggle('theme-dark', mode === 'dark');
     });
+  });
+
+  document.querySelectorAll('.tab-btn').forEach(function (btn) {
+    btn.addEventListener('click', function () {
+      var tab = btn.getAttribute('data-tab');
+      document.querySelectorAll('.tab-btn').forEach(function (b) {
+        var active = b === btn;
+        b.classList.toggle('active', active);
+        b.setAttribute('aria-selected', active ? 'true' : 'false');
+      });
+      document.querySelectorAll('.tab-panel').forEach(function (p) {
+        p.classList.toggle('active', p.getAttribute('data-panel') === tab);
+      });
+    });
+  });
+
+  var lightbox = document.getElementById('lightbox');
+  var lightboxImg = document.getElementById('lightboxImg');
+
+  document.querySelectorAll('.shot-card img').forEach(function (img) {
+    img.addEventListener('click', function () {
+      lightboxImg.src = img.currentSrc || img.src;
+      lightboxImg.alt = img.alt;
+      lightbox.classList.add('active');
+    });
+  });
+
+  lightbox.addEventListener('click', function () {
+    lightbox.classList.remove('active');
+    lightboxImg.src = '';
+  });
+
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') {
+      lightbox.classList.remove('active');
+      lightboxImg.src = '';
+    }
   });
 </script>
 

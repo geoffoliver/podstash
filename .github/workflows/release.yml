@@ -104,13 +104,48 @@ jobs:
             DEVELOPMENT_TEAM="$TEAM_ID" \
             CURRENT_PROJECT_VERSION="$GITHUB_RUN_NUMBER"
 
+      - name: Export archive
+        run: |
+          set -euo pipefail
+          # Exporting (rather than using the raw .app from inside the .xcarchive) matters
+          # specifically because of Sparkle: per its docs, Xcode only re-signs Sparkle.framework's
+          # nested helpers (Autoupdate, Updater.app, XPCServices) with our Developer ID identity
+          # during Archive & Export, not during a plain archive. Skipping export leaves those
+          # nested binaries signed with Sparkle's own ad-hoc signature, which notarization rejects.
+          cat > "$RUNNER_TEMP/ExportOptions.plist" <<PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+              <key>method</key>
+              <string>developer-id</string>
+              <key>teamID</key>
+              <string>$TEAM_ID</string>
+              <key>signingStyle</key>
+              <string>manual</string>
+              <key>signingCertificate</key>
+              <string>Developer ID Application</string>
+              <key>provisioningProfiles</key>
+              <dict>
+                  <key>me.geoffoliver.Podstash</key>
+                  <string>$PROVISIONING_PROFILE_UUID</string>
+              </dict>
+          </dict>
+          </plist>
+          PLIST
+
+          xcodebuild -exportArchive \
+            -archivePath "$RUNNER_TEMP/macOS.xcarchive" \
+            -exportPath "$RUNNER_TEMP/export" \
+            -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist"
+
       - name: Notarize and staple
         env:
           NOTARY_APPLE_ID: ${{ secrets.NOTARY_APPLE_ID }}
           NOTARY_PASSWORD: ${{ secrets.NOTARY_PASSWORD }}
         run: |
           set -euo pipefail
-          MAC_APP="$(find "$RUNNER_TEMP/macOS.xcarchive/Products/Applications" -maxdepth 1 -name "*.app" | head -n 1)"
+          MAC_APP="$(find "$RUNNER_TEMP/export" -maxdepth 1 -name "*.app" | head -n 1)"
           NOTARIZE_ZIP="$RUNNER_TEMP/Podstash-notarize.zip"
 
           ditto -c -k --keepParent "$MAC_APP" "$NOTARIZE_ZIP"

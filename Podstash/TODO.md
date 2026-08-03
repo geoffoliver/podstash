@@ -49,6 +49,7 @@
 - [x] Github release for x86 Macs
 - [x] Readme
 - [x] Docs
+- [ ] Sparkle for updates?
 - [ ] Tests?
 - [ ] TestFlight distribution
 - [ ] AppStore submission

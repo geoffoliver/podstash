@@ -47,7 +47,7 @@
 - [x] Podcast detail header on iOS is cramped (episode count, last updated date, "web" link)
 - [x] Change "home" view for iOS -- it should be sidebar, not queue
 - [x] Github release for x86 Macs
-- [ ] Readme
+- [x] Readme
 - [ ] Docs
 - [ ] Tests?
 - [ ] TestFlight distribution

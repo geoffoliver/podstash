@@ -424,29 +424,9 @@ struct PodcastHeaderView: View {
                         descriptionView(description)
                     }
 
-                    // Metadata row
-                    HStack(spacing: 12) {
-                        Label("\(podcast.episodes.count)", systemImage: "list.bullet")
-                            .font(.appFootnote)
-                            .foregroundStyle(.secondary)
-
-                        if let lastUpdated = podcast.lastUpdated {
-                            Text(formattedLastUpdated(lastUpdated))
-                                .font(.appFootnote)
-                                .foregroundStyle(.secondary)
-                        }
-
-                        // Website link
-                        if let websiteURL = podcast.websiteURL, let url = URL(string: websiteURL) {
-                            Link(destination: url) {
-                                Label("Web", systemImage: "safari")
-                                    .font(.appFootnote)
-                            }
-                        }
-                    }
-
-                    // On regular width, the buttons fit alongside the artwork.
+                    // On regular width, the metadata row and buttons fit alongside the artwork.
                     if !isCompact {
+                        metadataRow
                         actionButtons
                     }
                 }
@@ -456,13 +436,33 @@ struct PodcastHeaderView: View {
                 }
             }
 
-            // On compact width, give the buttons the full row so labels don't wrap.
+            // On compact width, give the metadata row and buttons the full width so
+            // they aren't squeezed into the narrow column next to the artwork.
             if isCompact {
+                metadataRow
                 actionButtons
             }
         }
         .padding()
         .background(.regularMaterial)
+    }
+
+    private var metadataRow: some View {
+        HStack(spacing: 12) {
+            if let lastUpdated = podcast.lastUpdated {
+                Text(formattedLastUpdated(lastUpdated))
+                    .font(.appFootnote)
+                    .foregroundStyle(.secondary)
+            }
+
+            // Website link
+            if let websiteURL = podcast.websiteURL, let url = URL(string: websiteURL) {
+                Link(destination: url) {
+                    Label("Web", systemImage: "safari")
+                        .font(.appFootnote)
+                }
+            }
+        }
     }
 
     private func descriptionView(_ description: String) -> some View {

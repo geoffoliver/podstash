@@ -46,6 +46,7 @@
 - [x] Github "pages" page - one page, screenshots for desktop and mobile, light and dark mode, download badges (point to github releases for now - point to AppStore once that is working).
 - [x] Podcast detail header on iOS is cramped (episode count, last updated date, "web" link)
 - [x] Change "home" view for iOS -- it should be sidebar, not queue
+- [ ] Github release for x86 Macs
 - [ ] Readme
 - [ ] Docs
 - [ ] Tests?

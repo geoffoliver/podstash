@@ -264,6 +264,11 @@ struct PodcastDetailView: View {
                 .help("Download episode")
             }
         }
+        #if os(macOS)
+        // .plain list style has no default row insets on macOS (unlike iOS), so without
+        // this the episode text sits flush against the window edge.
+        .padding(.horizontal)
+        #endif
         .contextMenu {
             Button {
                 audioPlayer.play(episode: episode)

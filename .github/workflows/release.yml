@@ -144,4 +144,4 @@ jobs:
             dist/Podstash.app.zip \
             --title "${{ github.ref_name }}" \
             --generate-notes \
-            --notes "macOS build below is Developer ID signed and notarized — no Gatekeeper warnings. Unzip and drag Podstash.app to /Applications."
+            --notes "macOS build below is a universal binary (Apple Silicon & Intel), Developer ID signed and notarized — no Gatekeeper warnings. Unzip and drag Podstash.app to /Applications."

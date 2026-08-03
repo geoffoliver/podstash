@@ -579,8 +579,9 @@ private struct MainWindowIdentifierAccessor: NSViewRepresentable {
 struct PodstashApp: App {
     #if os(macOS)
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
+    @StateObject private var updaterViewModel = SparkleUpdaterViewModel()
     #endif
-    
+
     @StateObject private var settings = AppSettings()
     @StateObject private var addPodcastCoordinator = AddPodcastCoordinator()
     @StateObject private var opmlCoordinator = OPMLImportCoordinator()
@@ -742,6 +743,15 @@ struct PodstashApp: App {
             Divider()
         }
     }
+
+    @CommandsBuilder
+    private var updateCommands: some Commands {
+        CommandGroup(after: .appInfo) {
+            Button("Check for Updates…") {
+                updaterViewModel.checkForUpdates()
+            }
+        }
+    }
     #endif
 
     var body: some Scene {
@@ -758,10 +768,11 @@ struct PodstashApp: App {
         .commands {
             fileCommands
             windowCommands
+            updateCommands
         }
 
         Settings {
-            SettingsView(settings: settings, autoRefreshManager: autoRefreshManager)
+            SettingsView(settings: settings, autoRefreshManager: autoRefreshManager, updaterViewModel: updaterViewModel)
         }
         .modelContainer(sharedModelContainer)
         #else

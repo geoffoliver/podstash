@@ -49,7 +49,7 @@
 - [x] Github release for x86 Macs
 - [x] Readme
 - [x] Docs
-- [ ] Sparkle (or something else) for auto-updates, or just wait for AppStore? IDK if desktop _needs_ app store and would rather not deal with the hassle if i don't have to, but obviously, iOS does, so no sparkle needed there. Not sure best way to proceed.
+- [x] Sparkle for auto-updates on macOS (iOS still needs TestFlight/App Store). CI signs and publishes `docs/appcast.xml` on every tagged release; toggle is in Settings → Updates.
 - [ ] Tests?
 - [ ] TestFlight distribution
 - [ ] AppStore submission

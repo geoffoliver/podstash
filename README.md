@@ -11,6 +11,7 @@ A fast, native podcast app for Mac, iPhone, and iPad. Queue-first listening — 
 - **Smart downloads** — auto-download new episodes, auto-delete played ones, and keep only what you actually need offline.
 - **Synced library** — subscriptions and queue stay in sync across your devices via iCloud.
 - **Scriptable on Mac** — Podstash exposes an AppleScript dictionary (see `Podstash/Podstash.sdef`) for automation.
+- **Self-updating on Mac** — signed, notarized builds check for new releases via [Sparkle](https://sparkle-project.org) and can install them in place.
 
 ## Download
 
@@ -25,7 +26,7 @@ iOS is not currently distributed publicly (see [Roadmap](#roadmap)); building fr
 
 ## Building from source
 
-Podstash is a single Xcode project targeting macOS and iOS from one codebase — there are no external package dependencies.
+Podstash is a single Xcode project targeting macOS and iOS from one codebase. Its only external dependency is [Sparkle](https://github.com/sparkle-project/Sparkle) (via Swift Package Manager), linked into the macOS build only.
 
 ```
 git clone https://github.com/geoffoliver/podstash.git
@@ -35,7 +36,7 @@ open Podstash.xcodeproj
 
 Select the `Podstash` scheme and a macOS or iOS destination, then build and run (⌘R). You'll need to point code signing at your own team in the project's Signing & Capabilities settings.
 
-`build-dist.sh` reproduces the release pipeline locally (archives, signs, and notarizes a macOS build and produces a dev-signed iOS `.ipa`) — it expects a Developer ID signing identity and a `notarytool` keychain profile named `podstash-notary` to be configured on your machine. Tagged pushes (`vX.Y.Z`) run the same macOS pipeline in CI via [`.github/workflows/release.yml`](.github/workflows/release.yml) and publish the result as a GitHub release.
+`build-dist.sh` reproduces the release pipeline locally (archives, signs, and notarizes a macOS build and produces a dev-signed iOS `.ipa`) — it expects a Developer ID signing identity and a `notarytool` keychain profile named `podstash-notary` to be configured on your machine. Tagged pushes (`vX.Y.Z`) run the same macOS pipeline in CI via [`.github/workflows/release.yml`](.github/workflows/release.yml), publish the result as a GitHub release, and sign/publish an updated Sparkle appcast so existing installs pick up the release automatically.
 
 ## Roadmap
 

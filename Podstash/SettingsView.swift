@@ -64,6 +64,9 @@ private struct SettingsFreeformRow<Content: View>: View {
 struct SettingsView: View {
     @ObservedObject var settings: AppSettings
     var autoRefreshManager: AutoRefreshManager?
+    #if os(macOS)
+    var updaterViewModel: SparkleUpdaterViewModel?
+    #endif
 
     var body: some View {
         #if os(macOS)
@@ -107,6 +110,15 @@ struct SettingsView: View {
             .fixedSize(horizontal: false, vertical: true)
             .tabItem {
                 Label("Playback", systemImage: "play.circle")
+            }
+
+            VStack(alignment: .leading, spacing: 18) {
+                UpdatesSettingsView(updaterViewModel: updaterViewModel)
+            }
+            .padding(24)
+            .fixedSize(horizontal: false, vertical: true)
+            .tabItem {
+                Label("Updates", systemImage: "arrow.down.circle")
             }
         }
         .frame(width: 560)
@@ -547,6 +559,28 @@ struct PlaybackSettingsView: View {
         #endif
     }
 }
+
+// MARK: - Updates Settings
+
+#if os(macOS)
+struct UpdatesSettingsView: View {
+    var updaterViewModel: SparkleUpdaterViewModel?
+
+    @AppStorage("SUEnableAutomaticChecks") private var automaticallyChecksForUpdates: Bool = true
+
+    var body: some View {
+        Group {
+            SettingsCheckboxRow(label: "Automatically check for updates", isOn: $automaticallyChecksForUpdates)
+
+            SettingsFreeformRow {
+                Button("Check for Updates…") {
+                    updaterViewModel?.checkForUpdates()
+                }
+            }
+        }
+    }
+}
+#endif
 
 #Preview {
     SettingsView(settings: AppSettings())

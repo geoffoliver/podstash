@@ -45,6 +45,7 @@
 - [x] Bug - Search not visible on iOS (phone) when an item is playing/paused.
 - [ ] Github "pages" page - one page, screenshots for desktop and mobile, light and dark mode, download badges (point to github releases for now - point to AppStore once that is working).
 - [ ] Readme
+- [ ] Change "home" view for iOS -- it should be sidebar, not queue
 - [ ] Docs
 - [ ] Tests?
 - [ ] TestFlight distribution

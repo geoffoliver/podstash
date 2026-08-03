@@ -1,0 +1,420 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Podstash Documentation</title>
+<meta name="description" content="How to use Podstash: subscribing, the queue, downloads, sync, keyboard shortcuts, and scripting.">
+<link rel="icon" type="image/png" href="assets/favicon-64.png">
+<style>
+  :root {
+    --accent: #5b3fc4;
+    --accent-2: #c2678f;
+    --bg: #ffffff;
+    --bg-subtle: #f6f5f4;
+    --text: #1a1a1a;
+    --text-muted: #6b6b6b;
+    --border: #e6e3e0;
+    --card-bg: #ffffff;
+    --code-bg: #f0eeec;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #121212;
+      --bg-subtle: #1a1a1a;
+      --text: #f2f0ee;
+      --text-muted: #9a9591;
+      --border: #2b2b2b;
+      --card-bg: #1a1a1a;
+      --code-bg: #232323;
+    }
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    overflow-x: hidden;
+  }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    line-height: 1.6;
+  }
+
+  a { color: var(--accent); }
+
+  @media (prefers-color-scheme: dark) {
+    a { color: #b79bf5; }
+  }
+
+  .wrap {
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 0 24px;
+  }
+
+  header.top {
+    border-bottom: 1px solid var(--border);
+    padding: 20px 0;
+  }
+
+  header.top .wrap {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  header.top .brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    text-decoration: none;
+    font-weight: 700;
+    color: var(--text);
+  }
+
+  header.top .brand img {
+    width: 28px;
+    height: 28px;
+    border-radius: 7px;
+  }
+
+  header.top nav a {
+    text-decoration: none;
+    color: var(--text-muted);
+    font-size: 0.92rem;
+    font-weight: 600;
+  }
+
+  header.top nav a:hover { color: var(--text); }
+
+  main {
+    padding: 56px 0 96px;
+  }
+
+  h1 {
+    font-size: clamp(1.9rem, 4vw, 2.4rem);
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    margin: 0 0 8px;
+  }
+
+  main > .wrap > p.lede {
+    color: var(--text-muted);
+    font-size: 1.05rem;
+    margin: 0 0 40px;
+  }
+
+  .toc {
+    background: var(--bg-subtle);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 20px 24px;
+    margin: 0 0 48px;
+  }
+
+  .toc p {
+    margin: 0 0 10px;
+    font-weight: 700;
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-muted);
+  }
+
+  .toc ul {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    columns: 2;
+    gap: 8px 24px;
+  }
+
+  .toc li { break-inside: avoid; margin-bottom: 6px; }
+
+  .toc a { text-decoration: none; font-weight: 600; font-size: 0.95rem; }
+  .toc a:hover { text-decoration: underline; }
+
+  section {
+    padding-top: 40px;
+    margin-top: 40px;
+    border-top: 1px solid var(--border);
+    scroll-margin-top: 24px;
+  }
+
+  section:first-of-type {
+    padding-top: 0;
+    margin-top: 0;
+    border-top: none;
+  }
+
+  h2 {
+    font-size: 1.4rem;
+    font-weight: 800;
+    letter-spacing: -0.01em;
+    margin: 0 0 16px;
+  }
+
+  h3 {
+    font-size: 1.05rem;
+    font-weight: 700;
+    margin: 28px 0 10px;
+  }
+
+  p { margin: 0 0 14px; }
+
+  ul, ol {
+    margin: 0 0 14px;
+    padding-left: 22px;
+  }
+
+  li { margin-bottom: 6px; }
+
+  code {
+    background: var(--code-bg);
+    border-radius: 5px;
+    padding: 2px 6px;
+    font-size: 0.9em;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+
+  kbd {
+    display: inline-block;
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-bottom-width: 2px;
+    border-radius: 5px;
+    padding: 1px 7px;
+    font-size: 0.85em;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 0 0 18px;
+    font-size: 0.92rem;
+  }
+
+  th, td {
+    text-align: left;
+    padding: 9px 12px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+
+  th {
+    color: var(--text-muted);
+    font-weight: 700;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
+
+  .note {
+    background: var(--bg-subtle);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 14px 18px;
+    font-size: 0.92rem;
+    color: var(--text-muted);
+    margin: 0 0 14px;
+  }
+
+  .note strong { color: var(--text); }
+
+  .platform-tag {
+    display: inline-block;
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: var(--text-muted);
+    background: var(--bg-subtle);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 2px 9px;
+    margin-left: 8px;
+    vertical-align: middle;
+  }
+
+  footer {
+    border-top: 1px solid var(--border);
+    padding: 32px 0;
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 0.85rem;
+  }
+
+  footer a {
+    color: var(--text-muted);
+    font-weight: 600;
+    text-decoration: none;
+  }
+
+  footer a:hover { color: var(--text); }
+
+  @media (max-width: 560px) {
+    .toc ul { columns: 1; }
+  }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="index.html">
+      <img src="assets/icon-256.png" alt="">
+      Podstash
+    </a>
+    <nav>
+      <a href="index.html">← Back to podstash.app</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <div class="wrap">
+    <h1>Documentation</h1>
+    <p class="lede">Everything you need to know to get the most out of Podstash on Mac and iPhone.</p>
+
+    <div class="toc">
+      <p>On this page</p>
+      <ul>
+        <li><a href="#getting-started">Getting started</a></li>
+        <li><a href="#queue">The queue</a></li>
+        <li><a href="#playback">Playback</a></li>
+        <li><a href="#downloads">Downloads &amp; storage</a></li>
+        <li><a href="#sync">iCloud sync</a></li>
+        <li><a href="#search">Search</a></li>
+        <li><a href="#shortcuts">Keyboard shortcuts</a></li>
+        <li><a href="#scripting">Scripting &amp; Airfoil</a></li>
+        <li><a href="#faq">FAQ</a></li>
+      </ul>
+    </div>
+
+    <section id="getting-started">
+      <h2>Getting started</h2>
+      <p>There are two ways to add a show:</p>
+      <ul>
+        <li><strong>Add by URL</strong> — paste a podcast's RSS feed URL. On Mac, use <kbd>⌘N</kbd> or File → Add Podcast by URL…</li>
+        <li><strong>Import OPML</strong> — bring in an existing subscription list from another podcast app. On Mac, use <kbd>⌘I</kbd> or File → Import OPML…; on iPhone/iPad, use the same command from the app's menu.</li>
+      </ul>
+      <p>Podstash downloads the show's episode list and, depending on your download settings, starts fetching the most recent episode(s) right away (see <a href="#downloads">Downloads &amp; storage</a>).</p>
+      <p>You can export your subscriptions back out to OPML at any time from Settings → Feeds → Export OPML…, or File → Export OPML… on Mac (<kbd>⇧⌘E</kbd>) — handy for backups or moving to another app.</p>
+    </section>
+
+    <section id="queue">
+      <h2>The queue</h2>
+      <p>Podstash is queue-first: instead of browsing each show separately, every episode you want to hear lives in one ordered queue across all your subscriptions.</p>
+      <ul>
+        <li><strong>Add All Unplayed</strong> — from the queue's "Queue Options" menu, adds every <em>downloaded</em> unplayed episode across all your subscriptions to the queue in one step (oldest first).</li>
+        <li><strong>Reorder</strong> — drag an episode to a new position in the queue.</li>
+        <li><strong>Mark played / delete</strong> — swipe a queue row (or use its context menu). On Mac and iOS, swiping puts "Mark Played" on the left and "Delete" on the right; swiping far enough performs the action automatically.</li>
+      </ul>
+      <p>Episodes finish and advance to the next item in the queue automatically, so once it's loaded up you can just keep listening.</p>
+    </section>
+
+    <section id="playback">
+      <h2>Playback</h2>
+      <p>Podstash plays downloaded files locally rather than streaming whenever a download is available, so playback starts instantly and works offline.</p>
+      <ul>
+        <li><strong>Now Playing</strong> — full transport controls (scrub, skip, speed) live in the persistent mini player on Mac, and a dedicated Now Playing screen on iPhone.</li>
+        <li><strong>Mini Player</strong> <span class="platform-tag">macOS</span> — a small always-visible window with playback controls; toggle it with <kbd>⇧⌘M</kbd> or Window → Mini Player. It can optionally stay on top of other windows (Settings → General).</li>
+        <li><strong>AirPlay</strong> <span class="platform-tag">macOS</span> — available directly from the desktop transport controls.</li>
+        <li><strong>Skip intervals &amp; speed</strong> — configurable in Settings → Playback: skip forward (default 30s), skip backward (default 15s), and a default playback speed from 0.5x–2.0x.</li>
+      </ul>
+    </section>
+
+    <section id="downloads">
+      <h2>Downloads &amp; storage</h2>
+      <p>All of this lives in Settings → Episodes:</p>
+      <table>
+        <tr><th>Setting</th><th>What it does</th></tr>
+        <tr><td>Auto-download new episodes</td><td>On by default: the most recent <em>N</em> episodes per show are downloaded automatically on refresh. Turn it off to only download episodes you request manually.</td></tr>
+        <tr><td>Episodes per refresh</td><td>How many of the newest episodes to auto-download each time a feed refreshes.</td></tr>
+        <tr><td>Keep episodes</td><td>The retention policy: <em>Unplayed Episodes Only</em>, <em>All Episodes</em>, or <em>Most Recent Episodes</em> (with a configurable count).</td></tr>
+        <tr><td>Auto-delete played episodes</td><td>Only shown when "Keep episodes" is set to <em>All Episodes</em> — otherwise the retention policy above already governs what's kept. When on, played episodes are removed automatically after the configured number of days.</td></tr>
+        <tr><td>Clean Up Episodes Now</td><td>Applies your retention policy immediately instead of waiting for the next scheduled cleanup.</td></tr>
+      </table>
+      <p>The same pane shows current storage usage — total episodes and how many are downloaded, with an estimated size.</p>
+      <p>Feed refresh timing itself (how often Podstash checks for new episodes, and whether to do so only on Wi-Fi) is under Settings → Feeds.</p>
+    </section>
+
+    <section id="sync">
+      <h2>iCloud sync</h2>
+      <p>Subscriptions, queue order, and playback progress can sync across your Mac, iPhone, and iPad via iCloud. Toggle sync as a whole, or its pieces individually (subscriptions, playback progress), under Settings → iCloud.</p>
+      <div class="note"><strong>Note:</strong> sync requires an Apple Developer Program membership with CloudKit enabled on the build you're running — the version distributed on the <a href="index.html">releases page</a> has this configured.</div>
+    </section>
+
+    <section id="search">
+      <h2>Search</h2>
+      <p>Search is available in both the queue and a podcast's episode list — on Mac it sits at the top of the window; on iPhone, pull down to reveal it. Podcast detail search always searches across the "All" episodes tab, not just Unplayed.</p>
+    </section>
+
+    <section id="shortcuts">
+      <h2>Keyboard shortcuts <span class="platform-tag">macOS</span></h2>
+      <table>
+        <tr><th>Action</th><th>Shortcut</th></tr>
+        <tr><td>Add Podcast by URL…</td><td><kbd>⌘N</kbd></td></tr>
+        <tr><td>Import OPML…</td><td><kbd>⌘I</kbd></td></tr>
+        <tr><td>Export OPML…</td><td><kbd>⇧⌘E</kbd></td></tr>
+        <tr><td>Refresh All Feeds</td><td><kbd>⌘R</kbd></td></tr>
+        <tr><td>Show Mini Player</td><td><kbd>⇧⌘M</kbd></td></tr>
+      </table>
+    </section>
+
+    <section id="scripting">
+      <h2>Scripting &amp; Airfoil support <span class="platform-tag">macOS</span></h2>
+      <p>Podstash exposes a small AppleScript dictionary for now-playing metadata and transport control:</p>
+      <ul>
+        <li>Properties: <code>track title</code>, <code>artist</code>, <code>album</code>, <code>duration</code>, <code>logo</code></li>
+        <li>Commands: <code>playpause</code>, <code>next</code>, <code>previous</code></li>
+      </ul>
+      <p>The full definition is in <a href="https://github.com/geoffoliver/podstash/blob/master/Podstash/Podstash.sdef"><code>Podstash.sdef</code></a> in the repo, or open Script Editor's Library window with Podstash running to browse it interactively.</p>
+
+      <h3>Setting up <a href="https://rogueamoeba.com/airfoil/">Airfoil</a></h3>
+      <p>That dictionary is what powers Podstash's integration with Airfoil, Rogue Amoeba's app for streaming audio to AirPlay speakers, Bluetooth devices, and other Macs. Once set up, selecting Podstash as a source in Airfoil shows the playing episode's title, podcast name, and artwork in Airfoil Speakers, and exposes play/pause/next/previous controls remotely.</p>
+      <p>Airfoil doesn't talk to Podstash's dictionary directly — it looks for small bridging scripts in its own support folder. Podstash ships those scripts, plus an installer, inside the app bundle, so setup is a one-time step:</p>
+      <ol>
+        <li>Make sure Podstash is in <code>/Applications</code>.</li>
+        <li>Open Terminal and run:
+          <p><code>/Applications/Podstash.app/Contents/Resources/install.sh</code></p>
+        </li>
+        <li>Open Airfoil and select <strong>Podstash</strong> as the audio source.</li>
+        <li>Play an episode in Podstash — metadata and controls should appear in Airfoil Speakers.</li>
+      </ol>
+      <p>The installer copies two compiled scripts into <code>~/Library/Application Support/Airfoil/</code> (<code>TrackTitles/</code> and <code>RemoteControl/</code>); re-run it any time you reinstall Podstash somewhere other than <code>/Applications</code>, or after a major update if metadata stops appearing.</p>
+    </section>
+
+    <section id="faq">
+      <h2>FAQ</h2>
+
+      <h3>Why won't macOS let me open the app?</h3>
+      <p>Released builds are Developer ID signed and notarized, so this shouldn't happen. If it does, make sure you downloaded the zip from the <a href="https://github.com/geoffoliver/podstash/releases/latest">GitHub releases page</a> rather than a fork or mirror, and that the zip fully extracted before you moved <code>Podstash.app</code> to Applications.</p>
+
+      <h3>Can Podstash play video podcasts?</h3>
+      <p>Not yet — it's audio-only for now.</p>
+
+      <h3>Is there an App Store version?</h3>
+      <p>Not yet. See <a href="https://github.com/geoffoliver/podstash/blob/master/Podstash/TODO.md">the roadmap</a> for what's planned.</p>
+
+      <h3>Where do I report a bug or request a feature?</h3>
+      <p>Open an issue on <a href="https://github.com/geoffoliver/podstash/issues">GitHub</a>.</p>
+    </section>
+  </div>
+</main>
+
+<footer>
+  <div class="wrap">
+    <p><a href="index.html">podstash.app</a> · <a href="https://github.com/geoffoliver/podstash">GitHub</a></p>
+  </div>
+</footer>
+
+</body>
+</html>

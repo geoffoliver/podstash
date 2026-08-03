@@ -2,7 +2,7 @@
 
 A fast, native podcast app for Mac, iPhone, and iPad. Queue-first listening — no subscriptions, no ads, no nonsense.
 
-[**Website**](https://geoffoliver.github.io/podstash/) · [**Latest release**](https://github.com/geoffoliver/podstash/releases/latest)
+[**Website**](https://geoffoliver.github.io/podstash/) · [**Documentation**](https://geoffoliver.github.io/podstash/docs.html) · [**Latest release**](https://github.com/geoffoliver/podstash/releases/latest)
 
 ## Features
 

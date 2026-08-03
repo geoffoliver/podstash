@@ -48,7 +48,7 @@
 - [x] Change "home" view for iOS -- it should be sidebar, not queue
 - [x] Github release for x86 Macs
 - [x] Readme
-- [ ] Docs
+- [x] Docs
 - [ ] Tests?
 - [ ] TestFlight distribution
 - [ ] AppStore submission

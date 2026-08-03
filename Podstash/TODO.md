@@ -49,7 +49,7 @@
 - [x] Github release for x86 Macs
 - [x] Readme
 - [x] Docs
-- [ ] Sparkle for updates?
+- [ ] Sparkle (or something else) for auto-updates, or just wait for AppStore? IDK if desktop _needs_ app store and would rather not deal with the hassle if i don't have to, but obviously, iOS does, so no sparkle needed there. Not sure best way to proceed.
 - [ ] Tests?
 - [ ] TestFlight distribution
 - [ ] AppStore submission

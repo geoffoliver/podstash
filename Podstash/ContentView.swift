@@ -294,8 +294,16 @@ struct PodcastListView: View {
     @Binding var columnVisibility: NavigationSplitViewVisibility
     @State private var showingSettings = false
     @State private var autoRefreshManager: AutoRefreshManager?
-    // Starts selecting the Queue row to match showingQueue's default of true in ContentView.
+    // macOS starts with the Queue row selected to match showingQueue's default of true in
+    // ContentView, since both columns are always visible there. iOS starts with no selection
+    // so the app opens on the sidebar (podcast list) instead of auto-pushing into the detail
+    // column - NavigationSplitView treats a non-empty initial selection as already "tapped"
+    // and jumps straight to detail on compact width.
+    #if os(macOS)
     @State private var multiSelection = Set<UUID>([Self.queueTag])
+    #else
+    @State private var multiSelection = Set<UUID>()
+    #endif
     @State private var showingUnsubscribeAlert = false
     @FocusState private var isFocused: Bool
 

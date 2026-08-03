@@ -45,7 +45,7 @@
 - [x] Bug - Search not visible on iOS (phone) when an item is playing/paused.
 - [x] Github "pages" page - one page, screenshots for desktop and mobile, light and dark mode, download badges (point to github releases for now - point to AppStore once that is working).
 - [x] Podcast detail header on iOS is cramped (episode count, last updated date, "web" link)
-- [ ] Change "home" view for iOS -- it should be sidebar, not queue
+- [x] Change "home" view for iOS -- it should be sidebar, not queue
 - [ ] Readme
 - [ ] Docs
 - [ ] Tests?

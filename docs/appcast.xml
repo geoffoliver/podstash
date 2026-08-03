@@ -3,6 +3,19 @@
     <channel>
         <title>Podstash</title>
         <item>
+            <title>0.0.6</title>
+            <pubDate>Mon, 03 Aug 2026 03:30:56 +0000</pubDate>
+            <link>https://geoffoliver.github.io/podstash/</link>
+            <sparkle:version>11</sparkle:version>
+            <sparkle:shortVersionString>0.0.6</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>26.5</sparkle:minimumSystemVersion>
+            <description sparkle:format="markdown"><![CDATA[macOS build below is a universal binary (Apple Silicon & Intel), Developer ID signed and notarized — no Gatekeeper warnings. Unzip and drag Podstash.app to /Applications.
+
+**Full Changelog**: https://github.com/geoffoliver/podstash/compare/v0.0.5...v0.0.6
+]]></description>
+            <enclosure url="https://github.com/geoffoliver/podstash/releases/download/v0.0.6/Podstash.app.zip" length="7226324" type="application/octet-stream" sparkle:edSignature="vqPVpNgPIcjIjS1OBE1aaQkaI0GnNNivylQjDPD5CzHjPL/2rimJKNGRC1cUPWVJVaQFJtBTFkV9tKEqUGfLAQ=="/>
+        </item>
+        <item>
             <title>0.0.5</title>
             <pubDate>Mon, 03 Aug 2026 02:33:47 +0000</pubDate>
             <link>https://geoffoliver.github.io/podstash/</link>

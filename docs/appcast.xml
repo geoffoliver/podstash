@@ -3,6 +3,19 @@
     <channel>
         <title>Podstash</title>
         <item>
+            <title>0.0.8</title>
+            <pubDate>Mon, 03 Aug 2026 05:13:02 +0000</pubDate>
+            <link>https://geoffoliver.github.io/podstash/</link>
+            <sparkle:version>13</sparkle:version>
+            <sparkle:shortVersionString>0.0.8</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>26.5</sparkle:minimumSystemVersion>
+            <description sparkle:format="markdown"><![CDATA[macOS build below is a universal binary (Apple Silicon & Intel), Developer ID signed and notarized — no Gatekeeper warnings. Unzip and drag Podstash.app to /Applications.
+
+**Full Changelog**: https://github.com/geoffoliver/podstash/compare/v0.0.7...v0.0.8
+]]></description>
+            <enclosure url="https://github.com/geoffoliver/podstash/releases/download/v0.0.8/Podstash.app.zip" length="7239632" type="application/octet-stream" sparkle:edSignature="/kT5BFu6jv5RQ6xiu2R6GOBYGn4Cxsms8UNUIwrLt00Qa7GPuRUjgzlaTi2O3bKb8LpAUrijW4anXUc7w20mDA=="/>
+        </item>
+        <item>
             <title>0.0.7</title>
             <pubDate>Mon, 03 Aug 2026 03:38:18 +0000</pubDate>
             <link>https://geoffoliver.github.io/podstash/</link>
@@ -27,19 +40,6 @@
 **Full Changelog**: https://github.com/geoffoliver/podstash/compare/v0.0.5...v0.0.6
 ]]></description>
             <enclosure url="https://github.com/geoffoliver/podstash/releases/download/v0.0.6/Podstash.app.zip" length="7226324" type="application/octet-stream" sparkle:edSignature="vqPVpNgPIcjIjS1OBE1aaQkaI0GnNNivylQjDPD5CzHjPL/2rimJKNGRC1cUPWVJVaQFJtBTFkV9tKEqUGfLAQ=="/>
-        </item>
-        <item>
-            <title>0.0.5</title>
-            <pubDate>Mon, 03 Aug 2026 02:33:47 +0000</pubDate>
-            <link>https://geoffoliver.github.io/podstash/</link>
-            <sparkle:version>10</sparkle:version>
-            <sparkle:shortVersionString>0.0.5</sparkle:shortVersionString>
-            <sparkle:minimumSystemVersion>26.5</sparkle:minimumSystemVersion>
-            <description sparkle:format="markdown"><![CDATA[macOS build below is a universal binary (Apple Silicon & Intel), Developer ID signed and notarized — no Gatekeeper warnings. Unzip and drag Podstash.app to /Applications.
-
-**Full Changelog**: https://github.com/geoffoliver/podstash/compare/v0.0.4...v0.0.5
-]]></description>
-            <enclosure url="https://github.com/geoffoliver/podstash/releases/download/v0.0.5/Podstash.app.zip" length="7224704" type="application/octet-stream" sparkle:edSignature="Z6aCB1W4wvP56B4vYfHy2KBvZZ/KNbvfzITaCO+jZWszCf98z3Y1bRekOkcusJqC3iJOThPY7+yhjHkr7uQEBQ=="/>
         </item>
     </channel>
 </rss>

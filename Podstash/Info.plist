@@ -22,5 +22,7 @@
 	<true/>
 	<key>SUPublicEDKey</key>
 	<string>FLnyKcr9/sEibSRx2JR5MCHmhPdI/HDcvhtnbLplt+c=</string>
+	<key>SUEnableInstallerLauncherService</key>
+	<true/>
 </dict>
 </plist>

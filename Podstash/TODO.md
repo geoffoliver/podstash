@@ -50,6 +50,7 @@
 - [x] Readme
 - [x] Docs
 - [x] Sparkle for auto-updates on macOS (iOS still needs TestFlight/App Store). CI signs and publishes `docs/appcast.xml` on every tagged release; toggle is in Settings → Updates.
+- [ ] Sparkle is STILL BROKEN!!
 - [ ] Tests?
 - [ ] TestFlight distribution
 - [ ] AppStore submission

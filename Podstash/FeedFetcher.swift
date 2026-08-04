@@ -164,6 +164,7 @@ class FeedFetcher {
         }
 
         // Create new episode objects
+        var createdEpisodes: [Episode] = []
         for parsedEpisode in newEpisodeData {
             let episode = Episode(
                 title: parsedEpisode.title,
@@ -177,11 +178,17 @@ class FeedFetcher {
 
             episode.podcast = podcast
             modelContext.insert(episode)
+            createdEpisodes.append(episode)
         }
-        
-        // Auto-download the most recent episodes per the user's setting
+
+        // Auto-download the most recent NEW episodes per the user's setting. This must only
+        // consider episodes just created above, not the podcast's whole surviving episode list -
+        // otherwise, once the newest episode gets played and later removed by
+        // EpisodeCleanupManager, the next-oldest surviving (but never-downloaded) episode would
+        // look like "the most recent undownloaded episode" and get auto-downloaded here, even
+        // though it aired before the one the user already played and isn't new.
         if settings.autoDownloadNewEpisodes, let downloadManager = downloadManager {
-            let recentEpisodes = podcast.episodes
+            let recentEpisodes = createdEpisodes
                 .sorted { $0.publishDate > $1.publishDate }
                 .prefix(settings.maxEpisodesToDownload)
 

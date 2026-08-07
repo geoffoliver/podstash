@@ -154,33 +154,20 @@ class AddPodcastCoordinator: ObservableObject {
         }
     }
     
+    // Only fills in podcast-level metadata for immediate UI feedback (artwork, author) -
+    // episode creation is deliberately left to the triggerRefreshAfterAdding callback's
+    // FeedFetcher.fetchFeed(for:) call right after this returns. FeedFetcher already has the
+    // correct "new episodes just created -> honor autoDownloadNewEpisodes" logic; duplicating
+    // episode creation here meant that call always saw those episodes as already-existing and
+    // never auto-downloaded anything.
     private func updateNewPodcast(_ podcast: Podcast, with parsedPodcast: ParsedPodcast) async {
         guard let modelContext = modelContext else { return }
 
-        // Update podcast metadata
         podcast.podcastDescription = parsedPodcast.description
         podcast.artworkURL = parsedPodcast.artworkURL
         podcast.author = parsedPodcast.author
         podcast.websiteURL = parsedPodcast.websiteURL
         podcast.lastUpdated = Date()
-
-        // Sort episodes by publish date (most recent first)
-        let sortedEpisodes = parsedPodcast.episodes.sorted { $0.publishDate > $1.publishDate }
-
-        for parsedEpisode in sortedEpisodes {
-            let episode = Episode(
-                title: parsedEpisode.title,
-                episodeDescription: parsedEpisode.description,
-                audioURL: parsedEpisode.audioURL,
-                guid: parsedEpisode.guid,
-                duration: parsedEpisode.duration,
-                publishDate: parsedEpisode.publishDate,
-                artworkURL: parsedEpisode.artworkURL
-            )
-
-            episode.podcast = podcast
-            modelContext.insert(episode)
-        }
 
         try? modelContext.save()
     }

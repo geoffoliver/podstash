@@ -51,6 +51,7 @@
 - [x] Docs
 - [x] Sparkle for auto-updates on macOS (iOS still needs TestFlight/App Store). CI signs and publishes `docs/appcast.xml` on every tagged release; toggle is in Settings → Updates.
 - [x] Sparkle is STILL BROKEN!! - fix was missing `com.apple.security.temporary-exception.mach-lookup.global-name` entitlement (`-spks`/`-spki`), required for a sandboxed app to talk to Sparkle's Installer.xpc. Bumped to 0.0.9; needs a real device test of "Check for Updates" from an older build before tagging.
+- [ ] Launch screen
 - [ ] Tests?
 - [ ] TestFlight distribution
 - [ ] AppStore submission

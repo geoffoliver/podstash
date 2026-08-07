@@ -1,0 +1,304 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Podstash Privacy Policy</title>
+<meta name="description" content="Podstash's privacy policy: what data it collects (none, by the developer), how iCloud sync works, and how podcast feeds are fetched.">
+<link rel="icon" type="image/png" href="assets/favicon-64.png">
+<style>
+  :root {
+    --accent: #5b3fc4;
+    --accent-2: #c2678f;
+    --bg: #ffffff;
+    --bg-subtle: #f6f5f4;
+    --text: #1a1a1a;
+    --text-muted: #6b6b6b;
+    --border: #e6e3e0;
+    --card-bg: #ffffff;
+    --code-bg: #f0eeec;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #121212;
+      --bg-subtle: #1a1a1a;
+      --text: #f2f0ee;
+      --text-muted: #9a9591;
+      --border: #2b2b2b;
+      --card-bg: #1a1a1a;
+      --code-bg: #232323;
+    }
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    overflow-x: hidden;
+  }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    line-height: 1.6;
+  }
+
+  a { color: var(--accent); }
+
+  @media (prefers-color-scheme: dark) {
+    a { color: #b79bf5; }
+  }
+
+  .wrap {
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 0 24px;
+  }
+
+  header.top {
+    border-bottom: 1px solid var(--border);
+    padding: 20px 0;
+  }
+
+  header.top .wrap {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  header.top .brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    text-decoration: none;
+    font-weight: 700;
+    color: var(--text);
+  }
+
+  header.top .brand img {
+    width: 28px;
+    height: 28px;
+    border-radius: 7px;
+  }
+
+  header.top nav a {
+    text-decoration: none;
+    color: var(--text-muted);
+    font-size: 0.92rem;
+    font-weight: 600;
+  }
+
+  header.top nav a:hover { color: var(--text); }
+
+  main {
+    padding: 56px 0 96px;
+  }
+
+  h1 {
+    font-size: clamp(1.9rem, 4vw, 2.4rem);
+    font-weight: 800;
+    letter-spacing: -0.02em;
+    margin: 0 0 8px;
+  }
+
+  main > .wrap > p.lede {
+    color: var(--text-muted);
+    font-size: 1.05rem;
+    margin: 0 0 40px;
+  }
+
+  .toc {
+    background: var(--bg-subtle);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 20px 24px;
+    margin: 0 0 48px;
+  }
+
+  .toc p {
+    margin: 0 0 10px;
+    font-weight: 700;
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-muted);
+  }
+
+  .toc ul {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    columns: 2;
+    gap: 8px 24px;
+  }
+
+  .toc li { break-inside: avoid; margin-bottom: 6px; }
+
+  .toc a { text-decoration: none; font-weight: 600; font-size: 0.95rem; }
+  .toc a:hover { text-decoration: underline; }
+
+  section {
+    padding-top: 40px;
+    margin-top: 40px;
+    border-top: 1px solid var(--border);
+    scroll-margin-top: 24px;
+  }
+
+  section:first-of-type {
+    padding-top: 0;
+    margin-top: 0;
+    border-top: none;
+  }
+
+  h2 {
+    font-size: 1.4rem;
+    font-weight: 800;
+    letter-spacing: -0.01em;
+    margin: 0 0 16px;
+  }
+
+  h3 {
+    font-size: 1.05rem;
+    font-weight: 700;
+    margin: 28px 0 10px;
+  }
+
+  p { margin: 0 0 14px; }
+
+  ul, ol {
+    margin: 0 0 14px;
+    padding-left: 22px;
+  }
+
+  li { margin-bottom: 6px; }
+
+  code {
+    background: var(--code-bg);
+    border-radius: 5px;
+    padding: 2px 6px;
+    font-size: 0.9em;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+
+  .note {
+    background: var(--bg-subtle);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 14px 18px;
+    font-size: 0.92rem;
+    color: var(--text-muted);
+    margin: 0 0 14px;
+  }
+
+  .note strong { color: var(--text); }
+
+  footer {
+    border-top: 1px solid var(--border);
+    padding: 32px 0;
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 0.85rem;
+  }
+
+  footer a {
+    color: var(--text-muted);
+    font-weight: 600;
+    text-decoration: none;
+  }
+
+  footer a:hover { color: var(--text); }
+
+  @media (max-width: 560px) {
+    .toc ul { columns: 1; }
+  }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="index.html">
+      <img src="assets/icon-256.png" alt="">
+      Podstash
+    </a>
+    <nav>
+      <a href="index.html">← Back to podstash.app</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <div class="wrap">
+    <h1>Privacy Policy</h1>
+    <p class="lede">Last updated August 7, 2026. Podstash is a podcast player for Mac and iPhone/iPad built by an individual developer, not a company with a data business — here's exactly what that means for your data.</p>
+
+    <div class="toc">
+      <p>On this page</p>
+      <ul>
+        <li><a href="#summary">The short version</a></li>
+        <li><a href="#icloud">iCloud sync</a></li>
+        <li><a href="#feeds">Podcast feeds &amp; downloads</a></li>
+        <li><a href="#local">What stays on your device</a></li>
+        <li><a href="#no-tracking">Analytics, ads, and tracking</a></li>
+        <li><a href="#children">Children's privacy</a></li>
+        <li><a href="#changes">Changes to this policy</a></li>
+        <li><a href="#contact">Contact</a></li>
+      </ul>
+    </div>
+
+    <section id="summary">
+      <h2>The short version</h2>
+      <p>Podstash doesn't have a server, doesn't have user accounts, and doesn't collect, sell, or share your data — because there's no backend for it to go to. Everything Podstash stores either stays on your device or syncs through your own private iCloud account, which the developer cannot see or access.</p>
+    </section>
+
+    <section id="icloud">
+      <h2>iCloud sync</h2>
+      <p>If you turn on iCloud sync (Settings → General → Sync with iCloud), Podstash uses Apple's CloudKit to sync your subscriptions, queue order, playback progress, and downloaded-episode markers across your own devices signed into the same Apple ID.</p>
+      <p>This sync goes through your <strong>private</strong> CloudKit database — the same mechanism apps like Notes or Reminders use. It's stored under your Apple ID, encrypted and managed by Apple, and scoped to you alone. The developer has no access to this database, no way to view its contents, and no copy of it anywhere else.</p>
+      <div class="note"><strong>Turning sync off:</strong> disabling iCloud sync in Settings stops any further syncing; a "Reset Local Sync…" option is also available if sync ever needs a clean restart. Neither of these sends anything to the developer — they only affect what's stored locally and in your own iCloud account.</div>
+    </section>
+
+    <section id="feeds">
+      <h2>Podcast feeds &amp; downloads</h2>
+      <p>When you subscribe to a show, Podstash fetches that show's RSS feed and episode audio directly from the URLs the show's publisher provides — the same servers any podcast app, or your web browser, would talk to. Podstash doesn't proxy, log, or relay this traffic through any server operated by the developer; your device talks to the podcast host directly.</p>
+      <p>Those third-party hosts (and, on Mac, any AirPlay/Bluetooth device you stream to via Airfoil) have their own privacy practices, which this policy doesn't cover.</p>
+    </section>
+
+    <section id="local">
+      <h2>What stays on your device</h2>
+      <p>Downloaded episode audio, artwork, and your app settings are stored locally in Podstash's app sandbox. If iCloud sync is off, none of this leaves your device at all.</p>
+    </section>
+
+    <section id="no-tracking">
+      <h2>Analytics, ads, and tracking</h2>
+      <p>Podstash contains no analytics SDKs, no advertising frameworks, and no third-party tracking of any kind. It doesn't know who you are, and it isn't trying to find out.</p>
+    </section>
+
+    <section id="children">
+      <h2>Children's privacy</h2>
+      <p>Podstash isn't directed at children and doesn't knowingly collect information from anyone, regardless of age — consistent with everything above, there's simply no data collection to speak of.</p>
+    </section>
+
+    <section id="changes">
+      <h2>Changes to this policy</h2>
+      <p>If this policy changes, the "last updated" date at the top of this page will change with it. Material changes will also be noted in the app's release notes.</p>
+    </section>
+
+    <section id="contact">
+      <h2>Contact</h2>
+      <p>Questions about this policy or how Podstash handles data? Open an issue on <a href="https://github.com/geoffoliver/podstash/issues">GitHub</a>.</p>
+    </section>
+  </div>
+</main>
+
+<footer>
+  <div class="wrap">
+    <p><a href="index.html">podstash.app</a> · <a href="https://github.com/geoffoliver/podstash">GitHub</a></p>
+  </div>
+</footer>
+
+</body>
+</html>

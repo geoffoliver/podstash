@@ -170,6 +170,7 @@ class AudioPlayerManager: ObservableObject {
         // Setup new episode
         currentEpisode = episode
         lastSavedPosition = episode.playbackPosition // Reset the save tracking
+        duration = 0 // Reset so the time observer picks up the new episode's duration
 
         // Clear stale artwork from the previous episode so it doesn't linger until the new one loads
         MPNowPlayingInfoCenter.default().nowPlayingInfo = nil

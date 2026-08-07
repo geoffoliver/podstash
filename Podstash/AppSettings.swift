@@ -106,8 +106,6 @@ class AppSettings: ObservableObject {
 
     // MARK: - iCloud Settings
     @AppStorage("iCloudSyncEnabled") var iCloudSyncEnabled: Bool = true
-    @AppStorage("syncPlaybackProgress") var syncPlaybackProgress: Bool = true
-    @AppStorage("syncSubscriptions") var syncSubscriptions: Bool = true
 
     // MARK: - Appearance
     @AppStorage("sidebarIconSize") var sidebarIconSize: String = SidebarIconSize.medium.rawValue
@@ -146,8 +144,6 @@ class AppSettings: ObservableObject {
         continuePlaybackAcrossDevices = true
 
         iCloudSyncEnabled = true
-        syncPlaybackProgress = true
-        syncSubscriptions = true
 
         sidebarIconSize = SidebarIconSize.medium.rawValue
     }

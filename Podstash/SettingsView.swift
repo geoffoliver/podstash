@@ -8,6 +8,9 @@
 import SwiftUI
 import SwiftData
 import UniformTypeIdentifiers
+#if os(macOS)
+import AppKit
+#endif
 
 #if os(macOS)
 /// Shared label-column width so every macOS settings tab lines up its controls
@@ -157,8 +160,43 @@ struct SettingsView: View {
 
 struct GeneralSettingsView: View {
     @ObservedObject var settings: AppSettings
+    @Environment(\.modelContext) private var modelContext
+
+    @State private var showResetSyncConfirmation = false
+    @State private var showResetSyncCompleted = false
+    @State private var resetSyncErrorMessage: String?
 
     var body: some View {
+        platformContent
+            .confirmationDialog(
+                "Reset Local Sync?",
+                isPresented: $showResetSyncConfirmation,
+                titleVisibility: .visible
+            ) {
+                Button("Reset Local Sync", role: .destructive) {
+                    resetLocalSync()
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("This clears Podstash's local database. Your subscriptions and playback history are safe in iCloud and will re-download the next time Podstash opens. Any offline episode downloads will need to be downloaded again.")
+            }
+            .alert("Local Sync Reset", isPresented: $showResetSyncCompleted) {
+                Button("OK") {}
+            } message: {
+                Text("Close and reopen Podstash to finish resetting sync.")
+            }
+            .alert("Couldn't Reset Sync", isPresented: Binding(
+                get: { resetSyncErrorMessage != nil },
+                set: { if !$0 { resetSyncErrorMessage = nil } }
+            )) {
+                Button("OK") {}
+            } message: {
+                Text(resetSyncErrorMessage ?? "")
+            }
+    }
+
+    @ViewBuilder
+    private var platformContent: some View {
         #if os(macOS)
         Group {
             SettingsCheckboxRow(label: "Auto-refresh feeds on launch", isOn: $settings.autoRefreshOnLaunch)
@@ -173,6 +211,37 @@ struct GeneralSettingsView: View {
             }
 
             SettingsCheckboxRow(label: "Keep Mini Player always on top", isOn: $settings.miniPlayerAlwaysOnTop)
+
+            Divider()
+                .padding(.vertical, 2)
+
+            // Tight spacing (rather than the row rhythm's usual 18pt) so each hint reads as a
+            // caption attached to the control above it, matching the Wi-Fi checkbox/hint
+            // pairing in FeedSettingsView.
+            VStack(alignment: .leading, spacing: 4) {
+                SettingsCheckboxRow(label: "Sync with iCloud", isOn: $settings.iCloudSyncEnabled)
+
+                SettingsFreeformRow {
+                    Text("Changes take effect after restarting Podstash.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 4) {
+                SettingsFreeformRow {
+                    Button("Reset Local Sync…", role: .destructive) {
+                        showResetSyncConfirmation = true
+                    }
+                    .disabled(!settings.iCloudSyncEnabled)
+                }
+
+                SettingsFreeformRow {
+                    Text("Clears Podstash's local database and quits the app so it rebuilds fresh from iCloud. Requires iCloud sync to be on.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
 
             SettingsFreeformRow {
                 Button("Reset to Defaults") {
@@ -190,10 +259,40 @@ struct GeneralSettingsView: View {
                 }
             }
 
+            Toggle("Sync with iCloud", isOn: $settings.iCloudSyncEnabled)
+
+            Text("Changes take effect after restarting Podstash.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            Button("Reset Local Sync…", role: .destructive) {
+                showResetSyncConfirmation = true
+            }
+            .disabled(!settings.iCloudSyncEnabled)
+
+            Text("Clears Podstash's local database so it rebuilds fresh from iCloud. Requires iCloud sync to be on.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
             Button("Reset to Defaults") {
                 settings.resetToDefaults()
             }
         }
+        #endif
+    }
+
+    private func resetLocalSync() {
+        do {
+            try modelContext.container.erase()
+        } catch {
+            resetSyncErrorMessage = error.localizedDescription
+            return
+        }
+
+        #if os(macOS)
+        NSApplication.shared.terminate(nil)
+        #else
+        showResetSyncCompleted = true
         #endif
     }
 }

@@ -163,7 +163,6 @@ struct GeneralSettingsView: View {
     @Environment(\.modelContext) private var modelContext
 
     @State private var showResetSyncConfirmation = false
-    @State private var showResetSyncCompleted = false
     @State private var resetSyncErrorMessage: String?
 
     var body: some View {
@@ -178,12 +177,7 @@ struct GeneralSettingsView: View {
                 }
                 Button("Cancel", role: .cancel) {}
             } message: {
-                Text("This clears Podstash's local database. Your subscriptions and playback history are safe in iCloud and will re-download the next time Podstash opens. Any offline episode downloads will need to be downloaded again.")
-            }
-            .alert("Local Sync Reset", isPresented: $showResetSyncCompleted) {
-                Button("OK") {}
-            } message: {
-                Text("Close and reopen Podstash to finish resetting sync.")
+                Text("This clears Podstash's local database and closes the app. Reopen it and your subscriptions and playback history will re-download from iCloud. Any offline episode downloads will need to be downloaded again.")
             }
             .alert("Couldn't Reset Sync", isPresented: Binding(
                 get: { resetSyncErrorMessage != nil },
@@ -289,10 +283,16 @@ struct GeneralSettingsView: View {
             return
         }
 
+        // Must terminate immediately, not just show a "reopen the app" alert: any further
+        // SwiftUI re-render that touches the now-erased container (e.g. the sidebar's queue
+        // count query re-running off an unrelated state change) traps inside SwiftData's
+        // internal invariant checks - an EXC_BREAKPOINT that `try?` can't catch, not a
+        // throwable Swift error. The confirmation dialog shown before this already told the
+        // user the app will close.
         #if os(macOS)
         NSApplication.shared.terminate(nil)
         #else
-        showResetSyncCompleted = true
+        exit(0)
         #endif
     }
 }

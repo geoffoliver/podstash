@@ -1,20 +1,39 @@
 {
   "fill" : {
-    "automatic-gradient" : "display-p3:0.23502,0.21535,0.60256,1.00000"
+    "linear-gradient" : [
+      "display-p3:0.38602,0.36714,0.73886,1.00000",
+      "display-p3:0.23502,0.21535,0.60256,1.00000"
+    ],
+    "orientation" : {
+      "start" : {
+        "x" : 0.5,
+        "y" : 0
+      },
+      "stop" : {
+        "x" : 0.5,
+        "y" : 0.7
+      }
+    }
   },
   "groups" : [
     {
       "layers" : [
         {
-          "image-name" : "podstash-icon.svg",
-          "name" : "podstash-icon",
-          "position" : {
-            "scale" : 1.5,
-            "translation-in-points" : [
-              54.0234375,
-              0
-            ]
-          }
+          "glass" : true,
+          "image-name" : "5.stache 2.png",
+          "name" : "5.stache 2",
+          "opacity" : 1
+        },
+        {
+          "hidden" : true,
+          "image-name" : "4.rings-no-cutout.png",
+          "name" : "4.rings-no-cutout"
+        },
+        {
+          "glass" : true,
+          "hidden" : false,
+          "image-name" : "4.rings 2.png",
+          "name" : "4.rings 2"
         }
       ],
       "shadow" : {

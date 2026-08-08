@@ -60,6 +60,7 @@
 # Maybe
 
 - [ ] "downloads" window/view/whatever - maybe we can just use the queue for this? show progress circle like on podcast detail with option to cancel?
+- [ ] Activity window - show sync status
 - [ ] can this play videos?
 - [ ] "window" menu flashes different content when app is playing - shows extra options for maximizing/fullscreening window
 - [ ] macOS queue drag/drop ghost is a plain blue bar with title only - could match the real row look instead (artwork thumbnail, rounded corners, stacked title/podcast text)

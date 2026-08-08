@@ -372,7 +372,7 @@ struct FeedSettingsView: View {
                 .disabled(settings.refreshIntervalEnum == .manual)
 
             if settings.refreshIntervalEnum != .manual {
-                Text("Feeds will refresh automatically in the background")
+                Text("Podstash also asks iOS to refresh feeds in the background between launches. iOS decides exactly when based on your usage and battery, so it's not on a fixed schedule, but new episodes should often be waiting when you open the app.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

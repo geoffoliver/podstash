@@ -16,6 +16,10 @@
 		<string>audio</string>
 		<string>fetch</string>
 	</array>
+	<key>BGTaskSchedulerPermittedIdentifiers</key>
+	<array>
+		<string>me.geoffoliver.Podstash.refresh</string>
+	</array>
 	<key>SUFeedURL</key>
 	<string>https://geoffoliver.github.io/podstash/appcast.xml</string>
 	<key>SUEnableAutomaticChecks</key>

@@ -10,6 +10,9 @@ import Foundation
 import Combine
 import UniformTypeIdentifiers
 import SwiftData
+#if !os(macOS)
+import BackgroundTasks
+#endif
 
 @MainActor
 class AddPodcastCoordinator: ObservableObject {
@@ -581,6 +584,9 @@ struct PodstashApp: App {
 
     #if os(macOS)
     @Environment(\.openWindow) private var openWindow
+    #else
+    @Environment(\.scenePhase) private var scenePhase
+    private static let backgroundRefreshTaskIdentifier = "me.geoffoliver.Podstash.refresh"
     #endif
 
     var sharedModelContainer: ModelContainer = {
@@ -772,8 +778,46 @@ struct PodstashApp: App {
         .commands {
             fileCommands
         }
+        .backgroundTask(.appRefresh(Self.backgroundRefreshTaskIdentifier)) {
+            await performBackgroundRefresh()
+        }
+        .onChange(of: scenePhase) { newPhase in
+            if newPhase == .background {
+                scheduleBackgroundRefresh()
+            }
+        }
         #endif
     }
+
+    #if !os(macOS)
+    // BGAppRefreshTask requests are a hint, not a guaranteed schedule - iOS decides the actual
+    // timing based on usage patterns and battery state. Re-submitted every time the app
+    // backgrounds and again at the top of each background refresh itself, so there's always a
+    // pending request as long as the user keeps opening the app occasionally.
+    private func scheduleBackgroundRefresh() {
+        guard let interval = settings.refreshIntervalEnum.timeInterval else {
+            // "Manual" refresh interval means the user doesn't want automatic refreshing at all.
+            return
+        }
+
+        let request = BGAppRefreshTaskRequest(identifier: Self.backgroundRefreshTaskIdentifier)
+        request.earliestBeginDate = Date(timeIntervalSinceNow: interval)
+        try? BGTaskScheduler.shared.submit(request)
+    }
+
+    private func performBackgroundRefresh() async {
+        // Queue up the next run regardless of how this one goes - a failed or cut-short
+        // refresh shouldn't end the chain.
+        scheduleBackgroundRefresh()
+
+        let context = sharedModelContainer.mainContext
+        let fetcher = FeedFetcher(modelContext: context, settings: settings, downloadManager: downloadManager)
+        _ = await fetcher.fetchAllFeeds()
+
+        EpisodeCleanupManager(modelContext: context, settings: settings).cleanupEpisodes()
+        downloadManager.syncFollowMeDownloads(settings: settings)
+    }
+    #endif
 }
 
 // MARK: - Add Podcast Sheet

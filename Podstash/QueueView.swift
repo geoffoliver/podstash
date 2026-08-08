@@ -280,6 +280,7 @@ struct QueueView: View {
                 }
             }
         }
+        .reservePlayerBarSpace(audioPlayer)
         .navigationTitle("Queue")
         // .navigationBarDrawer placement (rather than automatic): iOS 26 otherwise docks the
         // search field to the bottom of the screen, where it collides with CompactPlayerBar's

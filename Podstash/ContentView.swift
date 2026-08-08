@@ -429,6 +429,9 @@ struct PodcastListView: View {
                 }
             }
         }
+        #if !os(macOS)
+        .reservePlayerBarSpace(audioPlayer)
+        #endif
         .navigationTitle("Podcasts")
         .focused($isFocused)
         .onAppear {

@@ -28,7 +28,12 @@ class AudioPlayerManager: ObservableObject {
     @Published var currentTime: TimeInterval = 0
     @Published var duration: TimeInterval = 0
     @Published var playbackRate: Float = 1.0
-    
+    // Measured height of CompactPlayerBar (iOS), so scrollable lists placed underneath it via
+    // NavigationSplitView can reserve enough bottom content inset to fully clear it - the
+    // safeAreaInset applied around the NavigationSplitView doesn't propagate into a detail
+    // column's List content inset (NavigationSplitView manages its own column safe areas).
+    @Published var compactPlayerBarHeight: CGFloat = 0
+
     // MARK: - Private Properties
     private var player: AVPlayer?
     private var timeObserver: Any?

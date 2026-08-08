@@ -221,6 +221,23 @@ struct NowPlayingView: View {
 
 // MARK: - Compact Player Bar (for iOS bottom bar)
 
+#if !os(macOS)
+extension View {
+    // NavigationSplitView manages its own per-column safe areas, so the safeAreaInset
+    // ContentView applies around the whole split view for CompactPlayerBar never reaches a
+    // column's List content inset - every List in a sidebar/detail column (Queue, podcast
+    // detail's episode list, the podcast sidebar) scrolls its last row half-hidden behind the
+    // bar without this. Apply directly to each List; reserves the bar's actual measured height.
+    func reservePlayerBarSpace(_ audioPlayer: AudioPlayerManager) -> some View {
+        safeAreaInset(edge: .bottom) {
+            if audioPlayer.currentEpisode != nil {
+                Color.clear.frame(height: audioPlayer.compactPlayerBarHeight)
+            }
+        }
+    }
+}
+#endif
+
 struct CompactPlayerBar: View {
     @EnvironmentObject var audioPlayer: AudioPlayerManager
     @State private var showingNowPlaying = false
@@ -285,6 +302,9 @@ struct CompactPlayerBar: View {
             }
             .padding()
             .background(.regularMaterial)
+            .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { height in
+                audioPlayer.compactPlayerBarHeight = height
+            }
             .contentShape(Rectangle())
             .onTapGesture {
                 showingNowPlaying = true

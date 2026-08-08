@@ -134,6 +134,7 @@ struct PodcastDetailView: View {
             }
         }
         .listStyle(.plain)
+        .reservePlayerBarSpace(audioPlayer)
         #else
         VStack(spacing: 0) {
             // Header with artwork and info
@@ -547,6 +548,9 @@ struct PodcastHeaderView: View {
                 Label("Unsubscribe", systemImage: "xmark.circle")
                     .font(.appBody)
                     .frame(maxWidth: isCompact ? .infinity : nil)
+                    // The bordered button style's .tint(.red) below colors the text but leaves
+                    // the SF Symbol rendered in the system accent color, so force it explicitly.
+                    .foregroundStyle(.red)
             }
             .buttonStyle(.bordered)
             .controlSize(.regular)

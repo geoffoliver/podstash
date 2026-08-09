@@ -349,7 +349,7 @@ struct PodcastListView: View {
             // Podcasts section
             Section("Podcasts") {
                 if podcasts.isEmpty {
-                    Text("No podcasts yet. Import an OPML file to get started!")
+                    Text("No podcasts yet. Add a podcast RSS feed or import an OPML file to get started!")
                         .foregroundStyle(.secondary)
                         .padding()
                 } else {
@@ -594,6 +594,11 @@ struct PodcastListView: View {
     }
 }
 
+extension Color {
+    static let lightPurple = Color(red: 0.37254902, green: 0.36470588, blue: 0.71372549)
+    static let darkPurple = Color(red: 0.23137255, green: 0.21568627, blue: 0.58431373)
+}
+
 struct QueueRowView: View {
     let queueCount: Int
     let iconSize: CGFloat
@@ -605,15 +610,22 @@ struct QueueRowView: View {
             // Icon matching the podcast artwork size
             ZStack {
                 LinearGradient(
-                    colors: [.orange, .red],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
+                    colors: [
+                        .lightPurple,
+                        .darkPurple
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
                 )
                 
-                Image(systemName: "text.line.first.and.arrowtriangle.forward")
-                    .font(.system(size: iconSize * 0.4))
+                Image(systemName: "play.house")
+                    .font(.system(size: iconSize * 0.6))
                     .foregroundColor(.white.opacity(0.8))
             }
+            
+            /*
+            Image(platformImage: PlatformImage(imageLiteralResourceName: "Podstash"))
+            */
             .frame(width: iconSize, height: iconSize)
             .cornerRadius(6)
             

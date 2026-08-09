@@ -641,9 +641,17 @@ struct PodstashApp: App {
                 audioPlayer.setSettings(settings)
                 downloadManager.setModelContext(context)
 
+                // Collapse any episodes duplicated by a CloudKit sync race (e.g. this device and
+                // another both refreshing the same feed before either's newly-created episode
+                // synced to the other) before anything else touches the episode list.
+                EpisodeCleanupManager(modelContext: context, settings: settings).deduplicateEpisodes()
+
                 // Pick up any episodes downloaded on other devices via iCloud sync that
                 // aren't on disk here yet.
                 downloadManager.syncFollowMeDownloads(settings: settings)
+
+                // Reclaim disk space from downloaded files no live episode references anymore.
+                downloadManager.pruneOrphanedDownloads()
 
                 // Set up callback to refresh feeds after adding a podcast
                 addPodcastCoordinator.triggerRefreshAfterAdding = { podcast in
@@ -814,7 +822,9 @@ struct PodstashApp: App {
         let fetcher = FeedFetcher(modelContext: context, settings: settings, downloadManager: downloadManager)
         _ = await fetcher.fetchAllFeeds()
 
-        EpisodeCleanupManager(modelContext: context, settings: settings).cleanupEpisodes()
+        let cleanupManager = EpisodeCleanupManager(modelContext: context, settings: settings)
+        cleanupManager.deduplicateEpisodes()
+        cleanupManager.cleanupEpisodes()
         downloadManager.syncFollowMeDownloads(settings: settings)
     }
     #endif

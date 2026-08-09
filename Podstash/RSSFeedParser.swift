@@ -55,12 +55,49 @@ class RSSFeedParser: NSObject, XMLParserDelegate {
     private let maxEpisodesToParse = 5000
     private var didAbortIntentionally = false
     
-    private let dateFormatter: DateFormatter = {
+    // Real-world feeds don't all follow RFC 822 to the letter - some use a named timezone
+    // (GMT/EST/PST) instead of a numeric offset, some omit the leading zero on single-digit
+    // days, and some (particularly feeds re-exported from Atom) use ISO 8601 in pubDate. Tried
+    // in order; the first formatter that parses the string wins.
+    private static let rfc822DateFormats = [
+        "EEE, dd MMM yyyy HH:mm:ss Z",
+        "EEE, dd MMM yyyy HH:mm:ss zzz",
+        "EEE, d MMM yyyy HH:mm:ss Z",
+        "EEE, d MMM yyyy HH:mm:ss zzz",
+        "dd MMM yyyy HH:mm:ss Z",
+        "d MMM yyyy HH:mm:ss Z",
+    ]
+
+    private let dateFormatters: [DateFormatter] = RSSFeedParser.rfc822DateFormats.map { format in
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.dateFormat = "EEE, dd MMM yyyy HH:mm:ss Z"
+        formatter.dateFormat = format
+        return formatter
+    }
+
+    private let isoDateFormatter: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         return formatter
     }()
+
+    private let isoDateFormatterNoFractionalSeconds: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+        return formatter
+    }()
+
+    /// Returns nil, rather than "now", when the string doesn't match any known format - a
+    /// silent "now" fallback previously made unparseable-but-old episodes sort as the newest
+    /// thing in the feed and get swept up by auto-download.
+    private func parsePublishDate(_ text: String) -> Date? {
+        for formatter in dateFormatters {
+            if let date = formatter.date(from: text) {
+                return date
+            }
+        }
+        return isoDateFormatter.date(from: text) ?? isoDateFormatterNoFractionalSeconds.date(from: text)
+    }
     
     func parse(data: Data) -> ParsedPodcast? {
         parser = XMLParser(data: data)
@@ -185,7 +222,10 @@ class RSSFeedParser: NSObject, XMLParserDelegate {
                 }
 
             case "pubDate":
-                currentEpisodePublishDate = dateFormatter.date(from: trimmedText) ?? Date()
+                // Fall back to distantPast (not "now") for a date we can't parse, so a
+                // genuinely old episode with a malformed date never sorts as the newest thing
+                // in the feed and gets picked up by auto-download.
+                currentEpisodePublishDate = parsePublishDate(trimmedText) ?? Date.distantPast
                 
             case "itunes:duration":
                 currentEpisodeDuration = parseDuration(trimmedText)

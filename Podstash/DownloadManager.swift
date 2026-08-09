@@ -102,6 +102,38 @@ final class DownloadManager: NSObject, ObservableObject {
         }
     }
     
+    /// Deletes downloaded audio files in the Downloads folder that no live Episode row
+    /// references anymore. Every deletion path (retention cleanup, manual "remove download",
+    /// unsubscribing) only removes a file if it's still holding a reference to it at the moment
+    /// of deletion - so a file downloaded under one duplicate Episode row (see
+    /// EpisodeCleanupManager.deduplicateEpisodes) becomes permanently unreachable disk space the
+    /// instant that specific row is superseded, merged away, or deleted by any path that isn't
+    /// holding that exact filename. This is the backstop that reclaims it.
+    ///
+    /// Only prunes files untouched for at least a day, so this can never race a fresh CloudKit
+    /// import (e.g. right after Settings > Reset Local Sync, where the local store is briefly
+    /// empty while episodes re-sync) and delete a file that's about to be legitimately re-linked.
+    func pruneOrphanedDownloads() {
+        guard let modelContext else { return }
+
+        let fileManager = FileManager.default
+        guard let fileURLs = try? fileManager.contentsOfDirectory(
+            at: DownloadManager.downloadsDirectory,
+            includingPropertiesForKeys: [.contentModificationDateKey]
+        ), !fileURLs.isEmpty else { return }
+
+        let descriptor = FetchDescriptor<Episode>(predicate: #Predicate { $0.downloadedFilename != nil })
+        let referencedFilenames = Set((try? modelContext.fetch(descriptor))?.compactMap { $0.downloadedFilename } ?? [])
+
+        let cutoff = Date().addingTimeInterval(-60 * 60 * 24)
+
+        for fileURL in fileURLs where !referencedFilenames.contains(fileURL.lastPathComponent) {
+            let modificationDate = (try? fileURL.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate ?? Date()
+            guard modificationDate < cutoff else { continue }
+            try? fileManager.removeItem(at: fileURL)
+        }
+    }
+
     private func saveDownloadedFile(from tempURL: URL, for episodeID: UUID) {
         guard let modelContext = modelContext else {
             print("No model context available")

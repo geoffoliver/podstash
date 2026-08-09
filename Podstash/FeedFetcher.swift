@@ -143,6 +143,15 @@ class FeedFetcher {
             deletedAudioURLs.insert(tombstone.audioURL)
         }
 
+        // Guids/audioURLs staged into newEpisodeData during this same pass - checked alongside
+        // existingByGUID/existingByAudioURL below so that a feed listing the same item twice
+        // (a duplicate <item> block, a republish, a feed-generator bug - all things real feeds
+        // do) doesn't create two Episode rows for it in a single refresh. Without this, that
+        // duplication needs no CloudKit sync or second device to happen - one malformed feed
+        // fetch on one device is enough.
+        var stagedGUIDs: Set<String> = []
+        var stagedAudioURLs: Set<String> = []
+
         var newEpisodeData: [ParsedEpisode] = []
         for parsedEpisode in parsedEpisodes {
             if let guid = parsedEpisode.guid, existingByGUID[guid] != nil {
@@ -160,6 +169,17 @@ class FeedFetcher {
             if deletedAudioURLs.contains(parsedEpisode.audioURL) {
                 continue
             }
+            if let guid = parsedEpisode.guid, stagedGUIDs.contains(guid) {
+                continue
+            }
+            if stagedAudioURLs.contains(parsedEpisode.audioURL) {
+                continue
+            }
+
+            if let guid = parsedEpisode.guid {
+                stagedGUIDs.insert(guid)
+            }
+            stagedAudioURLs.insert(parsedEpisode.audioURL)
             newEpisodeData.append(parsedEpisode)
         }
 

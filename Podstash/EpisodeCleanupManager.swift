@@ -108,6 +108,74 @@ class EpisodeCleanupManager {
         }
     }
 
+    /// Collapses Episode rows that refer to the same feed item (matched by guid, falling back
+    /// to audioURL - same preference FeedFetcher uses) into one. Duplicates happen because
+    /// CloudKit sync is asynchronous: FeedFetcher only ever sees *this device's* currently-synced
+    /// state, so if two devices each refresh the same feed before either's newly-created Episode
+    /// row has synced to the other, both independently create their own row for the same item.
+    /// Sorting by id (rather than local fetch/insertion order) before picking which row survives
+    /// keeps the choice deterministic across devices, so independent runs of this pass tend to
+    /// converge on the same survivor instead of leapfrogging each other.
+    func deduplicateEpisodes() {
+        let podcastDescriptor = FetchDescriptor<Podcast>()
+        guard let podcasts = try? modelContext.fetch(podcastDescriptor) else { return }
+
+        for podcast in podcasts {
+            var survivorByKey: [String: Episode] = [:]
+
+            for episode in podcast.episodes.sorted(by: { $0.id.uuidString < $1.id.uuidString }) {
+                let key = episode.guid ?? episode.audioURL
+                guard !key.isEmpty else { continue }
+
+                guard let survivor = survivorByKey[key] else {
+                    survivorByKey[key] = episode
+                    continue
+                }
+
+                merge(episode, into: survivor)
+            }
+        }
+
+        try? modelContext.save()
+    }
+
+    /// Folds `duplicate`'s playback/download/queue state into `survivor`, then deletes
+    /// `duplicate` (and any file it downloaded independently, since that copy is now redundant).
+    private func merge(_ duplicate: Episode, into survivor: Episode) {
+        let duplicateLastPlayed = duplicate.lastPlayedDate ?? .distantPast
+        let survivorLastPlayed = survivor.lastPlayedDate ?? .distantPast
+        if duplicate.isPlayed && (!survivor.isPlayed || duplicateLastPlayed > survivorLastPlayed) {
+            survivor.isPlayed = true
+            survivor.playbackPosition = duplicate.playbackPosition
+            survivor.lastPlayedDate = duplicate.lastPlayedDate
+        } else if !survivor.isPlayed {
+            survivor.playbackPosition = max(survivor.playbackPosition, duplicate.playbackPosition)
+        }
+
+        if survivor.guid == nil {
+            survivor.guid = duplicate.guid
+        }
+
+        if survivor.queuePosition == nil {
+            survivor.queuePosition = duplicate.queuePosition
+        }
+
+        if duplicate.isDownloaded {
+            if survivor.isDownloaded {
+                // Both copies were downloaded independently - the duplicate's is redundant.
+                deleteDownloadedFileIfNeeded(for: duplicate)
+            } else {
+                // `downloadedFilename` is just a stored name resolved against this device's
+                // Downloads folder, so adopting the duplicate's is fine even though it embeds
+                // the duplicate's (now-discarded) id rather than the survivor's.
+                survivor.isDownloaded = true
+                survivor.downloadedFilename = duplicate.downloadedFilename
+            }
+        }
+
+        modelContext.delete(duplicate)
+    }
+
     /// Removes a downloaded episode's audio file from disk, if present, before its `Episode`
     /// record is deleted - otherwise the file is orphaned (still on disk, but no longer
     /// reachable or counted since the record that tracked it is gone).

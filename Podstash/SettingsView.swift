@@ -288,12 +288,12 @@ struct GeneralSettingsView: View {
         // count query re-running off an unrelated state change) traps inside SwiftData's
         // internal invariant checks - an EXC_BREAKPOINT that `try?` can't catch, not a
         // throwable Swift error. The confirmation dialog shown before this already told the
-        // user the app will close.
-        #if os(macOS)
-        NSApplication.shared.terminate(nil)
-        #else
+        // user the app will close. NSApplication.terminate(_:) is NOT immediate - it runs the
+        // normal Cocoa termination sequence (applicationShouldTerminate:, notifications, etc.),
+        // which gives the run loop a window to process a pending re-render and hit that exact
+        // trap. exit(0) kills the process with no further code execution, so it's used on both
+        // platforms here.
         exit(0)
-        #endif
     }
 }
 

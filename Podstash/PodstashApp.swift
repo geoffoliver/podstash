@@ -653,6 +653,9 @@ struct PodstashApp: App {
                 // Reclaim disk space from downloaded files no live episode references anymore.
                 downloadManager.pruneOrphanedDownloads()
 
+                // Reclaim disk space from download temp files orphaned by a crash or force-quit.
+                downloadManager.pruneStaleTempDownloads()
+
                 // Set up callback to refresh feeds after adding a podcast
                 addPodcastCoordinator.triggerRefreshAfterAdding = { podcast in
                     refreshCoordinator.refreshFeed(for: podcast)

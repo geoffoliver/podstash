@@ -16,6 +16,13 @@ final class DownloadManager: NSObject, ObservableObject {
     private var modelContext: ModelContext?
     private var downloadTasks: [UUID: URLSessionDownloadTask] = [:]
     private var urlSession: URLSession!
+
+    // Capped low on purpose: a burst of downloads (e.g. syncFollowMeDownloads after a big batch
+    // goes missing) used to fire every task at once, each completion doing its own SwiftData
+    // fetch+save on the main actor - with enough of them landing in the same window, that stalled
+    // the UI for ~20s. Queuing the rest keeps the app responsive at the cost of some throughput.
+    private let maxConcurrentDownloads = 3
+    private var pendingDownloadQueue: [Episode] = []
     
     override init() {
         super.init()
@@ -59,7 +66,24 @@ final class DownloadManager: NSObject, ObservableObject {
             return
         }
 
-        guard let url = URL(string: episode.audioURL) else { return }
+        guard URL(string: episode.audioURL) != nil else { return }
+
+        guard downloadTasks.count < maxConcurrentDownloads else {
+            pendingDownloadQueue.append(episode)
+            activeDownloads[episode.id] = 0.0
+            return
+        }
+
+        startDownload(episode)
+    }
+
+    private func startDownload(_ episode: Episode) {
+        guard let url = URL(string: episode.audioURL) else {
+            // Shouldn't happen (validated before queuing), but don't let a bad URL stall the
+            // rest of the queue behind it.
+            startNextQueuedDownloadIfNeeded()
+            return
+        }
 
         let task = urlSession.downloadTask(with: url)
         downloadTasks[episode.id] = task
@@ -67,11 +91,26 @@ final class DownloadManager: NSObject, ObservableObject {
         task.resume()
     }
 
+    /// Pulls the next episode off the queue once a download slot frees up. Called after every
+    /// completion, failure, and cancellation.
+    private func startNextQueuedDownloadIfNeeded() {
+        guard downloadTasks.count < maxConcurrentDownloads, !pendingDownloadQueue.isEmpty else { return }
+        startDownload(pendingDownloadQueue.removeFirst())
+    }
+
     func cancelDownload(_ episode: Episode) {
-        guard let task = downloadTasks[episode.id] else { return }
-        task.cancel()
-        downloadTasks.removeValue(forKey: episode.id)
-        activeDownloads.removeValue(forKey: episode.id)
+        if let task = downloadTasks[episode.id] {
+            task.cancel()
+            downloadTasks.removeValue(forKey: episode.id)
+            activeDownloads.removeValue(forKey: episode.id)
+            startNextQueuedDownloadIfNeeded()
+            return
+        }
+
+        if let index = pendingDownloadQueue.firstIndex(where: { $0.id == episode.id }) {
+            pendingDownloadQueue.remove(at: index)
+            activeDownloads.removeValue(forKey: episode.id)
+        }
     }
 
     func deleteDownload(_ episode: Episode) {
@@ -87,13 +126,16 @@ final class DownloadManager: NSObject, ObservableObject {
 
     /// Finds episodes marked downloaded via iCloud sync from another device whose file isn't
     /// actually present here yet, and starts downloading them locally - so "downloaded"
-    /// follows you across devices instead of silently falling back to streaming.
+    /// follows you across devices instead of silently falling back to streaming. Skips already-
+    /// played episodes - re-fetching something the user has already listened to just because its
+    /// local bytes went missing (crash, manual deletion, etc.) isn't "following you", it's a
+    /// pointless redownload of something they're done with.
     func syncFollowMeDownloads(settings: AppSettings) {
         guard settings.iCloudSyncEnabled else { return }
         guard let modelContext else { return }
 
         let descriptor = FetchDescriptor<Episode>(
-            predicate: #Predicate { $0.isDownloaded }
+            predicate: #Predicate { $0.isDownloaded && !$0.isPlayed }
         )
         guard let episodes = try? modelContext.fetch(descriptor) else { return }
 
@@ -130,6 +172,37 @@ final class DownloadManager: NSObject, ObservableObject {
         for fileURL in fileURLs where !referencedFilenames.contains(fileURL.lastPathComponent) {
             let modificationDate = (try? fileURL.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate ?? Date()
             guard modificationDate < cutoff else { continue }
+            try? fileManager.removeItem(at: fileURL)
+        }
+    }
+
+    /// Deletes leftover ".tmp" download files sitting directly in the app's temp directory -
+    /// both the OS's raw `CFNetworkDownload_*.tmp` files and our own copies made in
+    /// `urlSession(_:downloadTask:didFinishDownloadingTo:)` (named `<uuid>.tmp`, since the copy's
+    /// extension is inherited from the system file's, not the audio format). Both are normally
+    /// removed within moments of being created; anything still here after an hour was orphaned by
+    /// the app dying (crash, force-quit) before it could finish processing or clean up after
+    /// itself - that's what filled up `tmp` while `Downloads` stayed empty.
+    ///
+    /// Only looks at the temp directory's top level and only at ".tmp" files, so it can't touch
+    /// unrelated subdirectories other frameworks use (e.g. AVFoundation's media cache).
+    func pruneStaleTempDownloads() {
+        let fileManager = FileManager.default
+        let tempDirectory = fileManager.temporaryDirectory
+        guard let fileURLs = try? fileManager.contentsOfDirectory(
+            at: tempDirectory,
+            includingPropertiesForKeys: [.contentModificationDateKey, .isRegularFileKey]
+        ) else { return }
+
+        let cutoff = Date().addingTimeInterval(-60 * 60)
+
+        for fileURL in fileURLs where fileURL.pathExtension == "tmp" {
+            let isRegularFile = (try? fileURL.resourceValues(forKeys: [.isRegularFileKey]))?.isRegularFile ?? false
+            guard isRegularFile else { continue }
+
+            let modificationDate = (try? fileURL.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate ?? Date()
+            guard modificationDate < cutoff else { continue }
+
             try? fileManager.removeItem(at: fileURL)
         }
     }
@@ -254,6 +327,7 @@ extension DownloadManager: URLSessionDownloadDelegate {
                 // Clean up download tracking
                 downloadTasks.removeValue(forKey: episodeID)
                 activeDownloads.removeValue(forKey: episodeID)
+                startNextQueuedDownloadIfNeeded()
             }
         } catch {
             print("Failed to copy temp download file: \(error)")
@@ -292,8 +366,9 @@ extension DownloadManager: URLSessionDownloadDelegate {
             if let episodeID = episodeID {
                 downloadTasks.removeValue(forKey: episodeID)
                 activeDownloads.removeValue(forKey: episodeID)
+                startNextQueuedDownloadIfNeeded()
             }
-            
+
             print("Download failed: \(error.localizedDescription)")
         }
     }

@@ -3,6 +3,28 @@
     <channel>
         <title>Podstash</title>
         <item>
+            <title>0.0.16</title>
+            <pubDate>Sun, 09 Aug 2026 19:59:13 +0000</pubDate>
+            <link>https://geoffoliver.github.io/podstash/</link>
+            <sparkle:version>21</sparkle:version>
+            <sparkle:shortVersionString>0.0.16</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>26.5</sparkle:minimumSystemVersion>
+            <description sparkle:format="markdown"><![CDATA[macOS build below is a universal binary (Apple Silicon & Intel), Developer ID signed and notarized — no Gatekeeper warnings. Unzip and drag Podstash.app to /Applications.
+
+## What's Changed
+- Bump to 0.0.16
+- Fix all Xcode build warnings
+- Fix duplicate episodes and orphaned downloaded files
+- removed commented code
+- updated "queue" sidebar icon
+- updated icon
+
+**Full Changelog**: https://github.com/geoffoliver/podstash/compare/v0.0.15...v0.0.16
+
+]]></description>
+            <enclosure url="https://github.com/geoffoliver/podstash/releases/download/v0.0.16/Podstash.app.zip" length="4900106" type="application/octet-stream" sparkle:edSignature="s6gq0yzFboMMAh0Yo6Xr9t+g/m7A+bC3zQ7KKLYbZBgr8b6CtgUtTMu3HgzhRu+/aAZeZrFCCmna2T0zqUVXAg=="/>
+        </item>
+        <item>
             <title>0.0.15</title>
             <pubDate>Sat, 08 Aug 2026 04:01:08 +0000</pubDate>
             <link>https://geoffoliver.github.io/podstash/</link>
@@ -40,24 +62,6 @@
 
 ]]></description>
             <enclosure url="https://github.com/geoffoliver/podstash/releases/download/v0.0.14/Podstash.app.zip" length="4629549" type="application/octet-stream" sparkle:edSignature="JmFel7eE7EaHklzqoML2BSRxYvzYbiCDvOuEUaUoPrEBYnPeY2E/hc1bH6x5fHi3P9HvrRbsy98iXb0TeVR9AA=="/>
-        </item>
-        <item>
-            <title>0.0.13</title>
-            <pubDate>Sat, 08 Aug 2026 00:33:51 +0000</pubDate>
-            <link>https://geoffoliver.github.io/podstash/</link>
-            <sparkle:version>18</sparkle:version>
-            <sparkle:shortVersionString>0.0.13</sparkle:shortVersionString>
-            <sparkle:minimumSystemVersion>26.5</sparkle:minimumSystemVersion>
-            <description sparkle:format="markdown"><![CDATA[macOS build below is a universal binary (Apple Silicon & Intel), Developer ID signed and notarized — no Gatekeeper warnings. Unzip and drag Podstash.app to /Applications.
-
-## What's Changed
-- Bump to 0.0.13
-- Fix crash when resetting local sync on iOS
-
-**Full Changelog**: https://github.com/geoffoliver/podstash/compare/v0.0.12...v0.0.13
-
-]]></description>
-            <enclosure url="https://github.com/geoffoliver/podstash/releases/download/v0.0.13/Podstash.app.zip" length="4629508" type="application/octet-stream" sparkle:edSignature="02ft39cxwsGOUXEnBNfHlOiql59/Fh8dVWsMHf8nxZSYi6cEqQB4hU/WS4qq5vFEEw/eoEaAkuAEsnoP/T4qDA=="/>
         </item>
     </channel>
 </rss>

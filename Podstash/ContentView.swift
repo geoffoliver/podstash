@@ -623,9 +623,6 @@ struct QueueRowView: View {
                     .foregroundColor(.white.opacity(0.8))
             }
             
-            /*
-            Image(platformImage: PlatformImage(imageLiteralResourceName: "Podstash"))
-            */
             .frame(width: iconSize, height: iconSize)
             .cornerRadius(6)
             

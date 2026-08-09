@@ -200,7 +200,7 @@ struct MiniPlayerView: View {
             .onAppear {
                 windowSize = geometry.size
             }
-            .onChange(of: geometry.size) { newSize in
+            .onChange(of: geometry.size) { _, newSize in
                 windowSize = newSize
             }
         }

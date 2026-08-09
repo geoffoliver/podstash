@@ -302,9 +302,10 @@ class AudioPlayerManager: ObservableObject {
     func seek(to time: TimeInterval) {
         let cmTime = CMTime(seconds: time, preferredTimescale: 600)
         player?.seek(to: cmTime) { [weak self] completed in
-            if completed {
-                self?.currentTime = time
-                self?.updateNowPlayingInfo()
+            guard completed, let self else { return }
+            Task { @MainActor in
+                self.currentTime = time
+                self.updateNowPlayingInfo()
             }
         }
     }
@@ -499,8 +500,9 @@ class AudioPlayerManager: ObservableObject {
         // Saving every 10 seconds is excessive and triggers SwiftData @Query updates
         // We already save on pause, stop, and when episodes finish
         periodicSaveTimer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
-            guard let self = self, let episode = self.currentEpisode else { return }
+            guard let self else { return }
             Task { @MainActor in
+                guard let episode = self.currentEpisode else { return }
                 self.saveProgress(for: episode)
             }
         }
@@ -516,34 +518,35 @@ class AudioPlayerManager: ObservableObject {
         // UI updates don't need to be more frequent than once per second
         let interval = CMTime(seconds: 1.0, preferredTimescale: 600)
         timeObserver = player?.addPeriodicTimeObserver(forInterval: interval, queue: .main) { [weak self] time in
-            guard let self = self else { return }
-            
-            let newTime = time.seconds
-            
-            // CRITICAL FIX: Only publish time updates if they've changed by at least 0.5 seconds
-            // This prevents rapid-fire @Published updates that cause view re-rendering
-            // Note: We removed the "guard isPlaying" check to ensure currentTime updates
-            // even when paused, which helps UI responsiveness for play/pause button state
-            if abs(newTime - self.currentTime) >= 0.5 {
-                self.currentTime = newTime
+            guard let self else { return }
+            Task { @MainActor in
+                let newTime = time.seconds
 
-                // Keep Control Center / lock screen elapsed time in sync while playing
-                if self.isPlaying {
-                    self.updateNowPlayingInfo()
+                // CRITICAL FIX: Only publish time updates if they've changed by at least 0.5 seconds
+                // This prevents rapid-fire @Published updates that cause view re-rendering
+                // Note: We removed the "guard isPlaying" check to ensure currentTime updates
+                // even when paused, which helps UI responsiveness for play/pause button state
+                if abs(newTime - self.currentTime) >= 0.5 {
+                    self.currentTime = newTime
+
+                    // Keep Control Center / lock screen elapsed time in sync while playing
+                    if self.isPlaying {
+                        self.updateNowPlayingInfo()
+                    }
                 }
-            }
 
-            // Update duration only once, not on every tick
-            if self.duration == 0,
-               let duration = self.player?.currentItem?.duration.seconds,
-               !duration.isNaN && !duration.isInfinite {
-                self.duration = duration
+                // Update duration only once, not on every tick
+                if self.duration == 0,
+                   let duration = self.player?.currentItem?.duration.seconds,
+                   !duration.isNaN && !duration.isInfinite {
+                    self.duration = duration
 
-                // Update episode duration if not set
-                if let episode = self.currentEpisode,
-                   episode.duration == nil || episode.duration == 0 {
-                    episode.duration = duration
-                    try? self.modelContext?.save()
+                    // Update episode duration if not set
+                    if let episode = self.currentEpisode,
+                       episode.duration == nil || episode.duration == 0 {
+                        episode.duration = duration
+                        try? self.modelContext?.save()
+                    }
                 }
             }
         }

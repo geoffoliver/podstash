@@ -21,17 +21,11 @@ class FeedFetcher {
     let imageCacheManager: ImageCacheManager
     var downloadManager: DownloadManager?
     
-    init(modelContext: ModelContext, settings: AppSettings, imageCacheManager: ImageCacheManager = .shared, downloadManager: DownloadManager? = nil) {
+    init(modelContext: ModelContext, settings: AppSettings, imageCacheManager: ImageCacheManager? = nil, downloadManager: DownloadManager? = nil) {
         self.modelContext = modelContext
         self.settings = settings
-        self.imageCacheManager = imageCacheManager
+        self.imageCacheManager = imageCacheManager ?? .shared
         self.downloadManager = downloadManager
-    }
-    
-    /// Determine optimal concurrency based on system capabilities
-    private var maxConcurrentFetches: Int {
-        // Process feeds one at a time to keep UI responsive
-        return 1
     }
     
     /// Fetch and parse a single podcast feed, updating the podcast and adding episodes
@@ -227,123 +221,50 @@ class FeedFetcher {
         await Task.yield()
     }
     
-    /// Fetch feeds for multiple podcasts with concurrent processing
+    /// Fetch feeds for multiple podcasts one at a time to keep the UI responsive
     func fetchFeeds(for podcasts: [Podcast], progressHandler: ((String, Int, Int) -> Void)? = nil) async -> [Podcast: Result<Void, Error>] {
         var results: [Podcast: Result<Void, Error>] = [:]
-        let resultsLock = NSLock()
-        
-        // Track podcasts that were successfully updated
         var updatedPodcasts: [Podcast] = []
-        let podcastsLock = NSLock()
-        
-        // Process podcasts concurrently with a limit
-        await withTaskGroup(of: (Podcast, Result<Void, Error>).self) { group in
-            var currentIndex = 0
-            let total = podcasts.count
-            
-            // Start initial batch of tasks
-            for podcast in podcasts.prefix(maxConcurrentFetches) {
-                group.addTask { [weak self] in
-                    guard let self = self else {
-                        return (podcast, .failure(FeedFetchError.parsingFailed))
-                    }
-                    
-                    // Check for cancellation before starting
-                    if Task.isCancelled {
-                        return (podcast, .failure(CancellationError()))
-                    }
-                    
-                    let result: Result<Void, Error>
-                    do {
-                        try await self.fetchFeed(for: podcast, shouldSave: false)
-                        result = .success(())
-                    } catch is CancellationError {
-                        return (podcast, .failure(CancellationError()))
-                    } catch {
-                        result = .failure(error)
-                    }
-                    
-                    return (podcast, result)
-                }
-                currentIndex += 1
+
+        let total = podcasts.count
+        var lastProgressUpdate = CFAbsoluteTimeGetCurrent()
+
+        for (index, podcast) in podcasts.enumerated() {
+            if Task.isCancelled { break }
+
+            let result: Result<Void, Error>
+            do {
+                try await fetchFeed(for: podcast, shouldSave: false)
+                result = .success(())
+            } catch {
+                result = .failure(error)
             }
-            
-            var completed = 0
-            var lastProgressUpdate = CFAbsoluteTimeGetCurrent()
-            
-            // As tasks complete, add new ones
-            for await (podcast, result) in group {
-                // Check for cancellation
-                if Task.isCancelled {
-                    break
-                }
-                
-                // Throttle progress updates to reduce UI thrashing
-                completed += 1
-                let now = CFAbsoluteTimeGetCurrent()
-                if now - lastProgressUpdate > 0.1 || completed == total {
-                    await MainActor.run {
-                        progressHandler?(podcast.title, completed, total)
-                    }
-                    lastProgressUpdate = now
-                }
-                
-                // Store result
-                resultsLock.lock()
-                results[podcast] = result
-                resultsLock.unlock()
-                
-                // Track successfully updated podcasts
-                if case .success = result {
-                    podcastsLock.lock()
-                    updatedPodcasts.append(podcast)
-                    podcastsLock.unlock()
-                }
-                
-                // Add next task if available and not cancelled
-                if currentIndex < podcasts.count && !Task.isCancelled {
-                    let nextPodcast = podcasts[currentIndex]
-                    currentIndex += 1
-                    
-                    group.addTask { [weak self] in
-                        guard let self = self else {
-                            return (nextPodcast, .failure(FeedFetchError.parsingFailed))
-                        }
-                        
-                        // Check for cancellation before starting
-                        if Task.isCancelled {
-                            return (nextPodcast, .failure(CancellationError()))
-                        }
-                        
-                        let result: Result<Void, Error>
-                        do {
-                            try await self.fetchFeed(for: nextPodcast, shouldSave: false)
-                            result = .success(())
-                        } catch is CancellationError {
-                            return (nextPodcast, .failure(CancellationError()))
-                        } catch {
-                            result = .failure(error)
-                        }
-                        
-                        return (nextPodcast, result)
-                    }
-                }
+
+            // Throttle progress updates to reduce UI thrashing
+            let completed = index + 1
+            let now = CFAbsoluteTimeGetCurrent()
+            if now - lastProgressUpdate > 0.1 || completed == total {
+                progressHandler?(podcast.title, completed, total)
+                lastProgressUpdate = now
+            }
+
+            results[podcast] = result
+            if case .success = result {
+                updatedPodcasts.append(podcast)
             }
         }
-        
+
         // ONE SINGLE SAVE AT THE END - no intermediate saves!
         if !Task.isCancelled {
             // Update all timestamps at once to trigger ONE UI update instead of 40
-            await MainActor.run {
-                let now = Date()
-                for podcast in updatedPodcasts {
-                    podcast.lastUpdated = now
-                }
+            let now = Date()
+            for podcast in updatedPodcasts {
+                podcast.lastUpdated = now
             }
-            
+
             await performFinalSave()
         }
-        
+
         return results
     }
     

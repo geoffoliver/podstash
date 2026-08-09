@@ -358,28 +358,28 @@ enum OPMLParseResult {
     case failure(String)
 }
 
-class OPMLFeedParser: NSObject, XMLParserDelegate {
+nonisolated class OPMLFeedParser: NSObject, XMLParserDelegate {
     private var parser: XMLParser?
     private var feeds: [OPMLFeed] = []
-    
-    nonisolated override init() {
+
+    override init() {
         super.init()
     }
-    
-    nonisolated func parse(data: Data) -> OPMLParseResult {
+
+    func parse(data: Data) -> OPMLParseResult {
         parser = XMLParser(data: data)
         parser?.delegate = self
-        
+
         if parser?.parse() ?? false {
             return .success(feeds)
         } else {
             return .failure("XML parsing error")
         }
     }
-    
+
     // XMLParserDelegate methods
-    
-    nonisolated func parser(_ parser: XMLParser, didStartElement elementName: String,
+
+    func parser(_ parser: XMLParser, didStartElement elementName: String,
                 namespaceURI: String?, qualifiedName qName: String?,
                 attributes attributeDict: [String : String] = [:]) {
         if elementName.lowercased() == "outline" {
@@ -404,7 +404,7 @@ class OPMLFeedParser: NSObject, XMLParserDelegate {
         }
     }
     
-    nonisolated func parser(_ parser: XMLParser, parseErrorOccurred parseError: Error) {
+    func parser(_ parser: XMLParser, parseErrorOccurred parseError: Error) {
         // Could handle or log errors here if needed
     }
 }

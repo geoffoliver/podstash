@@ -133,7 +133,7 @@ struct ContentView: View {
                     .zIndex(1)
             }
         }
-        .onChange(of: opmlCoordinator.isImporting) { showingImportProgress = $0 }
+        .onChange(of: opmlCoordinator.isImporting) { _, newValue in showingImportProgress = newValue }
         .onReceive(opmlCoordinator.$importCompleted) { completedMessage in
             guard let completedMessage = completedMessage else { return }
             importCompletedMessage = completedMessage
@@ -255,7 +255,7 @@ struct ContentView: View {
                     .zIndex(1)
             }
         }
-        .onChange(of: opmlCoordinator.isImporting) { showingImportProgress = $0 }
+        .onChange(of: opmlCoordinator.isImporting) { _, newValue in showingImportProgress = newValue }
         .onReceive(opmlCoordinator.$importCompleted) { completedMessage in
             guard let completedMessage = completedMessage else { return }
             importCompletedMessage = completedMessage
@@ -446,7 +446,7 @@ struct PodcastListView: View {
             isFocused = true
         }
         #endif
-        .onChange(of: multiSelection) { newSelection in
+        .onChange(of: multiSelection) { _, newSelection in
             // Update selectedPodcast when single selection changes
             if newSelection.count > 1, newSelection.contains(Self.queueTag) {
                 // Queue got swept into a multi-item selection (Cmd+A, Shift+click range) -

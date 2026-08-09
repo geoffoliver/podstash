@@ -26,7 +26,7 @@ struct ParsedEpisode {
     let artworkURL: String?
 }
 
-class RSSFeedParser: NSObject, XMLParserDelegate {
+nonisolated class RSSFeedParser: NSObject, XMLParserDelegate {
     private var parser: XMLParser?
     private var currentElement = ""
     private var currentText = ""
@@ -299,7 +299,7 @@ class RSSFeedParser: NSObject, XMLParserDelegate {
 
 // MARK: - String Extension
 
-extension String {
+nonisolated extension String {
     /// Decode only the most common HTML entities for titles and plain text
     /// No regex, no complex parsing - just simple string replacement
     func decodingBasicHTMLEntities() -> String {

@@ -49,16 +49,16 @@ struct CachedAsyncImage<Content: View, Placeholder: View>: View {
         let urlString = url.absoluteString
         
         // Check cache first (on main actor since ImageCacheManager is @MainActor)
-        if let cachedImage = await ImageCacheManager.shared.getCachedImage(for: urlString) {
+        if let cachedImage = ImageCacheManager.shared.getCachedImage(for: urlString) {
             self.image = cachedImage
             return
         }
-        
+
         // Download and cache
         _ = await ImageCacheManager.shared.cacheImage(from: urlString)
-        
+
         // Load from cache after download
-        if let cachedImage = await ImageCacheManager.shared.getCachedImage(for: urlString) {
+        if let cachedImage = ImageCacheManager.shared.getCachedImage(for: urlString) {
             self.image = cachedImage
         }
     }

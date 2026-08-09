@@ -216,7 +216,7 @@ final class DownloadManager: NSObject, ObservableObject {
 
 extension DownloadManager: URLSessionDownloadDelegate {
     nonisolated func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {
-        guard let url = downloadTask.originalRequest?.url else { return }
+        guard downloadTask.originalRequest?.url != nil else { return }
         
         // IMPORTANT: Copy the file immediately before this method returns!
         // The system will delete the temp file after this delegate method completes.

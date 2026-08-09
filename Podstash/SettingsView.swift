@@ -318,7 +318,7 @@ struct FeedSettingsView: View {
                     }
                 }
                 .labelsHidden()
-                .onChange(of: settings.refreshInterval) { _ in
+                .onChange(of: settings.refreshInterval) {
                     autoRefreshManager.updateRefreshInterval()
                 }
             }

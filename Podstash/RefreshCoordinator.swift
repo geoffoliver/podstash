@@ -52,7 +52,7 @@ class RefreshCoordinator: ObservableObject {
     }
     
     func refreshAllFeeds() {
-        guard let modelContext = modelContext, !isRefreshing else { return }
+        guard modelContext != nil, !isRefreshing else { return }
         
         // Cancel any existing refresh first
         refreshTask?.cancel()
@@ -67,7 +67,7 @@ class RefreshCoordinator: ObservableObject {
     }
     
     func refreshSingleFeed(_ podcast: Podcast) {
-        guard let modelContext = modelContext, !isRefreshing else { return }
+        guard modelContext != nil, !isRefreshing else { return }
         
         refreshTask = Task {
             await performRefresh(for: [podcast])

@@ -159,7 +159,13 @@ struct QueueTableView: NSViewRepresentable {
         }
 
         func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
-            let item = episodes[row]
+            // AppKit calls this directly during window-state restoration, replaying a row count
+            // from a previous session's saved layout - if the queue has fewer rows this launch
+            // (e.g. episodes got marked played/unsubscribed since that state was saved), row can
+            // momentarily be out of range. Every other call site in this file already guards with
+            // `episodes[safe:]`; this one didn't, and an out-of-range index here crashes the app
+            // outright instead of just skipping the row.
+            guard let item = episodes[safe: row] else { return nil }
 
             let view = NSHostingView(
                 rootView: QueueEpisodeRow(

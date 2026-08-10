@@ -14,6 +14,101 @@ import SwiftData
 import BackgroundTasks
 #endif
 
+enum FeedValidationResult {
+    case success(ParsedPodcast)
+    case failure(String)
+}
+
+enum PodcastSubscribeOutcome {
+    case success(Podcast)
+    case alreadySubscribed
+    case failure(String)
+}
+
+// Shared by AddPodcastCoordinator (manual URL entry) and PodcastSearchCoordinator (iTunes
+// search results) so both flows fetch/parse/subscribe/download identically.
+@MainActor
+enum PodcastSubscriber {
+    static func subscribe(feedURLString: String, modelContext: ModelContext) async -> PodcastSubscribeOutcome {
+        let urlString = feedURLString.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !urlString.isEmpty else {
+            return .failure("Please enter a feed URL")
+        }
+
+        guard let url = URL(string: urlString),
+              url.scheme == "http" || url.scheme == "https" else {
+            return .failure("Please enter a valid HTTP or HTTPS URL")
+        }
+
+        let result = await Task.detached {
+            do {
+                let (data, _) = try await URLSession.shared.data(from: url)
+                let parser = RSSFeedParser()
+
+                guard let parsedPodcast = parser.parse(data: data) else {
+                    return FeedValidationResult.failure("Unable to parse feed. Please check the URL.")
+                }
+
+                guard !parsedPodcast.episodes.isEmpty else {
+                    return FeedValidationResult.failure("No episodes found in this feed.")
+                }
+
+                return FeedValidationResult.success(parsedPodcast)
+            } catch {
+                return FeedValidationResult.failure("Failed to fetch feed: \(error.localizedDescription)")
+            }
+        }.value
+
+        guard !Task.isCancelled else {
+            return .failure("Cancelled")
+        }
+
+        switch result {
+        case .failure(let message):
+            return .failure(message)
+
+        case .success(let parsedPodcast):
+            let subscriptionManager = SubscriptionManager(modelContext: modelContext)
+
+            guard subscriptionManager.subscribe(
+                title: parsedPodcast.title,
+                feedURL: urlString,
+                websiteURL: parsedPodcast.websiteURL,
+                description: parsedPodcast.description
+            ) else {
+                return .alreadySubscribed
+            }
+
+            let descriptor = FetchDescriptor<Podcast>(
+                predicate: #Predicate { podcast in
+                    podcast.feedURL == urlString
+                }
+            )
+
+            guard let podcasts = try? modelContext.fetch(descriptor),
+                  let newPodcast = podcasts.first else {
+                return .failure("Failed to save podcast")
+            }
+
+            // Only fills in podcast-level metadata for immediate UI feedback (artwork, author) -
+            // episode creation is deliberately left to the caller's post-subscribe refresh
+            // (FeedFetcher.fetchFeed(for:)). FeedFetcher already has the correct "new episodes
+            // just created -> honor autoDownloadNewEpisodes" logic; duplicating episode creation
+            // here meant that call always saw those episodes as already-existing and never
+            // auto-downloaded anything.
+            newPodcast.podcastDescription = parsedPodcast.description
+            newPodcast.artworkURL = parsedPodcast.artworkURL
+            newPodcast.author = parsedPodcast.author
+            newPodcast.websiteURL = parsedPodcast.websiteURL
+            newPodcast.lastUpdated = Date()
+            try? modelContext.save()
+
+            return .success(newPodcast)
+        }
+    }
+}
+
 @MainActor
 class AddPodcastCoordinator: ObservableObject {
     @Published var isPresented: Bool = false
@@ -21,7 +116,7 @@ class AddPodcastCoordinator: ObservableObject {
     @Published var isValidating: Bool = false
     @Published var validationMessage: String? = nil
     @Published var showSuccessMessage: Bool = false
-    
+
     private var modelContext: ModelContext?
     private var validationTask: Task<Void, Never>?
 
@@ -39,7 +134,7 @@ class AddPodcastCoordinator: ObservableObject {
         showSuccessMessage = false
         isPresented = true
     }
-    
+
     func cancel() {
         validationTask?.cancel()
         isPresented = false
@@ -48,137 +143,50 @@ class AddPodcastCoordinator: ObservableObject {
         isValidating = false
         showSuccessMessage = false
     }
-    
+
     func addPodcast() {
         guard let modelContext = modelContext else {
             validationMessage = "Error: Database not available"
             return
         }
-        
-        let urlString = feedURL.trimmingCharacters(in: .whitespacesAndNewlines)
-        
-        // Basic URL validation
-        guard !urlString.isEmpty else {
-            validationMessage = "Please enter a feed URL"
-            return
-        }
-        
-        guard let url = URL(string: urlString),
-              url.scheme == "http" || url.scheme == "https" else {
-            validationMessage = "Please enter a valid HTTP or HTTPS URL"
-            return
-        }
-        
+
         isValidating = true
         validationMessage = nil
-        
+
+        let urlString = feedURL
+
         validationTask = Task {
-            // Fetch and parse the feed
-            let result = await Task.detached {
-                do {
-                    let (data, _) = try await URLSession.shared.data(from: url)
-                    let parser = RSSFeedParser()
-                    
-                    guard let parsedPodcast = parser.parse(data: data) else {
-                        return FeedValidationResult.failure("Unable to parse feed. Please check the URL.")
-                    }
-                    
-                    // Verify it has audio content
-                    guard !parsedPodcast.episodes.isEmpty else {
-                        return FeedValidationResult.failure("No episodes found in this feed.")
-                    }
-                    
-                    return FeedValidationResult.success(parsedPodcast)
-                } catch {
-                    return FeedValidationResult.failure("Failed to fetch feed: \(error.localizedDescription)")
-                }
-            }.value
-            
+            let outcome = await PodcastSubscriber.subscribe(feedURLString: urlString, modelContext: modelContext)
+
             guard !Task.isCancelled else {
                 return
             }
-            
-            await MainActor.run {
-                switch result {
-                case .success(let parsedPodcast):
-                    // Check if already subscribed
-                    let subscriptionManager = SubscriptionManager(modelContext: modelContext)
-                    
-                    if subscriptionManager.subscribe(
-                        title: parsedPodcast.title,
-                        feedURL: urlString,
-                        websiteURL: parsedPodcast.websiteURL,
-                        description: parsedPodcast.description
-                    ) {
-                        // Successfully subscribed - now fetch the podcast to get it fully set up
-                        Task {
-                            // Get the newly created podcast
-                            let descriptor = FetchDescriptor<Podcast>(
-                                predicate: #Predicate { podcast in
-                                    podcast.feedURL == urlString
-                                }
-                            )
-                            
-                            if let podcasts = try? modelContext.fetch(descriptor),
-                               let newPodcast = podcasts.first {
-                                
-                                // Update podcast with parsed data and episodes
-                                await updateNewPodcast(newPodcast, with: parsedPodcast)
-                                
-                                // Trigger refresh callback
-                                triggerRefreshAfterAdding?(newPodcast)
-                                
-                                // Show success
-                                await MainActor.run {
-                                    isValidating = false
-                                    showSuccessMessage = true
-                                    
-                                    // Auto-dismiss after 1.5 seconds
-                                    Task {
-                                        try? await Task.sleep(for: .seconds(1.5))
-                                        await MainActor.run {
-                                            cancel()
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    } else {
-                        // Already subscribed
-                        validationMessage = "You're already subscribed to this podcast"
-                        isValidating = false
+
+            switch outcome {
+            case .success(let newPodcast):
+                triggerRefreshAfterAdding?(newPodcast)
+
+                isValidating = false
+                showSuccessMessage = true
+
+                // Auto-dismiss after 1.5 seconds
+                Task {
+                    try? await Task.sleep(for: .seconds(1.5))
+                    await MainActor.run {
+                        cancel()
                     }
-                    
-                case .failure(let error):
-                    validationMessage = error
-                    isValidating = false
                 }
+
+            case .alreadySubscribed:
+                validationMessage = "You're already subscribed to this podcast"
+                isValidating = false
+
+            case .failure(let message):
+                validationMessage = message
+                isValidating = false
             }
         }
     }
-    
-    // Only fills in podcast-level metadata for immediate UI feedback (artwork, author) -
-    // episode creation is deliberately left to the triggerRefreshAfterAdding callback's
-    // FeedFetcher.fetchFeed(for:) call right after this returns. FeedFetcher already has the
-    // correct "new episodes just created -> honor autoDownloadNewEpisodes" logic; duplicating
-    // episode creation here meant that call always saw those episodes as already-existing and
-    // never auto-downloaded anything.
-    private func updateNewPodcast(_ podcast: Podcast, with parsedPodcast: ParsedPodcast) async {
-        guard let modelContext = modelContext else { return }
-
-        podcast.podcastDescription = parsedPodcast.description
-        podcast.artworkURL = parsedPodcast.artworkURL
-        podcast.author = parsedPodcast.author
-        podcast.websiteURL = parsedPodcast.websiteURL
-        podcast.lastUpdated = Date()
-
-        try? modelContext.save()
-    }
-}
-
-enum FeedValidationResult {
-    case success(ParsedPodcast)
-    case failure(String)
 }
 
 @MainActor
@@ -575,6 +583,7 @@ struct PodstashApp: App {
 
     @StateObject private var settings = AppSettings()
     @StateObject private var addPodcastCoordinator = AddPodcastCoordinator()
+    @StateObject private var podcastSearchCoordinator = PodcastSearchCoordinator()
     @StateObject private var opmlCoordinator = OPMLImportCoordinator()
     @StateObject private var refreshCoordinator = RefreshCoordinator()
     @StateObject private var audioPlayer = AudioPlayerManager()
@@ -648,6 +657,7 @@ struct PodstashApp: App {
         PodcastDirectoryProvider { podcastDirectory in
         ContentView()
             .environmentObject(addPodcastCoordinator)
+            .environmentObject(podcastSearchCoordinator)
             .environmentObject(opmlCoordinator)
             .environmentObject(refreshCoordinator)
             .environmentObject(audioPlayer)
@@ -657,6 +667,7 @@ struct PodstashApp: App {
             .onAppear {
                 let context = sharedModelContainer.mainContext
                 addPodcastCoordinator.setModelContext(context)
+                podcastSearchCoordinator.setModelContext(context)
                 opmlCoordinator.setModelContext(context)
                 refreshCoordinator.setModelContext(context)
                 refreshCoordinator.setSettings(settings)
@@ -679,6 +690,9 @@ struct PodstashApp: App {
 
                 // Set up callback to refresh feeds after adding a podcast
                 addPodcastCoordinator.triggerRefreshAfterAdding = { podcast in
+                    refreshCoordinator.refreshFeed(for: podcast)
+                }
+                podcastSearchCoordinator.triggerRefreshAfterAdding = { podcast in
                     refreshCoordinator.refreshFeed(for: podcast)
                 }
 
@@ -713,6 +727,17 @@ struct PodstashApp: App {
                         .zIndex(998)
                 }
             }
+            .overlay {
+                if podcastSearchCoordinator.isPresented {
+                    Color.black.opacity(0.5)
+                        .ignoresSafeArea()
+                        .overlay(
+                            PodcastSearchSheet(coordinator: podcastSearchCoordinator)
+                        )
+                        .allowsHitTesting(true)
+                        .zIndex(998)
+                }
+            }
             #if os(macOS)
             .background(MainWindowIdentifierAccessor())
             #endif
@@ -726,6 +751,11 @@ struct PodstashApp: App {
                 addPodcastCoordinator.showDialog()
             }
             .keyboardShortcut("n", modifiers: .command)
+
+            Button("Search Podcasts…") {
+                podcastSearchCoordinator.showDialog()
+            }
+            .keyboardShortcut("f", modifiers: .command)
 
             Button("Import OPML…") {
                 opmlCoordinator.importOPML()
@@ -886,41 +916,17 @@ struct AddPodcastSheet: View {
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
 
-                    // Placeholder is drawn manually instead of via TextField's native
-                    // `placeholder:` param - on iOS, text that looks like a URL was getting
-                    // auto-styled in link-blue instead of the standard secondary gray, even
-                    // as unentered placeholder text. A plain overlaid Text sidesteps that.
-                    ZStack(alignment: .leading) {
-                        if coordinator.feedURL.isEmpty {
-                            Text("https://example.com/feed.rss")
-                                .foregroundStyle(.secondary)
-                                .padding(.horizontal, 10)
-                        }
-                        TextField("", text: $coordinator.feedURL)
-                            .padding(10)
-                            #if os(macOS)
-                            .textFieldStyle(.plain)
-                            #else
-                            .keyboardType(.URL)
-                            .textInputAutocapitalization(.never)
-                            .autocorrectionDisabled()
-                            #endif
+                    PlaceholderTextField(
+                        placeholder: "https://example.com/feed.rss",
+                        text: $coordinator.feedURL,
+                        isURLField: true
+                    ) {
+                        coordinator.addPodcast()
                     }
-                    .background(
-                        RoundedRectangle(cornerRadius: 8)
-                            .fill(Color.primary.opacity(0.06))
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 8)
-                            .stroke(Color.primary.opacity(0.15), lineWidth: 1)
-                    )
                     #if os(macOS)
                     .frame(width: 400)
                     #endif
                     .disabled(coordinator.isValidating)
-                    .onSubmit {
-                        coordinator.addPodcast()
-                    }
 
                     if let message = coordinator.validationMessage {
                         Label(message, systemImage: "exclamationmark.triangle.fill")

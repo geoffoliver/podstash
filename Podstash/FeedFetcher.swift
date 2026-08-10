@@ -105,44 +105,42 @@ class FeedFetcher {
             podcast.lastUpdated = Date()
         }
         
-        // Match parsed episodes against what's already stored, preferring guid (the RSS-spec
-        // stable identifier) over audioURL. Ad-supported feeds routinely rotate tracking tokens
-        // in the enclosure URL, so audioURL alone isn't reliable - matching on it exclusively
-        // caused already-played episodes to be recreated as "new" (unplayed, requeued) whenever
-        // their URL moved. Episodes stored before guid tracking existed are backfilled here so
-        // future refreshes match on guid too.
+        // Match parsed episodes against what's already stored locally, preferring guid (the
+        // RSS-spec stable identifier) over audioURL. Ad-supported feeds routinely rotate
+        // tracking tokens in the enclosure URL, so audioURL alone isn't reliable - matching on
+        // it exclusively caused already-played episodes to be recreated as "new" whenever their
+        // URL moved. Episodes stored before guid tracking existed are backfilled here so future
+        // refreshes match on guid too. Episode has no relationship to Podcast (see Models.swift),
+        // so "what's already stored for this podcast" is a podcastID-scoped fetch, not
+        // `podcast.episodes`.
+        let podcastID = podcast.id
+        let existingDescriptor = FetchDescriptor<Episode>(
+            predicate: #Predicate { $0.podcastID == podcastID }
+        )
+        let existingEpisodes = (try? modelContext.fetch(existingDescriptor)) ?? []
+
         var existingByGUID: [String: Episode] = [:]
         var existingByAudioURL: [String: Episode] = [:]
-        for episode in podcast.episodes {
+        for episode in existingEpisodes {
             if let guid = episode.guid {
                 existingByGUID[guid] = episode
             }
             existingByAudioURL[episode.audioURL] = episode
         }
 
-        // Episodes the retention/cleanup policy already deleted (because they were played)
-        // leave no Episode row behind to match against above, so without this they'd look
-        // "new" here and get resurrected unplayed every time this feed is refreshed again.
-        let podcastID = podcast.id
-        let tombstoneDescriptor = FetchDescriptor<DeletedEpisodeMarker>(
-            predicate: #Predicate { $0.podcastID == podcastID }
-        )
-        let tombstones = (try? modelContext.fetch(tombstoneDescriptor)) ?? []
-        var deletedGUIDs: Set<String> = []
-        var deletedAudioURLs: Set<String> = []
-        for tombstone in tombstones {
-            if let guid = tombstone.guid {
-                deletedGUIDs.insert(guid)
-            }
-            deletedAudioURLs.insert(tombstone.audioURL)
-        }
+        // The newest publishDate this device has ever seen for this feed, captured before any
+        // mutation below. Gates auto-download/auto-queue eligibility: an item at or before this
+        // date never triggers auto-download even if it doesn't have a local Episode row yet
+        // (e.g. retention cleanup deleted its old row, or a device is subscribing for the first
+        // time) - this is what makes it safe to have no tombstone mechanism at all. A local
+        // Episode row can still get recreated for it (harmless, metadata-only, local-only), it
+        // just never resurrects into the queue or triggers a fresh download.
+        let watermarkBeforeRefresh = podcast.newestKnownPublishDate ?? .distantPast
 
         // Guids/audioURLs staged into newEpisodeData during this same pass - checked alongside
         // existingByGUID/existingByAudioURL below so that a feed listing the same item twice
         // (a duplicate <item> block, a republish, a feed-generator bug - all things real feeds
-        // do) doesn't create two Episode rows for it in a single refresh. Without this, that
-        // duplication needs no CloudKit sync or second device to happen - one malformed feed
-        // fetch on one device is enough.
+        // do) doesn't create two Episode rows for it in a single refresh.
         var stagedGUIDs: Set<String> = []
         var stagedAudioURLs: Set<String> = []
 
@@ -155,12 +153,6 @@ class FeedFetcher {
                 if existing.guid == nil, let guid = parsedEpisode.guid {
                     existing.guid = guid
                 }
-                continue
-            }
-            if let guid = parsedEpisode.guid, deletedGUIDs.contains(guid) {
-                continue
-            }
-            if deletedAudioURLs.contains(parsedEpisode.audioURL) {
                 continue
             }
             if let guid = parsedEpisode.guid, stagedGUIDs.contains(guid) {
@@ -187,22 +179,28 @@ class FeedFetcher {
                 guid: parsedEpisode.guid,
                 duration: parsedEpisode.duration,
                 publishDate: parsedEpisode.publishDate,
-                artworkURL: parsedEpisode.artworkURL
+                artworkURL: parsedEpisode.artworkURL,
+                podcastID: podcastID
             )
 
-            episode.podcast = podcast
             modelContext.insert(episode)
             createdEpisodes.append(episode)
         }
 
-        // Auto-download the most recent NEW episodes per the user's setting. This must only
-        // consider episodes just created above, not the podcast's whole surviving episode list -
-        // otherwise, once the newest episode gets played and later removed by
-        // EpisodeCleanupManager, the next-oldest surviving (but never-downloaded) episode would
-        // look like "the most recent undownloaded episode" and get auto-downloaded here, even
-        // though it aired before the one the user already played and isn't new.
+        // Advance the watermark over every item this refresh saw, not just newly-created ones -
+        // a feed that hasn't published anything new still needs the watermark to reflect the
+        // newest item it currently lists.
+        if let newestParsed = parsedEpisodes.map(\.publishDate).max() {
+            podcast.newestKnownPublishDate = max(watermarkBeforeRefresh, newestParsed)
+        }
+
+        // Auto-download the most recent NEW episodes per the user's setting, gated to genuinely
+        // new material (newer than the watermark) - not just "was created this refresh", since a
+        // fresh Episode row can also get created for an old item whose previous row was deleted
+        // by retention cleanup, and that shouldn't re-trigger a download.
         if settings.autoDownloadNewEpisodes, let downloadManager = downloadManager {
             let recentEpisodes = createdEpisodes
+                .filter { $0.publishDate > watermarkBeforeRefresh }
                 .sorted { $0.publishDate > $1.publishDate }
                 .prefix(settings.maxEpisodesToDownload)
 

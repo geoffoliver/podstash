@@ -433,25 +433,25 @@ struct EpisodeSettingsView: View {
     var body: some View {
         #if os(macOS)
         Group {
-            SettingsFieldRow(label: "Keep episodes") {
+            SettingsFieldRow(label: "Downloads") {
                 Picker("", selection: $settings.episodeRetentionPolicy) {
                     ForEach(EpisodeRetentionPolicy.allCases) { policy in
-                        Text(policy.rawValue).tag(policy.rawValue)
+                        Text(policy.displayName).tag(policy.rawValue)
                     }
                 }
                 .labelsHidden()
             }
 
             if settings.episodeRetentionPolicyEnum == .mostRecent {
-                SettingsFieldRow(label: "Episodes to keep") {
-                    Stepper("\(settings.episodeRetentionCount) episodes",
+                SettingsFieldRow(label: "Downloads to keep") {
+                    Stepper("\(settings.episodeRetentionCount) most recent",
                            value: $settings.episodeRetentionCount,
                            in: 1...100)
                 }
             }
 
             if settings.episodeRetentionPolicyEnum == .all {
-                SettingsCheckboxRow(label: "Auto-delete played episodes", isOn: $settings.autoDeletePlayedEpisodes)
+                SettingsCheckboxRow(label: "Auto-delete played downloads", isOn: $settings.autoDeletePlayedEpisodes)
 
                 if settings.autoDeletePlayedEpisodes {
                     SettingsFieldRow(label: "Delete after") {
@@ -482,7 +482,7 @@ struct EpisodeSettingsView: View {
                             ProgressView()
                                 .controlSize(.small)
                         }
-                        Text(isCleaningUp ? "Cleaning Up..." : "Clean Up Episodes Now")
+                        Text(isCleaningUp ? "Cleaning Up..." : "Clean Up Downloads Now")
                     }
                 }
                 .disabled(isCleaningUp)
@@ -509,20 +509,20 @@ struct EpisodeSettingsView: View {
         }
         #else
         Group {
-            Picker("Keep episodes", selection: $settings.episodeRetentionPolicy) {
+            Picker("Downloads", selection: $settings.episodeRetentionPolicy) {
                 ForEach(EpisodeRetentionPolicy.allCases) { policy in
-                    Text(policy.rawValue).tag(policy.rawValue)
+                    Text(policy.displayName).tag(policy.rawValue)
                 }
             }
 
             if settings.episodeRetentionPolicyEnum == .mostRecent {
-                Stepper("Keep \(settings.episodeRetentionCount) episodes",
+                Stepper("Keep \(settings.episodeRetentionCount) most recent downloads",
                        value: $settings.episodeRetentionCount,
                        in: 1...100)
             }
 
             if settings.episodeRetentionPolicyEnum == .all {
-                Toggle("Auto-delete played episodes", isOn: $settings.autoDeletePlayedEpisodes)
+                Toggle("Auto-delete played downloads", isOn: $settings.autoDeletePlayedEpisodes)
 
                 if settings.autoDeletePlayedEpisodes {
                     Stepper("Delete after \(settings.autoDeleteAfterDays) days",
@@ -554,7 +554,7 @@ struct EpisodeSettingsView: View {
                         ProgressView()
                             .controlSize(.small)
                     }
-                    Text(isCleaningUp ? "Cleaning Up..." : "Clean Up Episodes Now")
+                    Text(isCleaningUp ? "Cleaning Up..." : "Clean Up Downloads Now")
                 }
             }
             .disabled(isCleaningUp)

@@ -17,10 +17,10 @@ final class DownloadManager: NSObject, ObservableObject {
     private var downloadTasks: [UUID: URLSessionDownloadTask] = [:]
     private var urlSession: URLSession!
 
-    // Capped low on purpose: a burst of downloads (e.g. syncFollowMeDownloads after a big batch
-    // goes missing) used to fire every task at once, each completion doing its own SwiftData
-    // fetch+save on the main actor - with enough of them landing in the same window, that stalled
-    // the UI for ~20s. Queuing the rest keeps the app responsive at the cost of some throughput.
+    // Capped low on purpose: a burst of auto-downloads used to fire every task at once, each
+    // completion doing its own SwiftData fetch+save on the main actor - with enough of them
+    // landing in the same window, that stalled the UI for ~20s. Queuing the rest keeps the app
+    // responsive at the cost of some throughput.
     private let maxConcurrentDownloads = 3
     private var pendingDownloadQueue: [Episode] = []
     
@@ -58,8 +58,9 @@ final class DownloadManager: NSObject, ObservableObject {
     func downloadEpisode(_ episode: Episode) {
         guard !isDownloading(episode) else { return }
 
-        // `isDownloaded` reflects whether *any* device has the file, since it syncs via
-        // iCloud. Only skip the download if the bytes are actually present on this device.
+        // isDownloaded is purely local state (Episode isn't CloudKit-mirrored), so this should
+        // always match reality - but double-check the bytes are actually present rather than
+        // trusting the flag blindly, in case a file was removed by something outside the app.
         if episode.isDownloaded,
            let filename = episode.downloadedFilename,
            FileManager.default.fileExists(atPath: DownloadManager.localFileURL(forStoredFilename: filename).path) {
@@ -124,33 +125,11 @@ final class DownloadManager: NSObject, ObservableObject {
         try? modelContext?.save()
     }
 
-    /// Finds episodes marked downloaded via iCloud sync from another device whose file isn't
-    /// actually present here yet, and starts downloading them locally - so "downloaded"
-    /// follows you across devices instead of silently falling back to streaming. Skips already-
-    /// played episodes - re-fetching something the user has already listened to just because its
-    /// local bytes went missing (crash, manual deletion, etc.) isn't "following you", it's a
-    /// pointless redownload of something they're done with.
-    func syncFollowMeDownloads(settings: AppSettings) {
-        guard settings.iCloudSyncEnabled else { return }
-        guard let modelContext else { return }
-
-        let descriptor = FetchDescriptor<Episode>(
-            predicate: #Predicate { $0.isDownloaded && !$0.isPlayed }
-        )
-        guard let episodes = try? modelContext.fetch(descriptor) else { return }
-
-        for episode in episodes {
-            downloadEpisode(episode)
-        }
-    }
-    
     /// Deletes downloaded audio files in the Downloads folder that no live Episode row
     /// references anymore. Every deletion path (retention cleanup, manual "remove download",
     /// unsubscribing) only removes a file if it's still holding a reference to it at the moment
-    /// of deletion - so a file downloaded under one duplicate Episode row (see
-    /// EpisodeCleanupManager.deduplicateEpisodes) becomes permanently unreachable disk space the
-    /// instant that specific row is superseded, merged away, or deleted by any path that isn't
-    /// holding that exact filename. This is the backstop that reclaims it.
+    /// of deletion - so a file can become unreachable disk space if its Episode row is deleted
+    /// by any path that isn't holding that exact filename. This is the backstop that reclaims it.
     ///
     /// Only prunes files untouched for at least a day, so this can never race a fresh CloudKit
     /// import (e.g. right after Settings > Reset Local Sync, where the local store is briefly
@@ -236,8 +215,6 @@ final class DownloadManager: NSObject, ObservableObject {
         // Generate unique filename. Derive the extension from the episode's audio URL,
         // not tempURL - tempURL's extension comes from URLSession's own internal temp
         // file naming (e.g. "CFNetworkDownload_XXXXXX.tmp"), not the actual audio format.
-        // The filename is deterministic (episode id + extension) so every device that
-        // downloads this episode independently lands on the same name.
         let audioURLExtension = URL(string: episode.audioURL)?.pathExtension ?? ""
         let fileExtension = audioURLExtension.isEmpty ? "mp3" : audioURLExtension
         let fileName = "\(episodeID.uuidString).\(fileExtension)"
@@ -258,26 +235,30 @@ final class DownloadManager: NSObject, ObservableObject {
                 try FileManager.default.copyItem(at: tempURL, to: destinationURL)
             }
             
-            // Update episode - store just the filename, not an absolute path, since this
-            // syncs via iCloud and only the filename is meaningful on another device.
+            // Store just the filename, not an absolute path - this device's Downloads folder
+            // path is meaningless anywhere else, and isDownloaded/downloadedFilename are local
+            // only now anyway (Episode isn't CloudKit-mirrored).
             episode.isDownloaded = true
             episode.downloadedFilename = fileName
-            
-            // Add to queue if not already in queue - but never resurrect an episode the user
-            // already marked played just because its file got redownloaded (e.g. via
-            // syncFollowMeDownloads after the local copy went missing).
-            if episode.queuePosition == nil && !episode.isPlayed {
-                // Find the highest queue position
-                let allEpisodesDescriptor = FetchDescriptor<Episode>()
-                let allEpisodes = try? modelContext.fetch(allEpisodesDescriptor)
-                let maxPosition = allEpisodes?.compactMap { $0.queuePosition }.max() ?? -1
-                episode.queuePosition = maxPosition + 1
+
+            // Add to queue if not already queued - but never resurrect an episode the user
+            // already marked played just because its file got (re)downloaded.
+            let record = PlaybackRecordStore.recordForMutation(episodeKey: episode.episodeKey, in: modelContext)
+            if record.queuePosition == nil && !record.isPlayed {
+                // Scoped to queuePosition != nil (the queue itself, always small) rather than
+                // fetching every PlaybackRecord ever created (~13,000+ rows and growing).
+                let queuedDescriptor = FetchDescriptor<PlaybackRecord>(
+                    predicate: #Predicate { $0.queuePosition != nil }
+                )
+                let queuedRecords = try? modelContext.fetch(queuedDescriptor)
+                let maxPosition = queuedRecords?.compactMap { $0.queuePosition }.max() ?? -1
+                record.queuePosition = maxPosition + 1
             }
-            
+
             try modelContext.save()
-            
+
             print("✅ Successfully saved episode download to: \(destinationURL.path)")
-            print("📋 Added episode to queue at position \(episode.queuePosition ?? -1)")
+            print("📋 Added episode to queue at position \(record.queuePosition ?? -1)")
             
         } catch {
             print("Failed to save downloaded file: \(error)")

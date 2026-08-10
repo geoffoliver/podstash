@@ -22,15 +22,15 @@ extension NSApplication {
     }
     
     @objc func artist() -> String? {
-        return MenuCoordinator.shared.audioPlayer?.currentEpisode?.podcast?.title
+        return MenuCoordinator.shared.audioPlayer?.currentPodcast?.title
     }
-    
+
     @objc func album() -> String? {
-        return MenuCoordinator.shared.audioPlayer?.currentEpisode?.podcast?.title
+        return MenuCoordinator.shared.audioPlayer?.currentPodcast?.title
     }
     
     @objc func duration() -> NSNumber? {
-        guard let duration = MenuCoordinator.shared.audioPlayer?.duration,
+        guard let duration = MenuCoordinator.shared.audioPlayer?.progress.duration,
               !duration.isNaN && !duration.isInfinite else {
             return nil
         }
@@ -38,7 +38,7 @@ extension NSApplication {
     }
     
     @objc func logo() -> NSAppleEventDescriptor? {
-        guard let artworkURL = MenuCoordinator.shared.audioPlayer?.currentEpisode?.podcast?.artworkURL else {
+        guard let artworkURL = MenuCoordinator.shared.audioPlayer?.currentPodcast?.artworkURL else {
             return nil
         }
         

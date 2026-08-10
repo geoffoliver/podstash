@@ -35,6 +35,7 @@ struct AirPlayButton: View {
 
 struct NowPlayingView: View {
     @EnvironmentObject var audioPlayer: AudioPlayerManager
+    @EnvironmentObject var playbackProgress: PlaybackProgress
     
     var body: some View {
         if let episode = audioPlayer.currentEpisode {
@@ -57,7 +58,7 @@ struct NowPlayingView: View {
                 Spacer()
 
                 // Episode artwork
-                if let artworkURL = episode.artworkURL ?? episode.podcast?.artworkURL,
+                if let artworkURL = episode.artworkURL ?? audioPlayer.currentPodcast?.artworkURL,
                    let url = URL(string: artworkURL) {
                     CachedAsyncImage(url: url) { image in
                         image
@@ -89,7 +90,7 @@ struct NowPlayingView: View {
                         .multilineTextAlignment(.center)
                         .lineLimit(2)
                     
-                    if let podcast = episode.podcast {
+                    if let podcast = audioPlayer.currentPodcast {
                         Text(podcast.title)
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
@@ -103,22 +104,22 @@ struct NowPlayingView: View {
                 VStack(spacing: 8) {
                     Slider(
                         value: Binding(
-                            get: { audioPlayer.currentTime },
+                            get: { playbackProgress.currentTime },
                             set: { audioPlayer.seek(to: $0) }
                         ),
-                        in: 0...max(audioPlayer.duration, 1)
+                        in: 0...max(playbackProgress.duration, 1)
                     )
                     .padding(.horizontal)
-                    
+
                     HStack {
-                        Text(formatTime(audioPlayer.currentTime))
+                        Text(formatTime(playbackProgress.currentTime))
                             .font(.footnote)
                             .monospacedDigit()
                             .foregroundStyle(.secondary)
 
                         Spacer()
 
-                        Text(formatTime(audioPlayer.duration))
+                        Text(formatTime(playbackProgress.duration))
                             .font(.footnote)
                             .monospacedDigit()
                             .foregroundStyle(.secondary)
@@ -166,7 +167,7 @@ struct NowPlayingView: View {
                         }) {
                             HStack {
                                 Text("\(speed, specifier: "%.2f")x")
-                                if audioPlayer.playbackRate == Float(speed) {
+                                if playbackProgress.playbackRate == Float(speed) {
                                     Image(systemName: "checkmark")
                                 }
                             }
@@ -175,7 +176,7 @@ struct NowPlayingView: View {
                 } label: {
                     HStack {
                         Image(systemName: "gauge")
-                        Text("\(audioPlayer.playbackRate, specifier: "%.2f")x")
+                        Text("\(playbackProgress.playbackRate, specifier: "%.2f")x")
                     }
                     .padding(.horizontal, 16)
                     .padding(.vertical, 8)
@@ -231,7 +232,7 @@ extension View {
     func reservePlayerBarSpace(_ audioPlayer: AudioPlayerManager) -> some View {
         safeAreaInset(edge: .bottom) {
             if audioPlayer.currentEpisode != nil {
-                Color.clear.frame(height: audioPlayer.compactPlayerBarHeight)
+                Color.clear.frame(height: audioPlayer.progress.compactPlayerBarHeight)
             }
         }
     }
@@ -240,13 +241,14 @@ extension View {
 
 struct CompactPlayerBar: View {
     @EnvironmentObject var audioPlayer: AudioPlayerManager
+    @EnvironmentObject var playbackProgress: PlaybackProgress
     @State private var showingNowPlaying = false
 
     var body: some View {
         if let episode = audioPlayer.currentEpisode {
             HStack(spacing: 12) {
                 // Episode artwork thumbnail
-                if let artworkURL = episode.artworkURL ?? episode.podcast?.artworkURL,
+                if let artworkURL = episode.artworkURL ?? audioPlayer.currentPodcast?.artworkURL,
                    let url = URL(string: artworkURL) {
                     CachedAsyncImage(url: url) { image in
                         image
@@ -275,7 +277,7 @@ struct CompactPlayerBar: View {
                         .fontWeight(.medium)
                         .lineLimit(1)
 
-                    if let podcast = episode.podcast {
+                    if let podcast = audioPlayer.currentPodcast {
                         Text(podcast.title)
                             .font(.footnote)
                             .foregroundStyle(.secondary)
@@ -303,7 +305,7 @@ struct CompactPlayerBar: View {
             .padding()
             .background(.regularMaterial)
             .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { height in
-                audioPlayer.compactPlayerBarHeight = height
+                playbackProgress.compactPlayerBarHeight = height
             }
             .contentShape(Rectangle())
             .onTapGesture {

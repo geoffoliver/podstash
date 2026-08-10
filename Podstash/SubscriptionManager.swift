@@ -51,8 +51,8 @@ class SubscriptionManager {
         }
     }
     
-    /// Unsubscribe from a podcast, deleting all of its data: episodes, playback
-    /// state, and any downloaded audio files on disk.
+    /// Unsubscribe from a podcast, deleting its local episode metadata and any downloaded audio
+    /// files on disk.
     /// - Returns: true if the unsubscribe was actually persisted to the store.
     @discardableResult
     func unsubscribe(podcast: Podcast) -> Bool {
@@ -60,15 +60,33 @@ class SubscriptionManager {
     }
 
     /// Unsubscribe from multiple podcasts in a single save.
+    ///
+    /// Deliberately does NOT touch PlaybackRecord: it's durable, cross-device "I've
+    /// listened to this" memory, independent of whether you're currently subscribed - if you
+    /// resubscribe to the same feed later, previously-played episodes should still show as
+    /// played, not look brand new again. (An earlier version of this method tried to delete the
+    /// matching PlaybackRecords here, keyed off the podcast's *currently existing* local
+    /// episodes - but retention cleanup can have already deleted the episode's downloaded file
+    /// by the time you unsubscribe, in the past also deleted the whole row, leaving some
+    /// PlaybackRecords silently un-cleaned. That inconsistency, not the persistence itself, was
+    /// the bug - so PlaybackRecord just isn't unsubscribe's concern at all now.)
     /// - Returns: true if the unsubscribe was actually persisted to the store.
     @discardableResult
     func unsubscribe(podcasts: [Podcast]) -> Bool {
         for podcast in podcasts {
-            for episode in podcast.episodes {
+            let podcastID = podcast.id
+            let episodeDescriptor = FetchDescriptor<Episode>(
+                predicate: #Predicate { $0.podcastID == podcastID }
+            )
+            let episodes = (try? modelContext.fetch(episodeDescriptor)) ?? []
+
+            for episode in episodes {
                 if let filename = episode.downloadedFilename {
                     try? FileManager.default.removeItem(at: DownloadManager.localFileURL(forStoredFilename: filename))
                 }
+                modelContext.delete(episode)
             }
+
             modelContext.delete(podcast)
         }
 

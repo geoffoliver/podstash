@@ -2,8 +2,6 @@
 //  EpisodeCleanupManager.swift
 //  Podstash
 //
-//  Created by Geoff Oliver on 7/30/26.
-//
 
 import Foundation
 import SwiftData
@@ -12,189 +10,119 @@ import SwiftData
 class EpisodeCleanupManager {
     private let modelContext: ModelContext
     private let settings: AppSettings
-    
+
     init(modelContext: ModelContext, settings: AppSettings) {
         self.modelContext = modelContext
         self.settings = settings
     }
-    
-    /// Clean up episodes based on retention policy
+
+    /// Reclaims disk space from downloaded audio per the user's retention policy. Never deletes
+    /// an Episode's local metadata row - Episode is cheap, local-only metadata now (see
+    /// Models.swift), not a large synced record, so there's no storage/sync reason to make the
+    /// app forget an episode exists just because it's been played or has aged out. Only the
+    /// actual disk-space cost (downloaded audio) is reclaimed, which is what these policies were
+    /// really about; "All" tabs always show every episode the subscribed feed currently lists.
     func cleanupEpisodes() {
         let policy = settings.episodeRetentionPolicyEnum
-        
+
         switch policy {
         case .all:
-            // Keep everything, but check for auto-delete played episodes
+            // Keep every download, but check for auto-reclaiming played ones
             if settings.autoDeletePlayedEpisodes {
-                deleteOldPlayedEpisodes()
+                reclaimOldPlayedDownloads()
             }
-            
+
         case .unplayedOnly:
-            // Delete all played episodes
-            deletePlayedEpisodes()
-            
+            // Reclaim every played episode's download
+            reclaimPlayedDownloads()
+
         case .mostRecent:
-            // Keep only the most recent X episodes per podcast
-            keepMostRecentEpisodes(count: settings.episodeRetentionCount)
+            // Keep downloads for only the most recent X episodes per podcast
+            reclaimDownloadsBeyondMostRecent(count: settings.episodeRetentionCount)
         }
-        
+
         try? modelContext.save()
     }
-    
-    private func deletePlayedEpisodes() {
-        let descriptor = FetchDescriptor<Episode>(
-            predicate: #Predicate { episode in
-                episode.isPlayed
-            }
-        )
 
-        guard let episodes = try? modelContext.fetch(descriptor) else { return }
+    /// Downloaded episodes plus their played/date state, per the synced PlaybackRecord store -
+    /// the local Episode row's played/date state doesn't exist anymore (see Models.swift), so
+    /// retention always starts here rather than filtering Episode directly. Scoped to just the
+    /// (usually single-digit-to-tens) downloaded episodes' keys via
+    /// PlaybackRecordStore.states(forKeys:in:) rather than fetching every played PlaybackRecord -
+    /// that table is never pruned and can reach tens of thousands of rows over time.
+    private func downloadedEpisodeStates() -> (episodes: [Episode], states: [String: EpisodeState]) {
+        let descriptor = FetchDescriptor<Episode>(predicate: #Predicate { $0.isDownloaded })
+        let episodes = (try? modelContext.fetch(descriptor)) ?? []
+        let keys = Set(episodes.map(\.episodeKey))
+        let states = PlaybackRecordStore.states(forKeys: keys, in: modelContext)
+        return (episodes, states)
+    }
 
-        for episode in episodes {
+    private func reclaimPlayedDownloads() {
+        let (episodes, states) = downloadedEpisodeStates()
+        let playedEpisodes = episodes.filter { states[$0.episodeKey]?.isPlayed ?? false }
+        guard !playedEpisodes.isEmpty else { return }
+
+        for episode in playedEpisodes {
             deleteDownloadedFileIfNeeded(for: episode)
-            recordTombstone(for: episode)
-            modelContext.delete(episode)
         }
     }
 
-    private func deleteOldPlayedEpisodes() {
+    private func reclaimOldPlayedDownloads() {
         let cutoffDate = Calendar.current.date(
             byAdding: .day,
             value: -settings.autoDeleteAfterDays,
             to: Date()
         ) ?? Date()
-        
-        // Fetch all played episodes
-        let descriptor = FetchDescriptor<Episode>(
-            predicate: #Predicate { episode in
-                episode.isPlayed
-            }
-        )
-        
-        guard let episodes = try? modelContext.fetch(descriptor) else { return }
-        
-        // Filter in Swift instead of predicate (nil coalescing doesn't work in predicates)
-        let oldEpisodes = episodes.filter { episode in
-            let playedDate = episode.lastPlayedDate ?? Date.distantPast
-            return playedDate < cutoffDate
+
+        let (episodes, states) = downloadedEpisodeStates()
+        let oldPlayedEpisodes = episodes.filter { episode in
+            guard let state = states[episode.episodeKey], state.isPlayed else { return false }
+            return (state.lastPlayedDate ?? .distantPast) < cutoffDate
         }
-        
-        for episode in oldEpisodes {
+        guard !oldPlayedEpisodes.isEmpty else { return }
+
+        for episode in oldPlayedEpisodes {
             deleteDownloadedFileIfNeeded(for: episode)
-            recordTombstone(for: episode)
-            modelContext.delete(episode)
         }
     }
 
-    private func keepMostRecentEpisodes(count: Int) {
-        // Get all podcasts
+    private func reclaimDownloadsBeyondMostRecent(count: Int) {
+        let (_, states) = downloadedEpisodeStates()
+
         let podcastDescriptor = FetchDescriptor<Podcast>()
         guard let podcasts = try? modelContext.fetch(podcastDescriptor) else { return }
-        
+
         for podcast in podcasts {
+            let podcastID = podcast.id
+            let episodeDescriptor = FetchDescriptor<Episode>(
+                predicate: #Predicate { $0.podcastID == podcastID }
+            )
+            guard let episodes = try? modelContext.fetch(episodeDescriptor) else { continue }
+
             // Sort episodes by publish date (newest first)
-            let sortedEpisodes = podcast.episodes.sorted { $0.publishDate > $1.publishDate }
-            
-            // Keep the first 'count' episodes, delete the rest. Only played episodes are
-            // removed here - unplayed ones are never auto-deleted, matching the other
-            // retention policies (see AppSettings.episodeRetentionPolicy).
-            let episodesToDelete = Array(sortedEpisodes.dropFirst(count)).filter { $0.isPlayed }
+            let sortedEpisodes = episodes.sorted { $0.publishDate > $1.publishDate }
 
-            for episode in episodesToDelete {
+            // Reclaim downloads beyond the most recent 'count' episodes. Only played ones are
+            // touched - unplayed downloads are never auto-deleted, matching the other retention
+            // policies (see AppSettings.episodeRetentionPolicy).
+            let episodesToReclaim = Array(sortedEpisodes.dropFirst(count))
+                .filter { $0.isDownloaded && (states[$0.episodeKey]?.isPlayed ?? false) }
+
+            for episode in episodesToReclaim {
                 deleteDownloadedFileIfNeeded(for: episode)
-                recordTombstone(for: episode)
-                modelContext.delete(episode)
             }
         }
     }
 
-    /// Collapses Episode rows that refer to the same feed item (matched by guid, falling back
-    /// to audioURL - same preference FeedFetcher uses) into one. Duplicates happen because
-    /// CloudKit sync is asynchronous: FeedFetcher only ever sees *this device's* currently-synced
-    /// state, so if two devices each refresh the same feed before either's newly-created Episode
-    /// row has synced to the other, both independently create their own row for the same item.
-    /// Sorting by id (rather than local fetch/insertion order) before picking which row survives
-    /// keeps the choice deterministic across devices, so independent runs of this pass tend to
-    /// converge on the same survivor instead of leapfrogging each other.
-    func deduplicateEpisodes() {
-        let podcastDescriptor = FetchDescriptor<Podcast>()
-        guard let podcasts = try? modelContext.fetch(podcastDescriptor) else { return }
-
-        for podcast in podcasts {
-            var survivorByKey: [String: Episode] = [:]
-
-            for episode in podcast.episodes.sorted(by: { $0.id.uuidString < $1.id.uuidString }) {
-                let key = episode.guid ?? episode.audioURL
-                guard !key.isEmpty else { continue }
-
-                guard let survivor = survivorByKey[key] else {
-                    survivorByKey[key] = episode
-                    continue
-                }
-
-                merge(episode, into: survivor)
-            }
-        }
-
-        try? modelContext.save()
-    }
-
-    /// Folds `duplicate`'s playback/download/queue state into `survivor`, then deletes
-    /// `duplicate` (and any file it downloaded independently, since that copy is now redundant).
-    private func merge(_ duplicate: Episode, into survivor: Episode) {
-        let duplicateLastPlayed = duplicate.lastPlayedDate ?? .distantPast
-        let survivorLastPlayed = survivor.lastPlayedDate ?? .distantPast
-        if duplicate.isPlayed && (!survivor.isPlayed || duplicateLastPlayed > survivorLastPlayed) {
-            survivor.isPlayed = true
-            survivor.playbackPosition = duplicate.playbackPosition
-            survivor.lastPlayedDate = duplicate.lastPlayedDate
-        } else if !survivor.isPlayed {
-            survivor.playbackPosition = max(survivor.playbackPosition, duplicate.playbackPosition)
-        }
-
-        if survivor.guid == nil {
-            survivor.guid = duplicate.guid
-        }
-
-        if survivor.queuePosition == nil {
-            survivor.queuePosition = duplicate.queuePosition
-        }
-
-        if duplicate.isDownloaded {
-            if survivor.isDownloaded {
-                // Both copies were downloaded independently - the duplicate's is redundant.
-                deleteDownloadedFileIfNeeded(for: duplicate)
-            } else {
-                // `downloadedFilename` is just a stored name resolved against this device's
-                // Downloads folder, so adopting the duplicate's is fine even though it embeds
-                // the duplicate's (now-discarded) id rather than the survivor's.
-                survivor.isDownloaded = true
-                survivor.downloadedFilename = duplicate.downloadedFilename
-            }
-        }
-
-        modelContext.delete(duplicate)
-    }
-
-    /// Removes a downloaded episode's audio file from disk, if present, before its `Episode`
-    /// record is deleted - otherwise the file is orphaned (still on disk, but no longer
-    /// reachable or counted since the record that tracked it is gone).
+    /// Removes a downloaded episode's audio file from disk, if present, and clears the
+    /// isDownloaded/downloadedFilename flags so the (surviving) Episode row accurately reflects
+    /// that the file is gone.
     private func deleteDownloadedFileIfNeeded(for episode: Episode) {
         guard episode.isDownloaded, let filename = episode.downloadedFilename else { return }
         try? FileManager.default.removeItem(at: DownloadManager.localFileURL(forStoredFilename: filename))
-    }
-
-    /// Leaves a marker behind so FeedFetcher recognizes this episode as already-seen (and
-    /// already-played) even after this row is gone, instead of recreating it as new/unplayed
-    /// on the next refresh. See DeletedEpisodeMarker's doc comment in Models.swift.
-    private func recordTombstone(for episode: Episode) {
-        guard let podcastID = episode.podcast?.id else { return }
-        let marker = DeletedEpisodeMarker(
-            podcastID: podcastID,
-            guid: episode.guid,
-            audioURL: episode.audioURL
-        )
-        modelContext.insert(marker)
+        episode.isDownloaded = false
+        episode.downloadedFilename = nil
     }
 
     /// Get storage usage information
@@ -203,9 +131,9 @@ class EpisodeCleanupManager {
         guard let episodes = try? modelContext.fetch(descriptor) else {
             return (0, 0, "0 MB")
         }
-        
+
         let downloadedCount = episodes.filter { $0.isDownloaded }.count
-        
+
         // Rough estimate: 1 MB per minute of audio at medium quality
         let totalMinutes = episodes.reduce(0.0) { result, episode in
             if episode.isDownloaded, let duration = episode.duration {
@@ -213,7 +141,7 @@ class EpisodeCleanupManager {
             }
             return result
         }
-        
+
         let estimatedMB = Int(totalMinutes)
         let sizeString: String
         if estimatedMB > 1024 {
@@ -221,7 +149,7 @@ class EpisodeCleanupManager {
         } else {
             sizeString = "\(estimatedMB) MB"
         }
-        
+
         return (episodes.count, downloadedCount, sizeString)
     }
 }

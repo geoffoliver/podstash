@@ -20,46 +20,72 @@ struct PodcastDetailView: View {
     @State private var searchText = ""
     @Environment(\.dismiss) private var dismiss
 
+    // Episode has no relationship to Podcast (see Models.swift) - queried directly by
+    // podcastID instead of `podcast.episodes`.
+    @Query private var episodesForPodcast: [Episode]
+
     enum EpisodeFilter {
         case unplayed, all
     }
 
-    // Pre-sort episodes ONCE, not on every render
-    private var sortedEpisodes: [Episode] {
-        podcast.episodes.sorted(by: { $0.publishDate > $1.publishDate })
+    init(podcast: Podcast) {
+        self.podcast = podcast
+        let podcastID = podcast.id
+        _episodesForPodcast = Query(filter: #Predicate<Episode> { $0.podcastID == podcastID })
     }
 
     private var isSearching: Bool {
         !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
-    private var filteredEpisodes: [Episode] {
-        // Searching always looks across every episode, regardless of which tab is
-        // selected - the tab picker is just a default view, not a search scope.
-        let episodes = isSearching ? sortedEpisodes : {
-            switch selectedTab {
-            case .unplayed:
-                // Only show unplayed episodes that are downloaded
-                return sortedEpisodes.filter { !$0.isPlayed && $0.isDownloaded }
-            case .all:
-                return sortedEpisodes
+    // isDownloaded lives on the local Episode directly, so this filters to the (typically
+    // small) downloaded subset BEFORE ever joining PlaybackRecord state - for a podcast with a
+    // large back-catalog (episode rows aren't deleted by retention anymore), that avoids
+    // fetching/joining thousands of episodes just to answer "how many downloaded ones are
+    // unplayed." Used for the "Unplayed" tab's label, which is shown regardless of which tab
+    // is actually selected.
+    private func unplayedDownloadedCount() -> Int {
+        let downloaded = episodesForPodcast.filter { $0.isDownloaded }
+        guard !downloaded.isEmpty else { return 0 }
+        let states = PlaybackRecordStore.states(forKeys: Set(downloaded.map(\.episodeKey)), in: modelContext)
+        return downloaded.filter { !(states[$0.episodeKey]?.isPlayed ?? false) }.count
+    }
+
+    // The episodes actually rendered for the current tab/search. Joins PlaybackRecord state
+    // (and sorts) only over the smallest candidate set each mode actually needs - the podcast's
+    // entire history is only ever touched for the "All" tab or an active search, never for the
+    // default "Unplayed" case, which is the one that matters most for render cost since it's
+    // the default and typically small regardless of how large the back-catalog has grown.
+    private func displayedEpisodes() -> [EpisodeDisplay] {
+        if isSearching {
+            // Search scans title/description across every episode - that's a cheap Episode-only
+            // text match, so PlaybackRecord state only gets joined for whatever actually matches,
+            // not the full back-catalog.
+            let matches = episodesForPodcast.filter { episode in
+                episode.title.localizedCaseInsensitiveContains(searchText)
+                    || (episode.episodeDescription?.localizedCaseInsensitiveContains(searchText) ?? false)
             }
-        }()
+            return PlaybackRecordStore.display(for: matches, in: modelContext)
+                .sorted(by: { $0.episode.publishDate > $1.episode.publishDate })
+        }
 
-        guard isSearching else { return episodes }
-
-        return episodes.filter { episode in
-            episode.title.localizedCaseInsensitiveContains(searchText)
-                || (episode.episodeDescription?.localizedCaseInsensitiveContains(searchText) ?? false)
+        switch selectedTab {
+        case .unplayed:
+            let downloaded = episodesForPodcast.filter { $0.isDownloaded }
+            return PlaybackRecordStore.display(for: downloaded, in: modelContext)
+                .filter { !$0.state.isPlayed }
+                .sorted(by: { $0.episode.publishDate > $1.episode.publishDate })
+        case .all:
+            // No way around joining state for everything here - "All" fundamentally means
+            // every episode with its played/queue status, so this is the one path that pays
+            // the full back-catalog cost, same as before this fix.
+            return PlaybackRecordStore.display(for: episodesForPodcast, in: modelContext)
+                .sorted(by: { $0.episode.publishDate > $1.episode.publishDate })
         }
     }
-    
-    private var unplayedDownloadedCount: Int {
-        sortedEpisodes.filter { !$0.isPlayed && $0.isDownloaded }.count
-    }
-    
+
     var body: some View {
-        content
+        content()
             .navigationTitle(podcast.title)
             #if os(macOS)
             // Explicit .toolbar placement (rather than .automatic): this view has no
@@ -90,7 +116,10 @@ struct PodcastDetailView: View {
     }
 
     @ViewBuilder
-    private var content: some View {
+    private func content() -> some View {
+        let filtered = displayedEpisodes()
+        let unplayedCount = unplayedDownloadedCount()
+
         #if os(iOS)
         // Header and tab picker live inside the same List as the episodes (rather than a
         // fixed VStack above a separate List) so the nav bar can track this scroll view's
@@ -105,7 +134,7 @@ struct PodcastDetailView: View {
             .listRowInsets(EdgeInsets())
             .listRowSeparator(.hidden)
 
-            if podcast.episodes.isEmpty {
+            if episodesForPodcast.isEmpty {
                 emptyEpisodesView
                     .listRowInsets(EdgeInsets())
                     .listRowSeparator(.hidden)
@@ -113,8 +142,8 @@ struct PodcastDetailView: View {
                 // Tab picker - disabled while searching since search always looks
                 // across all episodes regardless of which tab is selected.
                 Picker("Filter", selection: $selectedTab) {
-                    Text("Unplayed (\(unplayedDownloadedCount))").tag(EpisodeFilter.unplayed)
-                    Text("All (\(sortedEpisodes.count))").tag(EpisodeFilter.all)
+                    Text("Unplayed (\(unplayedCount))").tag(EpisodeFilter.unplayed)
+                    Text("All (\(episodesForPodcast.count))").tag(EpisodeFilter.all)
                 }
                 .pickerStyle(.segmented)
                 .padding()
@@ -122,13 +151,13 @@ struct PodcastDetailView: View {
                 .listRowInsets(EdgeInsets())
                 .listRowSeparator(.hidden)
 
-                if isSearching && filteredEpisodes.isEmpty {
+                if isSearching && filtered.isEmpty {
                     noResultsView
                         .listRowInsets(EdgeInsets())
                         .listRowSeparator(.hidden)
                 } else {
-                    ForEach(filteredEpisodes) { episode in
-                        episodeRow(episode)
+                    ForEach(filtered) { item in
+                        episodeRow(item)
                     }
                 }
             }
@@ -148,26 +177,26 @@ struct PodcastDetailView: View {
                 }
             )
 
-            if podcast.episodes.isEmpty {
+            if episodesForPodcast.isEmpty {
                 emptyEpisodesView
             } else {
                 // Tab picker - disabled while searching since search always looks
                 // across all episodes regardless of which tab is selected.
                 Picker("Filter", selection: $selectedTab) {
-                    Text("Unplayed (\(unplayedDownloadedCount))").tag(EpisodeFilter.unplayed)
-                    Text("All (\(sortedEpisodes.count))").tag(EpisodeFilter.all)
+                    Text("Unplayed (\(unplayedCount))").tag(EpisodeFilter.unplayed)
+                    Text("All (\(episodesForPodcast.count))").tag(EpisodeFilter.all)
                 }
                 .pickerStyle(.segmented)
                 .padding()
                 .disabled(isSearching)
 
-                if isSearching && filteredEpisodes.isEmpty {
+                if isSearching && filtered.isEmpty {
                     noResultsView
                 } else {
                 // Use List instead of ScrollView + ForEach for better performance (virtualization)
                 List {
-                    ForEach(filteredEpisodes) { episode in
-                        episodeRow(episode)
+                    ForEach(filtered) { item in
+                        episodeRow(item)
                     }
                 }
                 .listStyle(.plain)
@@ -212,12 +241,13 @@ struct PodcastDetailView: View {
     }
 
     @ViewBuilder
-    private func episodeRow(_ episode: Episode) -> some View {
+    private func episodeRow(_ item: EpisodeDisplay) -> some View {
+        let episode = item.episode
         HStack(spacing: 12) {
             Button {
                 audioPlayer.play(episode: episode)
             } label: {
-                EpisodeRowView(episode: episode, onShowInfo: { episodeForInfoSheet = $0 })
+                EpisodeRowView(item: item, onShowInfo: { episodeForInfoSheet = $0 })
             }
             .buttonStyle(.plain)
 
@@ -280,8 +310,8 @@ struct PodcastDetailView: View {
             Button {
                 addToQueue(episode)
             } label: {
-                Label(episode.queuePosition != nil ? "Remove from Queue" : "Add to Queue",
-                      systemImage: episode.queuePosition != nil ? "text.badge.minus" : "text.badge.plus")
+                Label(item.state.queuePosition != nil ? "Remove from Queue" : "Add to Queue",
+                      systemImage: item.state.queuePosition != nil ? "text.badge.minus" : "text.badge.plus")
             }
 
             Divider()
@@ -309,7 +339,7 @@ struct PodcastDetailView: View {
 
             Divider()
 
-            if !episode.isPlayed {
+            if !item.state.isPlayed {
                 Button {
                     markAsPlayed(episode)
                 } label: {
@@ -327,7 +357,7 @@ struct PodcastDetailView: View {
 
     private func unsubscribe() {
         if let currentEpisode = audioPlayer.currentEpisode,
-           podcast.episodes.contains(where: { $0.id == currentEpisode.id }) {
+           episodesForPodcast.contains(where: { $0.id == currentEpisode.id }) {
             audioPlayer.stop()
         }
 
@@ -335,36 +365,38 @@ struct PodcastDetailView: View {
         subscriptionManager.unsubscribe(podcast: podcast)
         dismiss()
     }
-    
+
     private func addToQueue(_ episode: Episode) {
-        if episode.queuePosition != nil {
+        let record = PlaybackRecordStore.recordForMutation(episodeKey: episode.episodeKey, in: modelContext)
+        if record.queuePosition != nil {
             // Remove from queue
-            episode.queuePosition = nil
+            record.queuePosition = nil
         } else {
             // Add to end of queue
-            let descriptor = FetchDescriptor<Episode>(
-                predicate: #Predicate { ep in
-                    ep.queuePosition != nil && !ep.isPlayed
+            let descriptor = FetchDescriptor<PlaybackRecord>(
+                predicate: #Predicate { rec in
+                    rec.queuePosition != nil && !rec.isPlayed
                 },
                 sortBy: [SortDescriptor(\.queuePosition, order: .reverse)]
             )
-            
+
             let maxPosition = (try? modelContext.fetch(descriptor))?.first?.queuePosition ?? -1
-            episode.queuePosition = maxPosition + 1
+            record.queuePosition = maxPosition + 1
         }
-        
+
         try? modelContext.save()
     }
-    
+
     private func markAsPlayed(_ episode: Episode) {
-        episode.isPlayed = true
-        episode.queuePosition = nil
-        episode.playbackPosition = 0
+        let record = PlaybackRecordStore.recordForMutation(episodeKey: episode.episodeKey, in: modelContext)
+        record.isPlayed = true
+        record.queuePosition = nil
+        record.playbackPosition = 0
         try? modelContext.save()
     }
 
     private func markAsUnplayed(_ episode: Episode) {
-        episode.isPlayed = false
+        PlaybackRecordStore.recordForMutation(episodeKey: episode.episodeKey, in: modelContext).isPlayed = false
         try? modelContext.save()
     }
 }

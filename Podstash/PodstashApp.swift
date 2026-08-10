@@ -590,12 +590,17 @@ struct PodstashApp: App {
     #endif
 
     var sharedModelContainer: ModelContainer = {
-        let schema = Schema([
-            Podcast.self,
-            Episode.self,
-            DeletedEpisodeMarker.self,
-        ])
-        
+        // Two configurations in one container, split by what needs to leave the device: Podcast
+        // (subscriptions) and PlaybackRecord (queue/queue order/played/position) are small, flat,
+        // relationship-free, and CloudKit-mirrored. Episode (RSS-derived metadata - title,
+        // description, audioURL, artwork, duration, publishDate) is local-only, independently
+        // re-parsed by every device. This split, and specifically the absence of any relationship
+        // in the synced schema, is what makes the pending-relationship-resolution storm that
+        // corrupted local state impossible to reproduce - that failure mode requires a synced
+        // relationship to exist. See the plan doc (data-model redesign) for the full incident writeup.
+        let cloudSchema = Schema([Podcast.self, PlaybackRecord.self])
+        let localSchema = Schema([Episode.self])
+
         // Podstash.entitlements now has the iCloud/CloudKit container (iCloud.me.geoffoliver.Podstash)
         // configured under the paid Apple Developer Program team, so it's safe to request CloudKit
         // mirroring. (Requesting .automatic without that entitlement made SwiftData enable Core Data's
@@ -609,13 +614,28 @@ struct PodstashApp: App {
             ? true
             : UserDefaults.standard.bool(forKey: "iCloudSyncEnabled")
 
-        let modelConfiguration = ModelConfiguration(
-            schema: schema,
+        // Explicit, distinct names are required here - without them both configurations default
+        // to the same identity, SwiftData silently collapses them into a single registered
+        // store, and any model belonging to the "other" one (whichever lost) has no store to
+        // live in: "Failed to identify a store that can hold instances of ...".
+        let cloudConfiguration = ModelConfiguration(
+            "cloud",
+            schema: cloudSchema,
             cloudKitDatabase: (cloudKitEntitlementsConfigured && iCloudSyncEnabled) ? .automatic : .none
+        )
+        // Never CloudKit-mirrored, regardless of the user's iCloud sync preference - Episode is
+        // always purely local.
+        let localConfiguration = ModelConfiguration(
+            "local",
+            schema: localSchema,
+            cloudKitDatabase: .none
         )
 
         do {
-            return try ModelContainer(for: schema, configurations: [modelConfiguration])
+            return try ModelContainer(
+                for: Schema([Podcast.self, PlaybackRecord.self, Episode.self]),
+                configurations: [cloudConfiguration, localConfiguration]
+            )
         } catch {
             fatalError("Could not create ModelContainer: \(error)")
         }
@@ -623,11 +643,15 @@ struct PodstashApp: App {
     
     @ViewBuilder
     private var mainContent: some View {
+        // Provides PodcastDirectory (episode.podcastID -> Podcast lookups) to the whole view
+        // tree, since Episode has no relationship to Podcast (see Models.swift).
+        PodcastDirectoryProvider { podcastDirectory in
         ContentView()
             .environmentObject(addPodcastCoordinator)
             .environmentObject(opmlCoordinator)
             .environmentObject(refreshCoordinator)
             .environmentObject(audioPlayer)
+            .environmentObject(audioPlayer.progress)
             .environmentObject(downloadManager)
             .environmentObject(settings)
             .onAppear {
@@ -639,16 +663,13 @@ struct PodstashApp: App {
                 refreshCoordinator.setDownloadManager(downloadManager)
                 audioPlayer.setModelContext(context)
                 audioPlayer.setSettings(settings)
+                audioPlayer.setPodcastDirectory(podcastDirectory)
                 downloadManager.setModelContext(context)
 
-                // Collapse any episodes duplicated by a CloudKit sync race (e.g. this device and
-                // another both refreshing the same feed before either's newly-created episode
-                // synced to the other) before anything else touches the episode list.
-                EpisodeCleanupManager(modelContext: context, settings: settings).deduplicateEpisodes()
-
-                // Pick up any episodes downloaded on other devices via iCloud sync that
-                // aren't on disk here yet.
-                downloadManager.syncFollowMeDownloads(settings: settings)
+                // Collapse any PlaybackRecords duplicated by a CloudKit sync race (e.g. two
+                // devices each first-touching the same episode before either's row synced to
+                // the other) before anything else reads queue/played state.
+                PlaybackRecordStore.deduplicate(in: context)
 
                 // Reclaim disk space from downloaded files no live episode references anymore.
                 downloadManager.pruneOrphanedDownloads()
@@ -695,6 +716,7 @@ struct PodstashApp: App {
             #if os(macOS)
             .background(MainWindowIdentifierAccessor())
             #endif
+        }
     }
 
     @CommandsBuilder
@@ -825,10 +847,8 @@ struct PodstashApp: App {
         let fetcher = FeedFetcher(modelContext: context, settings: settings, downloadManager: downloadManager)
         _ = await fetcher.fetchAllFeeds()
 
-        let cleanupManager = EpisodeCleanupManager(modelContext: context, settings: settings)
-        cleanupManager.deduplicateEpisodes()
-        cleanupManager.cleanupEpisodes()
-        downloadManager.syncFollowMeDownloads(settings: settings)
+        PlaybackRecordStore.deduplicate(in: context)
+        EpisodeCleanupManager(modelContext: context, settings: settings).cleanupEpisodes()
     }
     #endif
 }

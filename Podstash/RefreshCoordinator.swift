@@ -102,16 +102,12 @@ class RefreshCoordinator: ObservableObject {
             return // Cancellation is already handled by cancelRefresh()
         }
 
-        // Collapse any episodes duplicated by a CloudKit sync race before retention policy
-        // runs, so cleanup operates on one canonical row per feed item.
-        let cleanupManager = EpisodeCleanupManager(modelContext: modelContext, settings: settings)
-        cleanupManager.deduplicateEpisodes()
+        // Collapse any PlaybackRecords duplicated by a CloudKit sync race before retention
+        // policy runs, so cleanup operates on one canonical played/queue state per episode.
+        PlaybackRecordStore.deduplicate(in: modelContext)
 
         // Apply retention/auto-delete settings now that new episodes are in
-        cleanupManager.cleanupEpisodes()
-
-        // Also pick up anything downloaded on other devices via iCloud sync since the last refresh.
-        downloadManager?.syncFollowMeDownloads(settings: settings)
+        EpisodeCleanupManager(modelContext: modelContext, settings: settings).cleanupEpisodes()
 
         // Calculate results
         let successCount = results.values.filter { result in

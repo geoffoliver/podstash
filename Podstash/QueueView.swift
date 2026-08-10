@@ -2,22 +2,23 @@
 //  QueueView.swift
 //  Podstash
 //
-//  Created by Geoff Oliver on 7/30/26.
-//
 
 import SwiftUI
 import SwiftData
 
 struct QueueView: View {
     @Environment(\.modelContext) private var modelContext
-    // Query directly for queued episodes instead of filtering all episodes
+    @EnvironmentObject var podcastDirectory: PodcastDirectory
+    // Query directly for queued PlaybackRecords instead of filtering all episodes - queue/
+    // played state lives on PlaybackRecord now, not Episode (see Models.swift). Joined to local
+    // Episode metadata by episodeKey in `queuedEpisodes` below.
     @Query(
-        filter: #Predicate<Episode> { episode in
-            episode.queuePosition != nil && !episode.isPlayed
+        filter: #Predicate<PlaybackRecord> { record in
+            record.queuePosition != nil && !record.isPlayed
         },
-        sort: \Episode.queuePosition
-    ) private var queuedEpisodes: [Episode]
-    
+        sort: \PlaybackRecord.queuePosition
+    ) private var queuedRecords: [PlaybackRecord]
+
     @EnvironmentObject var audioPlayer: AudioPlayerManager
     @State private var multiSelection = Set<UUID>()
     @State private var showingRemoveAlert = false
@@ -32,39 +33,60 @@ struct QueueView: View {
         !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
-    // Reordering (drag/drop on macOS, edit-mode drag on iOS) is disabled while this
-    // is non-empty, since queuePosition indices from a filtered subset don't map
-    // onto the full queue's ordering.
-    private var displayedEpisodes: [Episode] {
+    // Joins queuedRecords (the reactive, CloudKit-synced source of truth for order/played) to
+    // their local Episode metadata, scoped to just the keys in the queue - never a full-library
+    // fetch. Records whose Episode hasn't been locally re-derived from RSS yet (e.g. this device
+    // hasn't refreshed that podcast) are simply skipped until it has.
+    private var queuedEpisodes: [EpisodeDisplay] {
+        guard !queuedRecords.isEmpty else { return [] }
+        let keys = Set(queuedRecords.map(\.episodeKey))
+        let episodeDescriptor = FetchDescriptor<Episode>(predicate: #Predicate { keys.contains($0.episodeKey) })
+        let episodes = (try? modelContext.fetch(episodeDescriptor)) ?? []
+        let episodeByKey = Dictionary(uniqueKeysWithValues: episodes.map { ($0.episodeKey, $0) })
+
+        return queuedRecords.compactMap { record in
+            guard let episode = episodeByKey[record.episodeKey] else { return nil }
+            return EpisodeDisplay(episode: episode, state: EpisodeState(record: record))
+        }
+    }
+
+    private func displayedEpisodes(from queuedEpisodes: [EpisodeDisplay]) -> [EpisodeDisplay] {
         guard isSearching else { return queuedEpisodes }
-        return queuedEpisodes.filter { episode in
-            episode.title.localizedCaseInsensitiveContains(searchText)
-                || (episode.podcast?.title.localizedCaseInsensitiveContains(searchText) ?? false)
+        return queuedEpisodes.filter { item in
+            item.episode.title.localizedCaseInsensitiveContains(searchText)
+                || (podcastDirectory.podcast(for: item.episode.podcastID)?.title.localizedCaseInsensitiveContains(searchText) ?? false)
         }
     }
 
     var body: some View {
+        // Computed ONCE per body evaluation and reused below - queuedEpisodes does a real
+        // SwiftData fetch, and was previously a bare computed property referenced ~4 times per
+        // render (directly, and again indirectly through the old displayedEpisodes property),
+        // same mistake as PodcastListView/PodcastDetailView's version of this bug.
+        let queuedEpisodesList = queuedEpisodes
+        let displayedEpisodesList = displayedEpisodes(from: queuedEpisodesList)
+
         Group {
             #if os(macOS)
             // macOS: Use proper NSTableView for double-click support
             VStack(spacing: 0) {
-                if queuedEpisodes.isEmpty {
+                if queuedEpisodesList.isEmpty {
                     VStack(spacing: 16) {
                         Image(systemName: "text.line.first.and.arrowtriangle.forward")
                             .font(.system(size: 48))
                             .foregroundStyle(.secondary)
-                        
+
                         Text("Queue is Empty")
                             .font(.title2)
                             .fontWeight(.semibold)
-                        
+
                         Text("Add episodes to your queue from any podcast")
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
                             .multilineTextAlignment(.center)
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                } else if isSearching && displayedEpisodes.isEmpty {
+                } else if isSearching && displayedEpisodesList.isEmpty {
                     VStack(spacing: 16) {
                         Image(systemName: "magnifyingglass")
                             .font(.system(size: 48))
@@ -79,7 +101,8 @@ struct QueueView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                 } else {
                     QueueTableView(
-                        episodes: displayedEpisodes,
+                        episodes: displayedEpisodesList,
+                        podcastDirectory: podcastDirectory,
                         selection: $multiSelection,
                         onDoubleClick: { episode in
                             audioPlayer.play(episode: episode)
@@ -87,7 +110,7 @@ struct QueueView: View {
                         onRemove: { episodes in
                             // Simply remove from queue - no reindexing needed
                             for episode in episodes {
-                                episode.queuePosition = nil
+                                PlaybackRecordStore.recordForMutation(episodeKey: episode.episodeKey, in: modelContext).queuePosition = nil
                             }
 
                             // Single save
@@ -97,9 +120,10 @@ struct QueueView: View {
                         onMarkPlayed: { episodes in
                             // Mark episodes as played immediately in memory
                             for episode in episodes {
-                                episode.isPlayed = true
-                                episode.queuePosition = nil
-                                episode.playbackPosition = 0
+                                let record = PlaybackRecordStore.recordForMutation(episodeKey: episode.episodeKey, in: modelContext)
+                                record.isPlayed = true
+                                record.queuePosition = nil
+                                record.playbackPosition = 0
                             }
 
                             // Clear selection immediately for instant UI feedback
@@ -137,8 +161,8 @@ struct QueueView: View {
             .onKeyPress(.return) {
                 if let selectedID = multiSelection.first,
                    multiSelection.count == 1,
-                   let episode = queuedEpisodes.first(where: { $0.id == selectedID }) {
-                    audioPlayer.play(episode: episode)
+                   let item = queuedEpisodesList.first(where: { $0.episode.id == selectedID }) {
+                    audioPlayer.play(episode: item.episode)
                     return .handled
                 }
                 return .ignored
@@ -156,13 +180,13 @@ struct QueueView: View {
                         } label: {
                             Label("Add All Unplayed", systemImage: "plus.circle")
                         }
-                        
+
                         Button {
                             clearQueue()
                         } label: {
                             Label("Clear Queue", systemImage: "trash")
                         }
-                        .disabled(queuedEpisodes.isEmpty)
+                        .disabled(queuedEpisodesList.isEmpty)
                     } label: {
                         Label("Queue Options", systemImage: "ellipsis.circle")
                     }
@@ -171,7 +195,7 @@ struct QueueView: View {
             #else
             // iOS: Use SwiftUI List
             List(selection: $multiSelection) {
-            if queuedEpisodes.isEmpty {
+            if queuedEpisodesList.isEmpty {
                 VStack(spacing: 16) {
                     Image(systemName: "text.line.first.and.arrowtriangle.forward")
                         .font(.system(size: 48))
@@ -188,7 +212,7 @@ struct QueueView: View {
                 }
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 40)
-            } else if isSearching && displayedEpisodes.isEmpty {
+            } else if isSearching && displayedEpisodesList.isEmpty {
                 VStack(spacing: 16) {
                     Image(systemName: "magnifyingglass")
                         .font(.system(size: 48))
@@ -206,26 +230,26 @@ struct QueueView: View {
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 40)
             } else {
-                ForEach(displayedEpisodes) { episode in
-                    QueueEpisodeRow(episode: episode, onShowInfo: { episodeForInfoSheet = $0 })
-                        .tag(episode.id)
+                ForEach(displayedEpisodesList) { item in
+                    QueueEpisodeRow(item: item, onShowInfo: { episodeForInfoSheet = $0 }, podcast: podcastDirectory.podcast(for: item.episode.podcastID))
+                        .tag(item.episode.id)
                         .environmentObject(audioPlayer)
                         .simultaneousGesture(
                             TapGesture(count: 2)
                                 .onEnded {
-                                    audioPlayer.play(episode: episode)
+                                    audioPlayer.play(episode: item.episode)
                                 }
                         )
                         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                             Button(role: .destructive) {
-                                removeFromQueue(episode)
+                                removeFromQueue(item.episode)
                             } label: {
                                 Label("Remove", systemImage: "trash")
                             }
                         }
                         .swipeActions(edge: .leading, allowsFullSwipe: true) {
                             Button {
-                                markAsPlayed(episode)
+                                markAsPlayed(item.episode)
                             } label: {
                                 Label("Mark Played", systemImage: "checkmark.circle.fill")
                             }
@@ -233,20 +257,20 @@ struct QueueView: View {
                         }
                         .contextMenu {
                             Button {
-                                audioPlayer.play(episode: episode)
+                                audioPlayer.play(episode: item.episode)
                             } label: {
                                 Label("Play", systemImage: "play.fill")
                             }
                             .disabled(multiSelection.count > 1)
-                            
+
                             Divider()
-                            
+
                             Button {
                                 if multiSelection.count > 1 {
                                     // Mark all selected as played
                                     markSelectedAsPlayed()
                                 } else {
-                                    markAsPlayed(episode)
+                                    markAsPlayed(item.episode)
                                 }
                             } label: {
                                 if multiSelection.count > 1 {
@@ -255,13 +279,13 @@ struct QueueView: View {
                                     Label("Mark as Played", systemImage: "checkmark.circle")
                                 }
                             }
-                            
+
                             Button(role: .destructive) {
                                 if multiSelection.count > 1 {
                                     // Remove all selected
                                     showingRemoveAlert = true
                                 } else {
-                                    removeFromQueue(episode)
+                                    removeFromQueue(item.episode)
                                 }
                             } label: {
                                 if multiSelection.count > 1 {
@@ -316,7 +340,7 @@ struct QueueView: View {
                     } label: {
                         Label("Clear Queue", systemImage: "trash")
                     }
-                    .disabled(queuedEpisodes.isEmpty)
+                    .disabled(queuedEpisodesList.isEmpty)
                 } label: {
                     Label("Queue Options", systemImage: "ellipsis.circle")
                 }
@@ -343,52 +367,54 @@ struct QueueView: View {
             EpisodeDetailView(episode: episode)
         }
     }
-    
+
     private func markSelectedAsPlayed() {
-        let episodesToMark = queuedEpisodes.filter { multiSelection.contains($0.id) }
+        let episodesToMark = queuedEpisodes.filter { multiSelection.contains($0.episode.id) }
 
         withAnimation {
-            for episode in episodesToMark {
-                episode.isPlayed = true
-                episode.queuePosition = nil
-                episode.playbackPosition = 0
+            for item in episodesToMark {
+                let record = PlaybackRecordStore.recordForMutation(episodeKey: item.episode.episodeKey, in: modelContext)
+                record.isPlayed = true
+                record.queuePosition = nil
+                record.playbackPosition = 0
             }
 
             // Single save - no reindexing
             try? modelContext.save()
         }
         multiSelection.removeAll()
-        
+
         // If current episode was marked, play next
         if let currentID = audioPlayer.currentEpisode?.id,
-           episodesToMark.contains(where: { $0.id == currentID }) {
+           episodesToMark.contains(where: { $0.episode.id == currentID }) {
             playNextInQueue()
         }
     }
-    
+
     private func removeSelectedFromQueue() {
-        let episodesToRemove = queuedEpisodes.filter { multiSelection.contains($0.id) }
-        
-        for episode in episodesToRemove {
-            episode.queuePosition = nil
+        let episodesToRemove = queuedEpisodes.filter { multiSelection.contains($0.episode.id) }
+
+        for item in episodesToRemove {
+            PlaybackRecordStore.recordForMutation(episodeKey: item.episode.episodeKey, in: modelContext).queuePosition = nil
         }
-        
+
         // Single save - no reindexing
         try? modelContext.save()
         multiSelection.removeAll()
     }
-    
+
     private func removeFromQueue(_ episode: Episode) {
-        episode.queuePosition = nil
+        PlaybackRecordStore.recordForMutation(episodeKey: episode.episodeKey, in: modelContext).queuePosition = nil
         // Single save - no reindexing
         try? modelContext.save()
     }
-    
+
     private func markAsPlayed(_ episode: Episode) {
         withAnimation {
-            episode.isPlayed = true
-            episode.queuePosition = nil
-            episode.playbackPosition = 0
+            let record = PlaybackRecordStore.recordForMutation(episodeKey: episode.episodeKey, in: modelContext)
+            record.isPlayed = true
+            record.queuePosition = nil
+            record.playbackPosition = 0
 
             // Single save - no reindexing
             try? modelContext.save()
@@ -399,65 +425,75 @@ struct QueueView: View {
             playNextInQueue()
         }
     }
-    
+
     private func moveEpisodes(from source: IndexSet, to destination: Int) {
         var episodes = queuedEpisodes
         episodes.move(fromOffsets: source, toOffset: destination)
-        
+
         // Reindex all episodes with their new positions
-        for (index, episode) in episodes.enumerated() {
-            episode.queuePosition = index
+        for (index, item) in episodes.enumerated() {
+            PlaybackRecordStore.recordForMutation(episodeKey: item.episode.episodeKey, in: modelContext).queuePosition = index
         }
-        
+
         try? modelContext.save()
     }
-    
-    private func reindexQueue() {
-        let episodes = queuedEpisodes
-        for (index, episode) in episodes.enumerated() {
-            episode.queuePosition = index
-        }
-        try? modelContext.save()
-    }
-    
+
     private func addAllUnplayedToQueue() {
-        // Fetch downloaded, unplayed episodes that aren't in queue
+        // Fetch downloaded episodes that aren't in queue, oldest first
+        let queuedKeys = Set(queuedRecords.map(\.episodeKey))
         let descriptor = FetchDescriptor<Episode>(
             predicate: #Predicate { episode in
-                !episode.isPlayed && episode.isDownloaded && episode.queuePosition == nil
+                episode.isDownloaded && !queuedKeys.contains(episode.episodeKey)
             },
             sortBy: [SortDescriptor(\.publishDate)] // Oldest first
         )
-        
-        guard let unplayedEpisodes = try? modelContext.fetch(descriptor) else { return }
-        
-        var nextPosition = (queuedEpisodes.last?.queuePosition ?? -1) + 1
-        
+
+        guard let candidateEpisodes = try? modelContext.fetch(descriptor) else { return }
+
+        // Exclude already-played episodes (played state lives on PlaybackRecord, not Episode,
+        // so this can't be expressed in the predicate above). Scoped to just the candidate
+        // episodes' keys rather than fetching every played PlaybackRecord (~13,000+ rows and
+        // growing, since PlaybackRecord history is never pruned).
+        let candidateKeys = Set(candidateEpisodes.map(\.episodeKey))
+        let states = PlaybackRecordStore.states(forKeys: candidateKeys, in: modelContext)
+        let unplayedEpisodes = candidateEpisodes.filter { !(states[$0.episodeKey]?.isPlayed ?? false) }
+
+        var nextPosition = (queuedRecords.compactMap(\.queuePosition).max() ?? -1) + 1
+
         for episode in unplayedEpisodes {
-            episode.queuePosition = nextPosition
+            PlaybackRecordStore.recordForMutation(episodeKey: episode.episodeKey, in: modelContext).queuePosition = nextPosition
             nextPosition += 1
         }
-        
+
         try? modelContext.save()
     }
-    
+
     private func clearQueue() {
-        for episode in queuedEpisodes {
-            episode.queuePosition = nil
+        for record in queuedRecords {
+            record.queuePosition = nil
         }
         try? modelContext.save()
     }
-    
+
     private func playNextInQueue() {
-        if let nextEpisode = queuedEpisodes.first {
-            audioPlayer.play(episode: nextEpisode)
+        if let nextItem = queuedEpisodes.first {
+            audioPlayer.play(episode: nextItem.episode)
         }
     }
 }
 
 struct QueueEpisodeRow: View {
-    let episode: Episode
+    let item: EpisodeDisplay
     let onShowInfo: (Episode) -> Void
+    // Passed explicitly rather than resolved via @EnvironmentObject<PodcastDirectory> - on
+    // macOS this row is instantiated inside an NSHostingView built directly by
+    // QueueTableView.Coordinator (see QueueTableView.swift), which is an isolated SwiftUI root
+    // that doesn't inherit the ambient environment from the rest of the view hierarchy. Same
+    // reason isCurrentlyPlaying/isPlaying below are passed explicitly on macOS instead of read
+    // from an environment object.
+    let podcast: Podcast?
+
+    private var episode: Episode { item.episode }
 
     #if os(macOS)
     // On macOS: Pass these explicitly to avoid environment object issues
@@ -491,11 +527,11 @@ struct QueueEpisodeRow: View {
         .buttonStyle(.plain)
         #endif
     }
-    
+
     private var rowContent: some View {
         HStack(spacing: 12) {
             // Episode artwork or podcast artwork
-            if let podcast = episode.podcast,
+            if let podcast,
                let artworkURL = podcast.artworkURL,
                let url = URL(string: artworkURL) {
                 CachedAsyncImage(url: url) { image in
@@ -532,7 +568,7 @@ struct QueueEpisodeRow: View {
                     }
                 }
 
-                if let podcast = episode.podcast {
+                if let podcast {
                     Text(podcast.title)
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
@@ -548,10 +584,10 @@ struct QueueEpisodeRow: View {
                     }
 
                     // Show progress if partially played
-                    if episode.playbackPosition > 0 {
+                    if item.state.playbackPosition > 0 {
                         Text("•")
                         if let duration = episode.duration, duration > 0 {
-                            let percent = Int((episode.playbackPosition / duration) * 100)
+                            let percent = Int((item.state.playbackPosition / duration) * 100)
                             Text("\(percent)%")
                                 .foregroundStyle(.blue)
                         }
@@ -580,12 +616,12 @@ struct QueueEpisodeRow: View {
         .padding(.horizontal, 16)
         .padding(.vertical, 4)
     }
-    
+
     private func formatDuration(_ duration: TimeInterval) -> String {
         let hours = Int(duration) / 3600
         let minutes = (Int(duration) % 3600) / 60
         let seconds = Int(duration) % 60
-        
+
         if hours > 0 {
             return String(format: "%d:%02d:%02d", hours, minutes, seconds)
         } else {
@@ -605,10 +641,10 @@ struct TableRowDoubleClickHandler<Content: View>: NSViewRepresentable {
     @Binding var selection: Set<UUID>
     let onDoubleClick: (UUID) -> Void
     let content: () -> Content
-    
+
     func makeNSView(context: Context) -> NSHostingView<Content> {
         let hostingView = NSHostingView(rootView: content())
-        
+
         // Find the NSTableView in the view hierarchy
         DispatchQueue.main.async {
             if let tableView = findTableView(in: hostingView) {
@@ -617,52 +653,52 @@ struct TableRowDoubleClickHandler<Content: View>: NSViewRepresentable {
                 context.coordinator.tableView = tableView
             }
         }
-        
+
         return hostingView
     }
-    
+
     func updateNSView(_ nsView: NSHostingView<Content>, context: Context) {
         nsView.rootView = content()
     }
-    
+
     func makeCoordinator() -> Coordinator {
         Coordinator(selection: $selection, onDoubleClick: onDoubleClick)
     }
-    
+
     private func findTableView(in view: NSView) -> NSTableView? {
         if let tableView = view as? NSTableView {
             return tableView
         }
-        
+
         for subview in view.subviews {
             if let tableView = findTableView(in: subview) {
                 return tableView
             }
         }
-        
+
         return nil
     }
-    
+
     class Coordinator: NSObject {
         @Binding var selection: Set<UUID>
         let onDoubleClick: (UUID) -> Void
         weak var tableView: NSTableView?
-        
+
         init(selection: Binding<Set<UUID>>, onDoubleClick: @escaping (UUID) -> Void) {
             self._selection = selection
             self.onDoubleClick = onDoubleClick
         }
-        
+
         @objc func handleDoubleClick(_ sender: Any?) {
             guard let tableView = tableView,
                   tableView.clickedRow >= 0 else { return }
-            
+
             // Get the first selected item (or clicked item if no selection)
             if let selectedID = selection.first {
                 onDoubleClick(selectedID)
             }
         }
-        
+
         // This is what NSTableView actually calls
         @objc func onAction(_ sender: Any?) {
             handleDoubleClick(sender)
@@ -670,4 +706,3 @@ struct TableRowDoubleClickHandler<Content: View>: NSViewRepresentable {
     }
 }
 #endif
-

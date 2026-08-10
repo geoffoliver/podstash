@@ -2,15 +2,18 @@
 //  QueueTableView.swift
 //  Podstash
 //
-//  Created by Geoff Oliver on 7/30/26.
-//
 
 #if os(macOS)
 import SwiftUI
 import AppKit
 
 struct QueueTableView: NSViewRepresentable {
-    let episodes: [Episode]
+    let episodes: [EpisodeDisplay]
+    // Passed explicitly (not read from the environment inside the Coordinator) since the rows
+    // built below live in an NSHostingView constructed directly by the Coordinator - an isolated
+    // SwiftUI root that doesn't inherit the ambient environment from the rest of the view
+    // hierarchy. See QueueEpisodeRow's `podcast` property for the same reasoning.
+    let podcastDirectory: PodcastDirectory
     @Binding var selection: Set<UUID>
     let onDoubleClick: (Episode) -> Void
     let onRemove: ([Episode]) -> Void
@@ -19,15 +22,15 @@ struct QueueTableView: NSViewRepresentable {
     let onShowInfo: ((Episode) -> Void)? // NEW: Callback for showing episode info
     let currentlyPlayingID: UUID?
     let isPlaying: Bool
-    
+
     func makeCoordinator() -> Coordinator {
         Coordinator(self)
     }
-    
+
     func makeNSView(context: Context) -> NSScrollView {
         let scrollView = NSScrollView()
         let tableView = NSTableView()
-        
+
         tableView.delegate = context.coordinator
         tableView.dataSource = context.coordinator
         tableView.allowsMultipleSelection = true
@@ -36,29 +39,29 @@ struct QueueTableView: NSViewRepresentable {
         tableView.intercellSpacing = NSSize(width: 0, height: 0)
         tableView.backgroundColor = .clear
         tableView.gridStyleMask = [] // No grid lines
-        
+
         // CRITICAL: Set action to nil to prevent single-click activation
         tableView.action = nil
-        
+
         // Enable double-click ONLY
         tableView.doubleAction = #selector(Coordinator.tableViewDoubleClicked(_:))
         tableView.target = context.coordinator
-        
+
         // Enable row actions (swipe actions)
         tableView.selectionHighlightStyle = .regular
-        
+
         // Set up context menu
         tableView.menu = context.coordinator.createContextMenu()
-        
+
         // ENABLE DRAG AND DROP REORDERING
         tableView.registerForDraggedTypes([.string])
-        
+
         // Add columns
         let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier("EpisodeColumn"))
         column.width = 500
         tableView.addTableColumn(column)
         tableView.headerView = nil // No header
-        
+
         scrollView.documentView = tableView
         scrollView.hasVerticalScroller = true
         scrollView.drawsBackground = false
@@ -67,50 +70,50 @@ struct QueueTableView: NSViewRepresentable {
 
         return scrollView
     }
-    
+
     func updateNSView(_ scrollView: NSScrollView, context: Context) {
         guard let tableView = scrollView.documentView as? NSTableView else { return }
-        
+
         let oldParent = context.coordinator.parent
         context.coordinator.parent = self
-        
+
         // CRITICAL: Only reload if episodes list actually changed
         let episodesChanged = !areEpisodesEqual(oldParent.episodes, episodes)
-        
+
         if episodesChanged {
             // Episodes list changed - do a full reload
             context.coordinator.episodes = episodes
             tableView.reloadData()
-        } else if oldParent.currentlyPlayingID != currentlyPlayingID || 
+        } else if oldParent.currentlyPlayingID != currentlyPlayingID ||
                   oldParent.isPlaying != isPlaying {
             // Only playback state changed - update affected rows
-            if let oldPlayingRow = episodes.firstIndex(where: { $0.id == oldParent.currentlyPlayingID }) {
+            if let oldPlayingRow = episodes.firstIndex(where: { $0.episode.id == oldParent.currentlyPlayingID }) {
                 tableView.reloadData(forRowIndexes: IndexSet(integer: oldPlayingRow), columnIndexes: IndexSet(integer: 0))
             }
-            if let newPlayingRow = episodes.firstIndex(where: { $0.id == currentlyPlayingID }) {
+            if let newPlayingRow = episodes.firstIndex(where: { $0.episode.id == currentlyPlayingID }) {
                 tableView.reloadData(forRowIndexes: IndexSet(integer: newPlayingRow), columnIndexes: IndexSet(integer: 0))
             }
         }
-        
+
         // Update selection
-        let selectedRows = episodes.enumerated().filter { selection.contains($0.element.id) }.map { $0.offset }
+        let selectedRows = episodes.enumerated().filter { selection.contains($0.element.episode.id) }.map { $0.offset }
         tableView.selectRowIndexes(IndexSet(selectedRows), byExtendingSelection: false)
     }
-    
+
     // Helper to compare episode arrays by ID only
-    private func areEpisodesEqual(_ lhs: [Episode], _ rhs: [Episode]) -> Bool {
+    private func areEpisodesEqual(_ lhs: [EpisodeDisplay], _ rhs: [EpisodeDisplay]) -> Bool {
         guard lhs.count == rhs.count else { return false }
         for (left, right) in zip(lhs, rhs) {
-            if left.id != right.id {
+            if left.episode.id != right.episode.id {
                 return false
             }
         }
         return true
     }
-    
+
     class Coordinator: NSObject, NSTableViewDelegate, NSTableViewDataSource {
         var parent: QueueTableView
-        var episodes: [Episode] = []
+        var episodes: [EpisodeDisplay] = []
         weak var tableView: NSTableView?
 
         init(_ parent: QueueTableView) {
@@ -128,58 +131,59 @@ struct QueueTableView: NSViewRepresentable {
         // whole selection; otherwise act on just the clicked row.
         var selectedEpisodesForMenu: [Episode] {
             guard let tableView = tableView else {
-                return parent.selection.compactMap { id in episodes.first { $0.id == id } }
+                return parent.selection.compactMap { id in episodes.first { $0.episode.id == id }?.episode }
             }
             let clickedRow = tableView.clickedRow
             if clickedRow >= 0 {
                 if tableView.selectedRowIndexes.contains(clickedRow) {
-                    return tableView.selectedRowIndexes.compactMap { episodes[safe: $0] }
+                    return tableView.selectedRowIndexes.compactMap { episodes[safe: $0]?.episode }
                 }
-                return episodes[safe: clickedRow].map { [$0] } ?? []
+                return episodes[safe: clickedRow].map { [$0.episode] } ?? []
             }
-            return tableView.selectedRowIndexes.compactMap { episodes[safe: $0] }
+            return tableView.selectedRowIndexes.compactMap { episodes[safe: $0]?.episode }
         }
-        
+
         func numberOfRows(in tableView: NSTableView) -> Int {
             episodes.count
         }
-        
+
         func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
-            let episode = episodes[row]
-            
+            let item = episodes[row]
+
             let view = NSHostingView(
                 rootView: QueueEpisodeRow(
-                    episode: episode,
+                    item: item,
                     onShowInfo: { [weak self] in self?.parent.onShowInfo?($0) },
-                    isCurrentlyPlaying: episode.id == parent.currentlyPlayingID,
+                    podcast: parent.podcastDirectory.podcast(for: item.episode.podcastID),
+                    isCurrentlyPlaying: item.episode.id == parent.currentlyPlayingID,
                     isPlaying: parent.isPlaying
                 )
             )
             return view
         }
-        
+
         func tableView(_ tableView: NSTableView, heightOfRow row: Int) -> CGFloat {
             return 70
         }
-        
+
         func tableView(_ tableView: NSTableView, rowViewForRow row: Int) -> NSTableRowView? {
             // Use standard row view without hover effects
             return nil  // Let the table view create default row views
         }
-        
+
         func tableViewSelectionDidChange(_ notification: Notification) {
             guard let tableView = notification.object as? NSTableView else { return }
-            
+
             let selectedRows = tableView.selectedRowIndexes
-            let selectedIDs = Set(selectedRows.compactMap { episodes[safe: $0]?.id })
-            
+            let selectedIDs = Set(selectedRows.compactMap { episodes[safe: $0]?.episode.id })
+
             DispatchQueue.main.async {
                 self.parent.selection = selectedIDs
             }
         }
-        
+
         // MARK: - Swipe Actions (just like Mail and Music!)
-        
+
         func tableView(_ tableView: NSTableView, rowActionsForRow row: Int, edge: NSTableView.RowActionEdge) -> [NSTableViewRowAction] {
             guard row >= 0, row < episodes.count else { return [] }
 
@@ -194,7 +198,7 @@ struct QueueTableView: NSViewRepresentable {
                 title: ""
             ) { [weak self] action, row in
                 guard let self = self, row < self.episodes.count else { return }
-                let episode = self.episodes[row]
+                let episode = self.episodes[row].episode
                 self.parent.onRemove([episode])
             }
             removeAction.backgroundColor = .systemRed
@@ -209,7 +213,7 @@ struct QueueTableView: NSViewRepresentable {
                 title: ""
             ) { [weak self] action, row in
                 guard let self = self, row < self.episodes.count else { return }
-                let episode = self.episodes[row]
+                let episode = self.episodes[row].episode
                 self.parent.onMarkPlayed([episode])
             }
             markPlayedAction.backgroundColor = .systemBlue
@@ -222,14 +226,14 @@ struct QueueTableView: NSViewRepresentable {
             // matching the sidebar's trash-at-the-edge convention.
             return [markPlayedAction, removeAction]
         }
-        
+
         @objc func tableViewDoubleClicked(_ sender: NSTableView) {
             let row = sender.clickedRow
             guard row >= 0, row < episodes.count else { return }
-            
-            parent.onDoubleClick(episodes[row])
+
+            parent.onDoubleClick(episodes[row].episode)
         }
-        
+
         func createContextMenu() -> NSMenu {
             let menu = NSMenu()
             menu.delegate = self
@@ -253,9 +257,9 @@ extension QueueTableView.Coordinator: NSMenuDelegate {
             )
             playItem.target = self
             menu.addItem(playItem)
-            
+
             menu.addItem(NSMenuItem.separator())
-            
+
             let infoItem = NSMenuItem(
                 title: "Show Details",
                 action: #selector(showEpisodeInfo),
@@ -263,10 +267,10 @@ extension QueueTableView.Coordinator: NSMenuDelegate {
             )
             infoItem.target = self
             menu.addItem(infoItem)
-            
+
             menu.addItem(NSMenuItem.separator())
         }
-        
+
         let markPlayedTitle = selectedEpisodes.count > 1 ? "Mark \(selectedEpisodes.count) as Played" : "Mark as Played"
         let markPlayedItem = NSMenuItem(
             title: markPlayedTitle,
@@ -275,9 +279,9 @@ extension QueueTableView.Coordinator: NSMenuDelegate {
         )
         markPlayedItem.target = self
         menu.addItem(markPlayedItem)
-        
+
         menu.addItem(NSMenuItem.separator())
-        
+
         let removeTitle = selectedEpisodes.count > 1 ? "Remove \(selectedEpisodes.count) from Queue" : "Remove from Queue"
         let removeItem = NSMenuItem(
             title: removeTitle,
@@ -287,7 +291,7 @@ extension QueueTableView.Coordinator: NSMenuDelegate {
         removeItem.target = self
         menu.addItem(removeItem)
     }
-    
+
     @objc func playSelectedEpisode() {
         if let episode = selectedEpisodesForMenu.first {
             parent.onDoubleClick(episode)
@@ -307,9 +311,9 @@ extension QueueTableView.Coordinator: NSMenuDelegate {
     @objc func removeSelectedFromQueue() {
         parent.onRemove(selectedEpisodesForMenu)
     }
-    
+
     // MARK: - Drag and Drop Support
-    
+
     func tableView(_ tableView: NSTableView, pasteboardWriterForRow row: Int) -> NSPasteboardWriting? {
         guard row >= 0, row < episodes.count else { return nil }
 
@@ -331,7 +335,7 @@ extension QueueTableView.Coordinator: NSMenuDelegate {
                   let row = Int(rowString),
                   row >= 0, row < self.episodes.count else { return }
 
-            let episode = self.episodes[row]
+            let episode = self.episodes[row].episode
             let size = draggingItem.draggingFrame.size
             guard size.width > 0, size.height > 0 else { return }
 
@@ -356,7 +360,7 @@ extension QueueTableView.Coordinator: NSMenuDelegate {
             draggingItem.setDraggingFrame(draggingItem.draggingFrame, contents: image)
         }
     }
-    
+
     func tableView(_ tableView: NSTableView, validateDrop info: NSDraggingInfo, proposedRow row: Int, proposedDropOperation dropOperation: NSTableView.DropOperation) -> NSDragOperation {
         // Only allow dropping between rows, not on rows
         if dropOperation == .above {
@@ -364,11 +368,11 @@ extension QueueTableView.Coordinator: NSMenuDelegate {
         }
         return []
     }
-    
+
     func tableView(_ tableView: NSTableView, acceptDrop info: NSDraggingInfo, row: Int, dropOperation: NSTableView.DropOperation) -> Bool {
         // Get the dragged row indices
         guard let items = info.draggingPasteboard.pasteboardItems else { return false }
-        
+
         var oldIndices: [Int] = []
         for item in items {
             if let rowString = item.string(forType: .string),
@@ -376,7 +380,7 @@ extension QueueTableView.Coordinator: NSMenuDelegate {
                 oldIndices.append(rowIndex)
             }
         }
-        
+
         guard !oldIndices.isEmpty else { return false }
 
         // Sort indices to handle multiple selections properly
@@ -387,7 +391,7 @@ extension QueueTableView.Coordinator: NSMenuDelegate {
         // adjustment for removed items internally), so pass it through as-is.
         let indexSet = IndexSet(oldIndices)
         parent.onMove(indexSet, row)
-        
+
         return true
     }
 }

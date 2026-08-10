@@ -23,16 +23,19 @@ typealias MPImage = UIImage
 @MainActor
 class AudioPlayerManager: ObservableObject {
     // MARK: - Published Properties
+    // Only currentEpisode/isPlaying live here - they change on user actions (switch episode,
+    // play/pause), not continuously. High-frequency progress ticking lives in the separate
+    // `progress` object below (see PlaybackProgress.swift for why the split matters): views
+    // that only need "what's playing" (sidebar, queue, podcast/episode detail) hold this object
+    // without pulling in progress, so they don't re-render every second something is playing.
     @Published var currentEpisode: Episode?
     @Published var isPlaying: Bool = false
-    @Published var currentTime: TimeInterval = 0
-    @Published var duration: TimeInterval = 0
-    @Published var playbackRate: Float = 1.0
-    // Measured height of CompactPlayerBar (iOS), so scrollable lists placed underneath it via
-    // NavigationSplitView can reserve enough bottom content inset to fully clear it - the
-    // safeAreaInset applied around the NavigationSplitView doesn't propagate into a detail
-    // column's List content inset (NavigationSplitView manages its own column safe areas).
-    @Published var compactPlayerBarHeight: CGFloat = 0
+
+    // Owned, not @Published itself - mutating its own @Published fields doesn't trigger this
+    // object's objectWillChange, so holding AudioPlayerManager alone doesn't subscribe you to
+    // progress ticks. Views that need live progress hold `progress` directly via a separate
+    // environment injection (see PodstashApp.swift).
+    let progress = PlaybackProgress()
 
     // MARK: - Private Properties
     private var player: AVPlayer?
@@ -40,6 +43,14 @@ class AudioPlayerManager: ObservableObject {
     private var modelContext: ModelContext?
     private var periodicSaveTimer: Timer?
     private var settings: AppSettings?
+    private var podcastDirectory: PodcastDirectory?
+
+    // Episode has no relationship to Podcast (see Models.swift) - resolved via podcastDirectory
+    // instead, same as every other call site that used to read `episode.podcast`.
+    var currentPodcast: Podcast? {
+        guard let currentEpisode else { return nil }
+        return podcastDirectory?.podcast(for: currentEpisode.podcastID)
+    }
     
     #if os(macOS)
     var miniPlayerController: MiniPlayerWindowController?
@@ -148,9 +159,13 @@ class AudioPlayerManager: ObservableObject {
     
     func setSettings(_ settings: AppSettings) {
         self.settings = settings
-        
+
         // Apply default playback speed
-        self.playbackRate = Float(settings.defaultPlaybackSpeed)
+        self.progress.playbackRate = Float(settings.defaultPlaybackSpeed)
+    }
+
+    func setPodcastDirectory(_ directory: PodcastDirectory) {
+        self.podcastDirectory = directory
     }
     
     deinit {
@@ -174,8 +189,9 @@ class AudioPlayerManager: ObservableObject {
         
         // Setup new episode
         currentEpisode = episode
-        lastSavedPosition = episode.playbackPosition // Reset the save tracking
-        duration = 0 // Reset so the time observer picks up the new episode's duration
+        let state = modelContext.map { PlaybackRecordStore.state(for: episode, in: $0) } ?? EpisodeState()
+        lastSavedPosition = state.playbackPosition // Reset the save tracking
+        progress.duration = 0 // Reset so the time observer picks up the new episode's duration
 
         // Clear stale artwork from the previous episode so it doesn't linger until the new one loads
         MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
@@ -201,11 +217,11 @@ class AudioPlayerManager: ObservableObject {
         player = AVPlayer(playerItem: playerItem)
         
         // Set playback rate
-        player?.rate = playbackRate
+        player?.rate = progress.playbackRate
         
         // Seek to saved position
-        if episode.playbackPosition > 0 {
-            let time = CMTime(seconds: episode.playbackPosition, preferredTimescale: 600)
+        if state.playbackPosition > 0 {
+            let time = CMTime(seconds: state.playbackPosition, preferredTimescale: 600)
             player?.seek(to: time)
         }
         
@@ -218,8 +234,11 @@ class AudioPlayerManager: ObservableObject {
         isPlaying = true
         
         // Update last played date
-        episode.lastPlayedDate = Date()
-        try? modelContext?.save()
+        if let modelContext {
+            let record = PlaybackRecordStore.recordForMutation(episodeKey: episode.episodeKey, in: modelContext)
+            record.lastPlayedDate = Date()
+            try? modelContext.save()
+        }
         
         // Setup periodic save timer (every 10 seconds)
         setupPeriodicSaveTimer()
@@ -304,15 +323,15 @@ class AudioPlayerManager: ObservableObject {
         player?.seek(to: cmTime) { [weak self] completed in
             guard completed, let self else { return }
             Task { @MainActor in
-                self.currentTime = time
+                self.progress.currentTime = time
                 self.updateNowPlayingInfo()
             }
         }
     }
-    
+
     func skip(by seconds: TimeInterval) {
-        let newTime = currentTime + seconds
-        let clampedTime = max(0, min(newTime, duration))
+        let newTime = progress.currentTime + seconds
+        let clampedTime = max(0, min(newTime, progress.duration))
         seek(to: clampedTime)
     }
     
@@ -327,7 +346,7 @@ class AudioPlayerManager: ObservableObject {
     }
     
     func setPlaybackRate(_ rate: Float) {
-        playbackRate = rate
+        progress.playbackRate = rate
         player?.rate = isPlaying ? rate : 0
         updateNowPlayingInfo()
     }
@@ -416,15 +435,15 @@ class AudioPlayerManager: ObservableObject {
         nowPlayingInfo[MPMediaItemPropertyTitle] = episode.title
 
         // Podcast name as artist/album
-        if let podcast = episode.podcast {
+        if let podcast = currentPodcast {
             nowPlayingInfo[MPMediaItemPropertyArtist] = podcast.title
             nowPlayingInfo[MPMediaItemPropertyAlbumTitle] = podcast.title
         }
 
         // Playback info
-        nowPlayingInfo[MPMediaItemPropertyPlaybackDuration] = duration
-        nowPlayingInfo[MPNowPlayingInfoPropertyElapsedPlaybackTime] = currentTime
-        nowPlayingInfo[MPNowPlayingInfoPropertyPlaybackRate] = isPlaying ? Double(playbackRate) : 0.0
+        nowPlayingInfo[MPMediaItemPropertyPlaybackDuration] = progress.duration
+        nowPlayingInfo[MPNowPlayingInfoPropertyElapsedPlaybackTime] = progress.currentTime
+        nowPlayingInfo[MPNowPlayingInfoPropertyPlaybackRate] = isPlaying ? Double(progress.playbackRate) : 0.0
 
         // Artwork is loaded once per episode by loadNowPlayingArtwork() and merged in;
         // preserving the existing dict here (rather than rebuilding from scratch) keeps it.
@@ -434,8 +453,8 @@ class AudioPlayerManager: ObservableObject {
     
     // New function to load artwork once when starting playback
     private func loadNowPlayingArtwork() {
-        guard let episode = currentEpisode,
-              let artworkURL = episode.podcast?.artworkURL,
+        guard currentEpisode != nil,
+              let artworkURL = currentPodcast?.artworkURL,
               let url = URL(string: artworkURL) else {
             return
         }
@@ -470,28 +489,31 @@ class AudioPlayerManager: ObservableObject {
     private var lastSavedPosition: TimeInterval = 0
     
     private func saveProgress(for episode: Episode) {
+        guard let modelContext else { return }
+
         // CRITICAL FIX: Only save if progress changed significantly (at least 10 seconds)
         // This prevents constant @Query updates in SwiftUI views
-        let significantChange = abs(currentTime - lastSavedPosition) >= 10
-        
+        let significantChange = abs(progress.currentTime - lastSavedPosition) >= 10
+
         // Always save when marking as played
-        let shouldMarkPlayed = episode.duration != nil && currentTime >= episode.duration! - 30
-        
+        let shouldMarkPlayed = episode.duration != nil && progress.currentTime >= episode.duration! - 30
+
         guard significantChange || shouldMarkPlayed else {
             return // Skip save if progress hasn't changed much
         }
-        
-        episode.playbackPosition = currentTime
-        episode.lastPlayedDate = Date()
-        lastSavedPosition = currentTime
-        
+
+        let record = PlaybackRecordStore.recordForMutation(episodeKey: episode.episodeKey, in: modelContext)
+        record.playbackPosition = progress.currentTime
+        record.lastPlayedDate = Date()
+        lastSavedPosition = progress.currentTime
+
         // Mark as played if reached within 30 seconds of end
         if shouldMarkPlayed {
-            episode.isPlayed = true
-            episode.playbackPosition = 0 // Reset position for played episodes
+            record.isPlayed = true
+            record.playbackPosition = 0 // Reset position for played episodes
         }
-        
-        try? modelContext?.save()
+
+        try? modelContext.save()
     }
     
     private func setupPeriodicSaveTimer() {
@@ -526,8 +548,8 @@ class AudioPlayerManager: ObservableObject {
                 // This prevents rapid-fire @Published updates that cause view re-rendering
                 // Note: We removed the "guard isPlaying" check to ensure currentTime updates
                 // even when paused, which helps UI responsiveness for play/pause button state
-                if abs(newTime - self.currentTime) >= 0.5 {
-                    self.currentTime = newTime
+                if abs(newTime - self.progress.currentTime) >= 0.5 {
+                    self.progress.currentTime = newTime
 
                     // Keep Control Center / lock screen elapsed time in sync while playing
                     if self.isPlaying {
@@ -536,10 +558,10 @@ class AudioPlayerManager: ObservableObject {
                 }
 
                 // Update duration only once, not on every tick
-                if self.duration == 0,
+                if self.progress.duration == 0,
                    let duration = self.player?.currentItem?.duration.seconds,
                    !duration.isNaN && !duration.isInfinite {
-                    self.duration = duration
+                    self.progress.duration = duration
 
                     // Update episode duration if not set
                     if let episode = self.currentEpisode,
@@ -563,35 +585,42 @@ class AudioPlayerManager: ObservableObject {
     
     @objc private func playerDidFinishPlaying() {
         Task { @MainActor in
-            if let episode = currentEpisode {
-                episode.isPlayed = true
-                episode.playbackPosition = 0
-                episode.queuePosition = nil // Remove from queue
-                episode.lastPlayedDate = Date()
-                try? modelContext?.save()
+            if let episode = currentEpisode, let modelContext {
+                let record = PlaybackRecordStore.recordForMutation(episodeKey: episode.episodeKey, in: modelContext)
+                record.isPlayed = true
+                record.playbackPosition = 0
+                record.queuePosition = nil // Remove from queue
+                record.lastPlayedDate = Date()
+                try? modelContext.save()
             }
-            
+
             isPlaying = false
-            currentTime = 0
-            
+            progress.currentTime = 0
+
             // Auto-play next episode in queue
             playNextInQueue()
         }
     }
-    
+
     private func playNextInQueue() {
         guard let context = modelContext else { return }
-        
-        // Fetch next queued episode
-        let descriptor = FetchDescriptor<Episode>(
-            predicate: #Predicate { episode in
-                episode.queuePosition != nil && !episode.isPlayed
+
+        // Find the next queued PlaybackRecord, then resolve its local Episode by episodeKey -
+        // queue/played state lives on PlaybackRecord, not Episode (see Models.swift).
+        let recordDescriptor = FetchDescriptor<PlaybackRecord>(
+            predicate: #Predicate { record in
+                record.queuePosition != nil && !record.isPlayed
             },
             sortBy: [SortDescriptor(\.queuePosition)]
         )
-        
-        if let episodes = try? context.fetch(descriptor),
-           let nextEpisode = episodes.first {
+
+        guard let records = try? context.fetch(recordDescriptor), let nextRecord = records.first else { return }
+
+        let nextKey = nextRecord.episodeKey
+        let episodeDescriptor = FetchDescriptor<Episode>(
+            predicate: #Predicate { $0.episodeKey == nextKey }
+        )
+        if let nextEpisode = (try? context.fetch(episodeDescriptor))?.first {
             play(episode: nextEpisode)
         }
     }

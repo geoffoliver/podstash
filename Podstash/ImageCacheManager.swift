@@ -84,17 +84,21 @@ final class ImageCacheManager: ObservableObject {
         return result
     }
     
-    /// Cache all artwork for a podcast (including its episodes)
-    func cacheArtwork(for podcast: Podcast) async {
+    /// Cache all artwork for a podcast (including its episodes). Episode has no relationship to
+    /// Podcast (see Models.swift), so its episodes are fetched by podcastID.
+    func cacheArtwork(for podcast: Podcast, in modelContext: ModelContext) async {
         var urls: [String] = []
-        
+
         // Add podcast artwork
         if let artworkURL = podcast.artworkURL {
             urls.append(artworkURL)
         }
-        
+
         // Add episode artwork (unique URLs only)
-        for episode in podcast.episodes {
+        let podcastID = podcast.id
+        let descriptor = FetchDescriptor<Episode>(predicate: #Predicate { $0.podcastID == podcastID })
+        let episodes = (try? modelContext.fetch(descriptor)) ?? []
+        for episode in episodes {
             if let artworkURL = episode.artworkURL, !urls.contains(artworkURL) {
                 urls.append(artworkURL)
             }

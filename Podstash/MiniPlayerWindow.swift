@@ -32,7 +32,7 @@ class MiniPlayerWindowController: NSWindowController, NSWindowDelegate {
         
         // Set content view with simple container
         let containerView = ResizableContainerView(frame: NSRect(x: 0, y: 0, width: 300, height: 300))
-        let hostingView = NSHostingView(rootView: MiniPlayerView(audioPlayer: audioPlayer, windowController: nil))
+        let hostingView = NSHostingView(rootView: MiniPlayerView(audioPlayer: audioPlayer, playbackProgress: audioPlayer.progress, windowController: nil))
         hostingView.frame = containerView.bounds
         hostingView.autoresizingMask = [.width, .height]
         containerView.hostingView = hostingView
@@ -48,7 +48,7 @@ class MiniPlayerWindowController: NSWindowController, NSWindowDelegate {
         // Update the view with the window controller reference
         if let containerView = window.contentView as? ResizableContainerView,
            let hostingView = containerView.hostingView as? NSHostingView<MiniPlayerView> {
-            hostingView.rootView = MiniPlayerView(audioPlayer: audioPlayer, windowController: self)
+            hostingView.rootView = MiniPlayerView(audioPlayer: audioPlayer, playbackProgress: audioPlayer.progress, windowController: self)
         }
         
         // Force minimum size
@@ -154,6 +154,7 @@ class ResizableContainerView: NSView {
 
 struct MiniPlayerView: View {
     @ObservedObject var audioPlayer: AudioPlayerManager
+    @ObservedObject var playbackProgress: PlaybackProgress
     weak var windowController: MiniPlayerWindowController?
     
     @State private var isHovering = false
@@ -172,7 +173,7 @@ struct MiniPlayerView: View {
                 
                 // Artwork or placeholder
                 if let episode = audioPlayer.currentEpisode {
-                    if let artworkURL = episode.artworkURL ?? episode.podcast?.artworkURL,
+                    if let artworkURL = episode.artworkURL ?? audioPlayer.currentPodcast?.artworkURL,
                        let url = URL(string: artworkURL) {
                         CachedAsyncImage(url: url) { image in
                             image
@@ -281,7 +282,7 @@ struct MiniPlayerView: View {
                             .lineLimit(2)
                             .padding(.horizontal, 16)
                         
-                        if let podcast = episode.podcast {
+                        if let podcast = audioPlayer.currentPodcast {
                             Text(podcast.title)
                                 .font(.callout)
                                 .foregroundColor(.white.opacity(0.8))
@@ -341,26 +342,26 @@ struct MiniPlayerView: View {
                 .padding(.bottom, isCompact ? 6 : 16)
                 
                 // Progress bar (with more padding from bottom)
-                if audioPlayer.duration > 0 {
+                if playbackProgress.duration > 0 {
                     VStack(spacing: 4) {
                         InteractiveProgressSlider(
-                            currentTime: audioPlayer.currentTime,
-                            duration: audioPlayer.duration,
+                            currentTime: playbackProgress.currentTime,
+                            duration: playbackProgress.duration,
                             onSeek: { newTime in
                                 audioPlayer.seek(to: newTime)
                             }
                         )
-                        
+
                         if !isCompact {
                             HStack {
-                                Text(formatTime(audioPlayer.currentTime))
+                                Text(formatTime(playbackProgress.currentTime))
                                     .font(.caption2)
                                     .foregroundColor(.white.opacity(0.8))
                                     .monospacedDigit()
-                                
+
                                 Spacer()
-                                
-                                Text(formatTime(audioPlayer.duration))
+
+                                Text(formatTime(playbackProgress.duration))
                                     .font(.caption2)
                                     .foregroundColor(.white.opacity(0.8))
                                     .monospacedDigit()
@@ -448,7 +449,8 @@ struct InteractiveProgressSlider: View {
 }
 
 #Preview {
-    MiniPlayerView(audioPlayer: AudioPlayerManager(), windowController: nil)
+    let audioPlayer = AudioPlayerManager()
+    MiniPlayerView(audioPlayer: audioPlayer, playbackProgress: audioPlayer.progress, windowController: nil)
         .frame(width: 300, height: 300)
 }
 

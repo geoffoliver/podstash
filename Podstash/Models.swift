@@ -8,11 +8,11 @@
 import Foundation
 import SwiftData
 
+// CloudKit-mirrored (see PodstashApp.sharedModelContainer for the configuration split).
 @Model
 final class Podcast {
     // CloudKit mirroring requires every non-optional property to carry a default value on
-    // the declaration itself (an init parameter default isn't enough), and to-one
-    // relationships to be optional - see Episode.podcast below.
+    // the declaration itself (an init parameter default isn't enough).
     var id: UUID = UUID()
     var title: String = ""
     var feedURL: String = ""
@@ -22,19 +22,16 @@ final class Podcast {
     var author: String?
     var subscriptionDate: Date = Date()
     var lastUpdated: Date?
-    
-    // CloudKit mirroring requires relationships to be Optional even when they're to-many, so
-    // the actual persisted relationship is `episodesStorage`; `episodes` below is a plain
-    // computed convenience wrapper so every existing call site can keep treating it as a
-    // non-optional array.
-    @Relationship(deleteRule: .cascade, inverse: \Episode.podcast)
-    var episodesStorage: [Episode]? = []
 
-    var episodes: [Episode] {
-        get { episodesStorage ?? [] }
-        set { episodesStorage = newValue }
-    }
-    
+    // The newest `publishDate` this device has ever observed for this feed, advanced on every
+    // refresh to max(existing, every parsed item's publishDate) - regardless of whether any
+    // item ends up auto-downloaded. Gates FeedFetcher's auto-download/auto-queue eligibility:
+    // an item at or before this date never triggers auto-download, even if its local Episode
+    // row doesn't exist yet (e.g. retention cleanup deleted it, or this is a fresh install) -
+    // that's what makes it safe to never resurrect an already-handled episode as "new" without
+    // needing a tombstone table.
+    var newestKnownPublishDate: Date?
+
     init(
         id: UUID = UUID(),
         title: String,
@@ -44,7 +41,8 @@ final class Podcast {
         artworkURL: String? = nil,
         author: String? = nil,
         subscriptionDate: Date = Date(),
-        lastUpdated: Date? = nil
+        lastUpdated: Date? = nil,
+        newestKnownPublishDate: Date? = nil
     ) {
         self.id = id
         self.title = title
@@ -55,9 +53,15 @@ final class Podcast {
         self.author = author
         self.subscriptionDate = subscriptionDate
         self.lastUpdated = lastUpdated
+        self.newestKnownPublishDate = newestKnownPublishDate
     }
 }
 
+// NOT CloudKit-mirrored - purely local metadata cache, independently derived from RSS by every
+// device. Cross-device state (played/position/queue) lives in PlaybackRecord instead, joined by
+// `episodeKey`. No relationship to Podcast: a synced model and a local-only model can't be
+// linked by a SwiftData relationship across different ModelConfigurations, so `podcastID` is a
+// plain scalar and callers fetch/filter Episodes by it instead of walking `podcast.episodes`.
 @Model
 final class Episode {
     var id: UUID = UUID()
@@ -65,26 +69,30 @@ final class Episode {
     var episodeDescription: String?
     var audioURL: String = ""
     // RSS <guid> - the feed's own stable identifier for this item, used (in preference to
-    // audioURL) to recognize an episode across refreshes. Nil for episodes stored before this
-    // field existed, or for feeds that omit guid; those fall back to matching by audioURL.
+    // audioURL) to recognize an episode across refreshes. Nil for feeds that omit guid (rare -
+    // Apple's podcast requirements mandate it, and it was present on every item across every
+    // feed this app was tested against); those fall back to matching by audioURL.
     var guid: String?
+    // Stable join key to PlaybackRecord: `guid ?? audioURL` at creation time, fixed forever -
+    // never recomputed even if a guid is later backfilled onto a row originally matched by
+    // audioURL alone, so an episode never "moves" to a different PlaybackRecord mid-life.
+    // Stored as a real field (not a computed property) so it can be used directly in
+    // #Predicate equality/`.contains` - SwiftData predicates can't evaluate `??`.
+    var episodeKey: String = ""
     var duration: TimeInterval?
     var publishDate: Date = Date()
     var artworkURL: String?
-    var isPlayed: Bool = false
-    var playbackPosition: TimeInterval = 0
-    var lastPlayedDate: Date?  // Track when user last played this episode
-    var isDownloaded: Bool = false  // For future offline support
+    // Per-device only, deliberately not synced: a downloaded file either exists in this
+    // device's Downloads folder or it doesn't. Syncing this used to drive
+    // DownloadManager.syncFollowMeDownloads, silently re-downloading gigabytes on every device
+    // sharing an iCloud account - dropped entirely.
+    var isDownloaded: Bool = false
     // Filename only (e.g. "<episode-id>.mp3"), not an absolute path - resolved to this
     // device's local Downloads folder via DownloadManager.localFileURL(forStoredFilename:).
-    // Since this field syncs via iCloud, an absolute path from another device's container
-    // would be meaningless here; the filename is deterministic (derived from episode.id) so
-    // every device resolves it the same way once it has the file.
     var downloadedFilename: String?
-    var queuePosition: Int?  // Position in queue, nil if not in queue
-    
-    var podcast: Podcast?
-    
+    // Plain scalar (see type-level doc comment above) - not a relationship.
+    var podcastID: UUID = UUID()
+
     init(
         id: UUID = UUID(),
         title: String,
@@ -94,48 +102,55 @@ final class Episode {
         duration: TimeInterval? = nil,
         publishDate: Date,
         artworkURL: String? = nil,
-        isPlayed: Bool = false,
-        playbackPosition: TimeInterval = 0,
-        lastPlayedDate: Date? = nil,
         isDownloaded: Bool = false,
         downloadedFilename: String? = nil,
-        queuePosition: Int? = nil
+        podcastID: UUID
     ) {
         self.id = id
         self.title = title
         self.episodeDescription = episodeDescription
         self.audioURL = audioURL
         self.guid = guid
+        self.episodeKey = guid ?? audioURL
         self.duration = duration
         self.publishDate = publishDate
         self.artworkURL = artworkURL
-        self.isPlayed = isPlayed
-        self.playbackPosition = playbackPosition
-        self.lastPlayedDate = lastPlayedDate
         self.isDownloaded = isDownloaded
         self.downloadedFilename = downloadedFilename
-        self.queuePosition = queuePosition
+        self.podcastID = podcastID
     }
 }
 
-/// A tombstone left behind when EpisodeCleanupManager removes a played episode's row under the
-/// user's retention policy. Without this, a deleted episode has no trace left to match against,
-/// so the next feed refresh sees its guid/audioURL as "new" and resurrects it - unplayed, and
-/// re-added to the queue. FeedFetcher checks these before creating an episode; they intentionally
-/// outlive the Episode row they refer to; scoped by podcastID (not a relationship) since the
-/// point is to persist past the episode - and podcast - being gone.
+// CloudKit-mirrored. Tiny and flat - no relationships to anything, which structurally rules out
+// the relationship-resolution retry storm that corrupted local state before this redesign (see
+// PodstashApp.sharedModelContainer). Rows are created lazily, only once the user actually plays,
+// queues, or marks an episode (see PlaybackRecordStore.recordForMutation) - an episode with no
+// PlaybackRecord row is just isPlayed=false/playbackPosition=0/queuePosition=nil, so an untouched
+// library syncs ~nothing.
+//
+// Not `@Attribute(.unique)` on episodeKey - SwiftData doesn't support unique constraints under
+// CloudKit mirroring, so two devices each first-touching the same episode before either's row
+// syncs can produce two rows for one key. PlaybackRecordStore.deduplicate(in:) is the periodic
+// cleanup for that gap.
 @Model
-final class DeletedEpisodeMarker {
-    var id: UUID = UUID()
-    var podcastID: UUID = UUID()
-    var guid: String?
-    var audioURL: String = ""
-    var deletedDate: Date = Date()
+final class PlaybackRecord {
+    var episodeKey: String = ""
+    var isPlayed: Bool = false
+    var playbackPosition: TimeInterval = 0
+    var lastPlayedDate: Date?
+    var queuePosition: Int?
 
-    init(podcastID: UUID, guid: String?, audioURL: String, deletedDate: Date = Date()) {
-        self.podcastID = podcastID
-        self.guid = guid
-        self.audioURL = audioURL
-        self.deletedDate = deletedDate
+    init(
+        episodeKey: String,
+        isPlayed: Bool = false,
+        playbackPosition: TimeInterval = 0,
+        lastPlayedDate: Date? = nil,
+        queuePosition: Int? = nil
+    ) {
+        self.episodeKey = episodeKey
+        self.isPlayed = isPlayed
+        self.playbackPosition = playbackPosition
+        self.lastPlayedDate = lastPlayedDate
+        self.queuePosition = queuePosition
     }
 }

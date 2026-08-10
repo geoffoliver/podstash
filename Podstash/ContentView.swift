@@ -281,8 +281,18 @@ struct ContentView: View {
 
 struct PodcastListView: View {
     @Query(sort: \Podcast.title) private var podcasts: [Podcast]
-    // REMOVED: Don't query all episodes just for the count - it causes massive re-renders
-    // Instead, we'll fetch the count on-demand when needed for the badge
+    // Scoped @Query, not a plain ad-hoc fetch recomputed inside body: badge counts used to be
+    // computed by calling modelContext.fetch(...) directly in `body`, which reran on every
+    // single re-render of this view - including every row click, since selecting a row mutates
+    // @State right here. That's a synchronous SQL round trip blocking the UI on every click,
+    // which is what made the sidebar feel laggy regardless of what was being clicked. These are
+    // filtered to just what's downloaded/played/queued (never the full Episode table), so
+    // SwiftData only needs to recompute them when matching rows actually change, not on every
+    // unrelated render - cheap in-memory work off already-tracked arrays instead of a fresh query.
+    @Query(filter: #Predicate<PlaybackRecord> { $0.queuePosition != nil && !$0.isPlayed })
+    private var queuedRecords: [PlaybackRecord]
+    @Query(filter: #Predicate<Episode> { $0.isDownloaded })
+    private var downloadedEpisodesQuery: [Episode]
     @Environment(\.modelContext) private var modelContext
     @EnvironmentObject var refreshCoordinator: RefreshCoordinator
     @EnvironmentObject var audioPlayer: AudioPlayerManager
@@ -322,28 +332,43 @@ struct PodcastListView: View {
         multiSelection.subtracting([Self.queueTag])
     }
 
+    /// Downloaded+unplayed episode counts keyed by podcast ID. Must be called ONCE per body
+    /// evaluation and the result reused (see `body` below) - this was briefly a computed `var`
+    /// referenced directly inside the podcast ForEach, which meant it silently rebuilt the
+    /// entire dictionary from scratch for every single row (38 podcasts = 38 full rebuilds per
+    /// render, growing worse as more got downloaded/played). That's what caused both the click
+    /// lag and the refresh slowdown - a refresh triggers many @Query updates, and each one
+    /// re-paid that same O(podcasts x records) cost.
+    ///
+    /// Played-state used to come from a `@Query` over every `isPlayed == true` PlaybackRecord -
+    /// harmless when Episode rows (and their play state) got pruned by retention, but under the
+    /// CloudKit-split architecture PlaybackRecord rows are never deleted, so that query grew to
+    /// ~13,000 rows and rebuilding a Set from all of them (map + hash every episodeKey) on every
+    /// single render - i.e. every click, since any @State change re-evaluates body - was costing
+    /// most of a second by itself. downloadedEpisodesQuery is tiny (usually single digits to
+    /// tens), so scope the PlaybackRecord lookup to just those keys via
+    /// PlaybackRecordStore.states(forKeys:in:), which becomes a cheap SQL IN-clause instead of
+    /// pulling and hashing the entire played-history table in Swift.
+    private func computeDownloadedUnplayedCounts() -> [UUID: Int] {
+        guard !downloadedEpisodesQuery.isEmpty else { return [:] }
+        let downloadedKeys = Set(downloadedEpisodesQuery.map(\.episodeKey))
+        let states = PlaybackRecordStore.states(forKeys: downloadedKeys, in: modelContext)
+        var counts: [UUID: Int] = [:]
+        for episode in downloadedEpisodesQuery where !(states[episode.episodeKey]?.isPlayed ?? false) {
+            counts[episode.podcastID, default: 0] += 1
+        }
+        return counts
+    }
+
     var body: some View {
-        // Cache the queue count to avoid multiple database queries per render
-        let queueCount = fetchQueueCount()
-        // Compute downloaded+unplayed counts once via a single lightweight query, instead of
-        // letting each PodcastRowView fault in and filter its full episodes relationship
-        // (which was materializing the entire library - 20k+ episodes - on every render).
-        let downloadedUnplayedCounts = fetchDownloadedUnplayedCounts()
+        let queueCount = queuedRecords.count
+        let downloadedUnplayedCounts = computeDownloadedUnplayedCounts()
 
         List(selection: $multiSelection) {
             // Queue section at top
             Section {
                 QueueRowView(queueCount: queueCount, iconSize: settings.sidebarIconSizeEnum.points, fontSize: settings.sidebarIconSizeEnum.fontSize)
                     .tag(Self.queueTag)
-                    .contentShape(Rectangle())
-                    .onTapGesture {
-                        showingQueue = true
-                        selectedPodcast = nil
-                        multiSelection = [Self.queueTag]
-                        #if !os(macOS)
-                        columnVisibility = .detailOnly
-                        #endif
-                    }
             }
             
             // Podcasts section
@@ -356,39 +381,6 @@ struct PodcastListView: View {
                     ForEach(podcasts) { podcast in
                         PodcastRowView(podcast: podcast, iconSize: settings.sidebarIconSizeEnum.points, fontSize: settings.sidebarIconSizeEnum.fontSize, downloadedUnplayedCount: downloadedUnplayedCounts[podcast.id] ?? 0)
                             .tag(podcast.id)
-                            .contentShape(Rectangle()) // Make entire row tappable
-                            .onTapGesture {
-                                // Handle selection manually for better control
-                                #if os(macOS)
-                                // On macOS, check for modifier keys
-                                let modifiers = NSEvent.modifierFlags
-                                if modifiers.contains(.command) {
-                                    // Cmd+click: toggle selection
-                                    if multiSelection.contains(podcast.id) {
-                                        multiSelection.remove(podcast.id)
-                                    } else {
-                                        multiSelection.insert(podcast.id)
-                                    }
-                                } else if modifiers.contains(.shift) {
-                                    // Shift+click: range selection
-                                    // For now, just add to selection
-                                    multiSelection.insert(podcast.id)
-                                } else {
-                                    // Normal click: single selection and show detail
-                                    multiSelection = [podcast.id]
-                                    showingQueue = false
-                                    selectedPodcast = podcast
-                                }
-                                #else
-                                // iOS: simple tap behavior
-                                if multiSelection.count <= 1 {
-                                    multiSelection = [podcast.id]
-                                    showingQueue = false
-                                    selectedPodcast = podcast
-                                    columnVisibility = .detailOnly
-                                }
-                                #endif
-                            }
                             .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                                 Button(role: .destructive) {
                                     multiSelection = [podcast.id]
@@ -398,7 +390,7 @@ struct PodcastListView: View {
                                 }
                                 
                                 Button {
-                                    markAllAsPlayed(for: podcast)
+                                    markAllAsPlayed(for: [podcast])
                                 } label: {
                                     Image(systemName: "checkmark")
                                 }
@@ -411,7 +403,14 @@ struct PodcastListView: View {
                                 .disabled(selectedPodcastIDs.count > 1)
 
                                 Button("Mark All as Played") {
-                                    markAllAsPlayed(for: podcast)
+                                    // Same selection-aware pattern as Unsubscribe below: act on
+                                    // the whole multi-selection only if the right-clicked row is
+                                    // actually part of it, otherwise just the clicked row.
+                                    if selectedPodcastIDs.count > 1 && selectedPodcastIDs.contains(podcast.id) {
+                                        markAllAsPlayed(for: podcasts.filter { selectedPodcastIDs.contains($0.id) })
+                                    } else {
+                                        markAllAsPlayed(for: [podcast])
+                                    }
                                 }
 
                                 Button("Unsubscribe", role: .destructive) {
@@ -539,59 +538,51 @@ struct PodcastListView: View {
     
     private func unsubscribeSelected() {
         let podcastsToDelete = podcasts.filter { selectedPodcastIDs.contains($0.id) }
-        
+
         // Check if we're deleting a podcast that has the currently playing episode
         if let currentEpisode = audioPlayer.currentEpisode {
-            let isDeletingCurrentPodcast = podcastsToDelete.contains { podcast in
-                podcast.episodes.contains { $0.id == currentEpisode.id }
-            }
-            
+            let currentPodcastID = currentEpisode.podcastID
+            let isDeletingCurrentPodcast = podcastsToDelete.contains { $0.id == currentPodcastID }
+
             if isDeletingCurrentPodcast {
                 audioPlayer.stop()
             }
         }
-        
+
         let subscriptionManager = SubscriptionManager(modelContext: modelContext)
         subscriptionManager.unsubscribe(podcasts: podcastsToDelete)
 
         multiSelection.removeAll()
         selectedPodcast = nil
     }
-    
-    private func markAllAsPlayed(for podcast: Podcast) {
-        for episode in podcast.episodes {
-            episode.isPlayed = true
+
+    // Only downloaded, not-yet-played episodes - "Mark All as Played" means "I'm done with what
+    // I downloaded from this podcast," not "erase this podcast's entire back-catalog history."
+    // That filter also keeps the batch naturally small (bounded by what's actually downloaded,
+    // not by however many thousand episodes the feed has ever listed), so a single fetch+save
+    // is enough - no chunking needed. Earlier versions of this tried chunking a much bigger,
+    // unfiltered batch to avoid freezing the UI, which multiplied save() calls (one CloudKit
+    // export-scheduling request each) far past what even the original per-podcast-loop bug did.
+    private func markAllAsPlayed(for podcastsToMark: [Podcast]) {
+        let podcastIDs = Set(podcastsToMark.map(\.id))
+        guard !podcastIDs.isEmpty else { return }
+
+        let descriptor = FetchDescriptor<Episode>(
+            predicate: #Predicate { $0.isDownloaded && podcastIDs.contains($0.podcastID) }
+        )
+        guard let downloadedEpisodes = try? modelContext.fetch(descriptor) else { return }
+
+        let downloadedKeys = Set(downloadedEpisodes.map(\.episodeKey))
+        let states = PlaybackRecordStore.states(forKeys: downloadedKeys, in: modelContext)
+        let episodesToMark = downloadedEpisodes.filter { !(states[$0.episodeKey]?.isPlayed ?? false) }
+        guard !episodesToMark.isEmpty else { return }
+
+        for episode in episodesToMark {
+            PlaybackRecordStore.recordForMutation(episodeKey: episode.episodeKey, in: modelContext).isPlayed = true
         }
         try? modelContext.save()
     }
-    
-    private func fetchQueueCount() -> Int {
-        let descriptor = FetchDescriptor<Episode>(
-            predicate: #Predicate { episode in
-                episode.queuePosition != nil && !episode.isPlayed
-            }
-        )
-        return (try? modelContext.fetchCount(descriptor)) ?? 0
-    }
 
-    /// Downloaded+unplayed episode counts keyed by podcast ID, computed with one query scoped to
-    /// downloaded episodes only (a small subset) rather than faulting in every episode per podcast.
-    private func fetchDownloadedUnplayedCounts() -> [UUID: Int] {
-        let descriptor = FetchDescriptor<Episode>(
-            predicate: #Predicate { episode in
-                episode.isDownloaded && !episode.isPlayed
-            }
-        )
-        guard let episodes = try? modelContext.fetch(descriptor) else { return [:] }
-
-        var counts: [UUID: Int] = [:]
-        for episode in episodes {
-            if let podcastID = episode.podcast?.id {
-                counts[podcastID, default: 0] += 1
-            }
-        }
-        return counts
-    }
 }
 
 extension Color {
@@ -706,62 +697,27 @@ struct PodcastRowView: View {
     }
 }
 
-// MARK: - Episode List View
-
-struct EpisodeListView: View {
-    let podcast: Podcast
-    @EnvironmentObject var audioPlayer: AudioPlayerManager
-    @State private var episodeForInfoSheet: Episode?
-
-    var body: some View {
-        List {
-            if podcast.episodes.isEmpty {
-                VStack(spacing: 16) {
-                    Text("No episodes yet")
-                        .font(.headline)
-                        .foregroundStyle(.secondary)
-                    Text("Refresh this podcast to download episodes")
-                        .font(.subheadline)
-                        .foregroundStyle(.tertiary)
-                }
-                .frame(maxWidth: .infinity)
-                .padding()
-            } else {
-                ForEach(podcast.episodes.sorted(by: { $0.publishDate > $1.publishDate })) { episode in
-                    Button {
-                        audioPlayer.play(episode: episode)
-                    } label: {
-                        EpisodeRowView(episode: episode, onShowInfo: { episodeForInfoSheet = $0 })
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-        }
-        .navigationTitle(podcast.title)
-        .sheet(item: $episodeForInfoSheet) { episode in
-            EpisodeDetailView(episode: episode)
-        }
-    }
-}
-
 struct EpisodeRowView: View {
-    let episode: Episode
+    let item: EpisodeDisplay
     let onShowInfo: (Episode) -> Void
     @EnvironmentObject var audioPlayer: AudioPlayerManager
+    @Environment(\.modelContext) private var modelContext
+
+    private var episode: Episode { item.episode }
 
     // Cache stripped description to avoid repeated HTML processing
     private let strippedDescription: String?
 
-    init(episode: Episode, onShowInfo: @escaping (Episode) -> Void) {
-        self.episode = episode
+    init(item: EpisodeDisplay, onShowInfo: @escaping (Episode) -> Void) {
+        self.item = item
         self.onShowInfo = onShowInfo
-        self.strippedDescription = episode.episodeDescription?.stripHTMLTags()
+        self.strippedDescription = item.episode.episodeDescription?.stripHTMLTags()
     }
-    
+
     var isCurrentlyPlaying: Bool {
         audioPlayer.currentEpisode?.id == episode.id
     }
-    
+
     var body: some View {
         HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 6) {
@@ -769,14 +725,14 @@ struct EpisodeRowView: View {
                     Text(episode.title)
                         .font(.headline)
                         .foregroundStyle(isCurrentlyPlaying ? .blue : .primary)
-                    
+
                     if isCurrentlyPlaying && audioPlayer.isPlaying {
                         Image(systemName: "speaker.wave.2.fill")
                             .font(.caption)
                             .foregroundStyle(.blue)
                     }
                 }
-                
+
                 if let description = strippedDescription {
                     Text(description)
                         .font(.appBody)
@@ -798,20 +754,20 @@ struct EpisodeRowView: View {
                     }
 
                     // Show progress if partially played
-                    if episode.playbackPosition > 0 && !episode.isPlayed {
+                    if item.state.playbackPosition > 0 && !item.state.isPlayed {
                         Text("•")
                             .foregroundStyle(.tertiary)
                         if let duration = episode.duration, duration > 0 {
-                            let percent = Int((episode.playbackPosition / duration) * 100)
+                            let percent = Int((item.state.playbackPosition / duration) * 100)
                             Text("\(percent)% played")
                                 .font(.appCaption)
                                 .foregroundStyle(.blue)
                         }
                     }
-                    
+
                     Spacer()
-                    
-                    if episode.isPlayed {
+
+                    if item.state.isPlayed {
                         Image(systemName: "checkmark.circle.fill")
                             .foregroundStyle(.green)
                             .font(.caption)
@@ -819,7 +775,7 @@ struct EpisodeRowView: View {
                 }
             }
             .padding(.vertical, 4)
-            
+
             // Info button
             Button {
                 onShowInfo(episode)
@@ -839,24 +795,26 @@ struct EpisodeRowView: View {
             } label: {
                 Label("Show Details", systemImage: "info.circle")
             }
-            
+
             Divider()
-            
+
             Button {
                 audioPlayer.play(episode: episode)
             } label: {
                 Label("Play", systemImage: "play.fill")
             }
-            
-            if episode.isPlayed {
+
+            if item.state.isPlayed {
                 Button {
-                    episode.isPlayed = false
+                    PlaybackRecordStore.recordForMutation(episodeKey: episode.episodeKey, in: modelContext).isPlayed = false
+                    try? modelContext.save()
                 } label: {
                     Label("Mark as Unplayed", systemImage: "circle")
                 }
             } else {
                 Button {
-                    episode.isPlayed = true
+                    PlaybackRecordStore.recordForMutation(episodeKey: episode.episodeKey, in: modelContext).isPlayed = true
+                    try? modelContext.save()
                 } label: {
                     Label("Mark as Played", systemImage: "checkmark.circle.fill")
                 }
@@ -877,40 +835,6 @@ struct EpisodeRowView: View {
     }
 }
 
-// MARK: - Stubs
-
-struct PodcastEpisodeListView: View {
-    @Query(sort: \Podcast.title) private var podcasts: [Podcast]
-    
-    var body: some View {
-        List {
-            if podcasts.isEmpty {
-                Text("No podcasts yet. Import an OPML file to get started!")
-                    .foregroundStyle(.secondary)
-                    .padding()
-            } else {
-                ForEach(podcasts) { podcast in
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(podcast.title)
-                            .font(.headline)
-                        if let description = podcast.podcastDescription {
-                            Text(description)
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(2)
-                        }
-                        Text(podcast.feedURL)
-                            .font(.caption2)
-                            .foregroundStyle(.tertiary)
-                    }
-                    .padding(.vertical, 4)
-                }
-            }
-        }
-        .navigationTitle("Podcasts")
-    }
-}
-
 #if os(macOS)
 private struct AirPlayRoutePickerView: NSViewRepresentable {
     func makeNSView(context: Context) -> AVRoutePickerView {
@@ -924,7 +848,8 @@ private struct AirPlayRoutePickerView: NSViewRepresentable {
 
 struct TransportControlsBar: View {
     @EnvironmentObject var audioPlayer: AudioPlayerManager
-    
+    @EnvironmentObject var playbackProgress: PlaybackProgress
+
     var body: some View {
         VStack(spacing: 0) {
             Divider()
@@ -932,7 +857,7 @@ struct TransportControlsBar: View {
             HStack(spacing: 16) {
                 // Episode artwork thumbnail
                 if let episode = audioPlayer.currentEpisode,
-                   let podcast = episode.podcast,
+                   let podcast = audioPlayer.currentPodcast,
                    let artworkURL = podcast.artworkURL,
                    let url = URL(string: artworkURL) {
                     CachedAsyncImage(url: url) { image in
@@ -963,7 +888,7 @@ struct TransportControlsBar: View {
                             .fontWeight(.medium)
                             .lineLimit(1)
 
-                        if let podcast = episode.podcast {
+                        if let podcast = audioPlayer.currentPodcast {
                             Text(podcast.title)
                                 .font(.appFootnote)
                                 .foregroundStyle(.secondary)
@@ -1028,27 +953,27 @@ struct TransportControlsBar: View {
                             RoundedRectangle(cornerRadius: 2)
                                 .fill(Color.accentColor)
                                 .frame(
-                                    width: geometry.size.width * CGFloat(playbackProgress),
+                                    width: geometry.size.width * CGFloat(progressFraction),
                                     height: 4
                                 )
                         }
                         .onTapGesture { location in
                             let progress = location.x / geometry.size.width
-                            audioPlayer.seek(to: audioPlayer.duration * Double(progress))
+                            audioPlayer.seek(to: playbackProgress.duration * Double(progress))
                         }
                     }
                     .frame(height: 4)
                     
                     // Time labels
                     HStack {
-                        Text(formatTime(audioPlayer.currentTime))
+                        Text(formatTime(playbackProgress.currentTime))
                             .font(.appCaption)
                             .monospacedDigit()
                             .foregroundStyle(.secondary)
 
                         Spacer()
 
-                        Text(formatTime(audioPlayer.duration))
+                        Text(formatTime(playbackProgress.duration))
                             .font(.appCaption)
                             .monospacedDigit()
                             .foregroundStyle(.secondary)
@@ -1064,7 +989,7 @@ struct TransportControlsBar: View {
                         }) {
                             HStack {
                                 Text("\(speed, specifier: "%.2f")x")
-                                if abs(audioPlayer.playbackRate - Float(speed)) < 0.01 {
+                                if abs(playbackProgress.playbackRate - Float(speed)) < 0.01 {
                                     Image(systemName: "checkmark")
                                 }
                             }
@@ -1073,7 +998,7 @@ struct TransportControlsBar: View {
                 } label: {
                     HStack(spacing: 4) {
                         Image(systemName: "gauge")
-                        Text("\(audioPlayer.playbackRate, specifier: "%.2f")x")
+                        Text("\(playbackProgress.playbackRate, specifier: "%.2f")x")
                     }
                     .font(.appFootnote)
                     .foregroundStyle(.secondary)
@@ -1106,9 +1031,9 @@ struct TransportControlsBar: View {
     // `duration` starts at 0 and is only populated asynchronously once the
     // player item's duration resolves, so guard against that window to avoid
     // a momentary full-width flash of the progress bar.
-    private var playbackProgress: Double {
-        guard audioPlayer.duration > 0 else { return 0 }
-        return min(audioPlayer.currentTime / audioPlayer.duration, 1)
+    private var progressFraction: Double {
+        guard playbackProgress.duration > 0 else { return 0 }
+        return min(playbackProgress.currentTime / playbackProgress.duration, 1)
     }
 }
 #endif
@@ -1118,9 +1043,26 @@ struct TransportControlsBar: View {
 struct EpisodeDetailView: View {
     let episode: Episode
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var modelContext
     @EnvironmentObject var audioPlayer: AudioPlayerManager
     @EnvironmentObject var downloadManager: DownloadManager
-    
+    @EnvironmentObject var podcastDirectory: PodcastDirectory
+
+    // Played/position/queue state lives on PlaybackRecord, not Episode (see Models.swift) -
+    // queried live here (rather than passed in as EpisodeDisplay) so this sheet stays reactive
+    // to changes arriving from other devices while it's open.
+    @Query private var matchingRecords: [PlaybackRecord]
+
+    init(episode: Episode) {
+        self.episode = episode
+        let key = episode.episodeKey
+        _matchingRecords = Query(filter: #Predicate<PlaybackRecord> { $0.episodeKey == key })
+    }
+
+    private var state: EpisodeState {
+        matchingRecords.first.map(EpisodeState.init(record:)) ?? EpisodeState()
+    }
+
     var isCurrentlyPlaying: Bool {
         audioPlayer.currentEpisode?.id == episode.id
     }
@@ -1134,7 +1076,7 @@ struct EpisodeDetailView: View {
             ScrollView {
                 VStack(spacing: 24) {
                     // Artwork
-                    if let artworkURL = episode.artworkURL ?? episode.podcast?.artworkURL,
+                    if let artworkURL = episode.artworkURL ?? podcastDirectory.podcast(for: episode.podcastID)?.artworkURL,
                        let url = URL(string: artworkURL) {
                         CachedAsyncImage(url: url) { image in
                             image
@@ -1162,7 +1104,7 @@ struct EpisodeDetailView: View {
                             .multilineTextAlignment(.center)
                         
                         // Podcast name
-                        if let podcast = episode.podcast {
+                        if let podcast = podcastDirectory.podcast(for: episode.podcastID) {
                             Text(podcast.title)
                                 .font(.headline)
                                 .foregroundStyle(.secondary)
@@ -1204,7 +1146,7 @@ struct EpisodeDetailView: View {
                                         .cornerRadius(12)
                                 }
 
-                                if episode.isPlayed {
+                                if state.isPlayed {
                                     Label("Played", systemImage: "checkmark.circle.fill")
                                         .font(.appFootnote)
                                         .foregroundStyle(.white)
@@ -1214,7 +1156,7 @@ struct EpisodeDetailView: View {
                                         .cornerRadius(12)
                                 }
 
-                                if episode.queuePosition != nil {
+                                if state.queuePosition != nil {
                                     Label("In Queue", systemImage: "text.line.first.and.arrowtriangle.forward")
                                         .font(.appFootnote)
                                         .foregroundStyle(.white)
@@ -1226,7 +1168,7 @@ struct EpisodeDetailView: View {
                             }
 
                             // Progress
-                            if episode.playbackPosition > 0 && !episode.isPlayed {
+                            if state.playbackPosition > 0 && !state.isPlayed {
                                 if let duration = episode.duration, duration > 0 {
                                     VStack(spacing: 4) {
                                         HStack {
@@ -1234,7 +1176,7 @@ struct EpisodeDetailView: View {
                                                 .font(.appFootnote)
                                                 .foregroundStyle(.secondary)
                                             Spacer()
-                                            Text("\(Int((episode.playbackPosition / duration) * 100))%")
+                                            Text("\(Int((state.playbackPosition / duration) * 100))%")
                                                 .font(.appFootnote)
                                                 .foregroundStyle(.secondary)
                                         }
@@ -1244,7 +1186,7 @@ struct EpisodeDetailView: View {
                                         // List that proposal can go ambiguous, and the NaN
                                         // width it produced blanked out this entire sheet.
                                         // ProgressView doesn't have that failure mode.
-                                        ProgressView(value: episode.playbackPosition, total: duration)
+                                        ProgressView(value: state.playbackPosition, total: duration)
                                     }
                                     .padding(.top, 8)
                                 }
@@ -1345,35 +1287,42 @@ struct EpisodeDetailView: View {
                         Divider()
                         
                         // Mark as played/unplayed
-                        if episode.isPlayed {
+                        if state.isPlayed {
                             Button {
-                                episode.isPlayed = false
+                                PlaybackRecordStore.recordForMutation(episodeKey: episode.episodeKey, in: modelContext).isPlayed = false
+                                try? modelContext.save()
                             } label: {
                                 Label("Mark as Unplayed", systemImage: "circle")
                             }
                         } else {
                             Button {
-                                episode.isPlayed = true
+                                PlaybackRecordStore.recordForMutation(episodeKey: episode.episodeKey, in: modelContext).isPlayed = true
+                                try? modelContext.save()
                             } label: {
                                 Label("Mark as Played", systemImage: "checkmark.circle")
                             }
                         }
-                        
+
                         // Add to / Remove from queue
-                        if episode.queuePosition != nil {
+                        if state.queuePosition != nil {
                             Button {
-                                episode.queuePosition = nil
+                                PlaybackRecordStore.recordForMutation(episodeKey: episode.episodeKey, in: modelContext).queuePosition = nil
+                                try? modelContext.save()
                             } label: {
                                 Label("Remove from Queue", systemImage: "minus.circle")
                             }
                         } else {
                             Button {
-                                // Add to end of queue
-                                let descriptor = FetchDescriptor<Episode>()
-                                if let allEpisodes = try? episode.modelContext?.fetch(descriptor) {
-                                    let maxPosition = allEpisodes.compactMap { $0.queuePosition }.max() ?? -1
-                                    episode.queuePosition = maxPosition + 1
-                                }
+                                // Add to end of queue. Scoped to queuePosition != nil (the
+                                // queue itself, always small) rather than fetching every
+                                // PlaybackRecord ever created (~13,000+ rows and growing).
+                                let descriptor = FetchDescriptor<PlaybackRecord>(
+                                    predicate: #Predicate { $0.queuePosition != nil }
+                                )
+                                let maxPosition = (try? modelContext.fetch(descriptor))?.compactMap { $0.queuePosition }.max() ?? -1
+                                let record = PlaybackRecordStore.recordForMutation(episodeKey: episode.episodeKey, in: modelContext)
+                                record.queuePosition = maxPosition + 1
+                                try? modelContext.save()
                             } label: {
                                 Label("Add to Queue", systemImage: "text.line.first.and.arrowtriangle.forward")
                             }

@@ -29,12 +29,25 @@ enum RefreshInterval: String, CaseIterable, Identifiable {
     }
 }
 
+// rawValue is the persisted UserDefaults value (via @AppStorage) - kept stable independent of
+// display wording so changing the user-facing label never silently resets someone's saved
+// preference back to the default. See `displayName` for what's actually shown in Settings.
 enum EpisodeRetentionPolicy: String, CaseIterable, Identifiable {
     case unplayedOnly = "Unplayed Episodes Only"
     case all = "All Episodes"
     case mostRecent = "Most Recent Episodes"
-    
+
     var id: String { rawValue }
+
+    // These policies only ever reclaim downloaded audio now, never an episode's local metadata
+    // row (see EpisodeCleanupManager) - worded around "downloads" to match.
+    var displayName: String {
+        switch self {
+        case .unplayedOnly: return "Delete Played Downloads"
+        case .all: return "Keep All Downloads"
+        case .mostRecent: return "Keep Most Recent Downloads"
+        }
+    }
 }
 
 enum SidebarIconSize: String, CaseIterable, Identifiable {

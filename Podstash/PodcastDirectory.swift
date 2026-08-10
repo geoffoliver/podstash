@@ -16,9 +16,15 @@ import Combine
 @MainActor
 final class PodcastDirectory: ObservableObject {
     @Published private(set) var byID: [UUID: Podcast] = [:]
+    // Bumped on every update() so observers that can't diff `byID` itself (e.g. QueueTableView's
+    // NSTableView rows, which cache a `Podcast?` per row at creation time) can detect that the
+    // directory's contents changed and know to rebuild, even when the set of episodes/rows shown
+    // is unchanged.
+    private(set) var revision = 0
 
     func update(_ podcasts: [Podcast]) {
         byID = Dictionary(uniqueKeysWithValues: podcasts.map { ($0.id, $0) })
+        revision += 1
     }
 
     func podcast(for id: UUID) -> Podcast? {

@@ -73,6 +73,8 @@ class SubscriptionManager {
     /// - Returns: true if the unsubscribe was actually persisted to the store.
     @discardableResult
     func unsubscribe(podcasts: [Podcast]) -> Bool {
+        var episodeKeysToDequeue: Set<String> = []
+
         for podcast in podcasts {
             let podcastID = podcast.id
             let episodeDescriptor = FetchDescriptor<Episode>(
@@ -84,10 +86,26 @@ class SubscriptionManager {
                 if let filename = episode.downloadedFilename {
                     try? FileManager.default.removeItem(at: DownloadManager.localFileURL(forStoredFilename: filename))
                 }
+                episodeKeysToDequeue.insert(episode.episodeKey)
                 modelContext.delete(episode)
             }
 
             modelContext.delete(podcast)
+        }
+
+        // A queue entry with no local Episode row left to back it can't actually display -
+        // QueueView.queuedEpisodes silently drops any PlaybackRecord it can't join to an Episode -
+        // so leaving queuePosition set here just leaves the queue badge counting entries the queue
+        // itself will never show. isPlayed/playbackPosition/lastPlayedDate are untouched: that
+        // history should still survive a resubscribe (see doc comment above).
+        if !episodeKeysToDequeue.isEmpty {
+            let recordDescriptor = FetchDescriptor<PlaybackRecord>(
+                predicate: #Predicate { episodeKeysToDequeue.contains($0.episodeKey) }
+            )
+            let recordsToDequeue = (try? modelContext.fetch(recordDescriptor)) ?? []
+            for record in recordsToDequeue {
+                record.queuePosition = nil
+            }
         }
 
         do {

@@ -103,6 +103,7 @@ struct QueueView: View {
                     QueueTableView(
                         episodes: displayedEpisodesList,
                         podcastDirectory: podcastDirectory,
+                        podcastDirectoryRevision: podcastDirectory.revision,
                         selection: $multiSelection,
                         onDoubleClick: { episode in
                             audioPlayer.play(episode: episode)

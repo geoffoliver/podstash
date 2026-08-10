@@ -14,6 +14,8 @@ struct QueueTableView: NSViewRepresentable {
     // SwiftUI root that doesn't inherit the ambient environment from the rest of the view
     // hierarchy. See QueueEpisodeRow's `podcast` property for the same reasoning.
     let podcastDirectory: PodcastDirectory
+    // See directoryChanged in updateNSView below for why this is needed alongside podcastDirectory.
+    let podcastDirectoryRevision: Int
     @Binding var selection: Set<UUID>
     let onDoubleClick: (Episode) -> Void
     let onRemove: ([Episode]) -> Void
@@ -79,9 +81,18 @@ struct QueueTableView: NSViewRepresentable {
 
         // CRITICAL: Only reload if episodes list actually changed
         let episodesChanged = !areEpisodesEqual(oldParent.episodes, episodes)
+        // Rows cache `podcast: Podcast?` at creation time (see Coordinator.tableView(_:viewFor:)
+        // below), resolved from podcastDirectory. PodcastDirectory is populated asynchronously
+        // after the Queue view's first render (PodcastDirectoryProvider's @Query result lands in
+        // .onAppear, not before), so on cold launch the very first reloadData() below can run
+        // before any podcasts are loaded - rows cache a nil podcast and fall back to the generic
+        // music-note icon forever, since an unchanged episode list otherwise never triggers
+        // another reload. Bumping podcastDirectoryRevision on every directory update lets us
+        // detect that and force a reload even though the episode list itself didn't change.
+        let directoryChanged = oldParent.podcastDirectoryRevision != podcastDirectoryRevision
 
-        if episodesChanged {
-            // Episodes list changed - do a full reload
+        if episodesChanged || directoryChanged {
+            // Episodes list (or the podcast data rows depend on) changed - do a full reload
             context.coordinator.episodes = episodes
             tableView.reloadData()
         } else if oldParent.currentlyPlayingID != currentlyPlayingID ||

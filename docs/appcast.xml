@@ -3,23 +3,22 @@
     <channel>
         <title>Podstash</title>
         <item>
-            <title>0.0.17</title>
-            <pubDate>Sun, 09 Aug 2026 23:39:34 +0000</pubDate>
+            <title>0.0.18</title>
+            <pubDate>Mon, 10 Aug 2026 04:56:07 +0000</pubDate>
             <link>https://geoffoliver.github.io/podstash/</link>
-            <sparkle:version>22</sparkle:version>
-            <sparkle:shortVersionString>0.0.17</sparkle:shortVersionString>
+            <sparkle:version>23</sparkle:version>
+            <sparkle:shortVersionString>0.0.18</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>26.5</sparkle:minimumSystemVersion>
             <description sparkle:format="markdown"><![CDATA[macOS build below is a universal binary (Apple Silicon & Intel), Developer ID signed and notarized — no Gatekeeper warnings. Unzip and drag Podstash.app to /Applications.
 
 ## What's Changed
-- Bump to 0.0.17
-- Fix download/reset bugs behind redownloaded played episodes and startup hang
-- updated icon on docs page
+- Bump to 0.0.18
+- Shrink CloudKit sync to queue/progress/subscriptions; fix perf regressions this exposed
 
-**Full Changelog**: https://github.com/geoffoliver/podstash/compare/v0.0.16...v0.0.17
+**Full Changelog**: https://github.com/geoffoliver/podstash/compare/v0.0.17...v0.0.18
 
 ]]></description>
-            <enclosure url="https://github.com/geoffoliver/podstash/releases/download/v0.0.17/Podstash.app.zip" length="4905875" type="application/octet-stream" sparkle:edSignature="FREO6z+auvYvQ39jGFhbQVlGejslkqPYLukAs2iZjbX/mMeXFPCDnbRmxhSV4Z7Bxk+fYrPrMjGKXPkfYInWBA=="/>
+            <enclosure url="https://github.com/geoffoliver/podstash/releases/download/v0.0.18/Podstash.app.zip" length="4975060" type="application/octet-stream" sparkle:edSignature="qsSTD6ChYzyt4NzxJ9jHmq9bNICG4fd6zRtNT5p3QvZ/0brveetD892hubSvCiW9Sucv1JB6sUAPuiYoWt/yAg=="/>
         </item>
         <item>
             <title>0.0.16</title>

@@ -187,8 +187,6 @@ jobs:
 
           NOTES_FILE="$RUNNER_TEMP/release-notes.md"
           {
-            echo "macOS build below is a universal binary (Apple Silicon & Intel), Developer ID signed and notarized — no Gatekeeper warnings. Unzip and drag Podstash.app to /Applications."
-            echo
             echo "## What's Changed"
             # Exclude commits that only touch the auto-generated appcast — pure
             # release-automation noise, not something a user cares about.

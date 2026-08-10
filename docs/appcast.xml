@@ -3,23 +3,22 @@
     <channel>
         <title>Podstash</title>
         <item>
-            <title>0.0.19</title>
-            <pubDate>Mon, 10 Aug 2026 05:33:26 +0000</pubDate>
+            <title>0.0.20</title>
+            <pubDate>Mon, 10 Aug 2026 06:28:02 +0000</pubDate>
             <link>https://geoffoliver.github.io/podstash/</link>
-            <sparkle:version>25</sparkle:version>
-            <sparkle:shortVersionString>0.0.19</sparkle:shortVersionString>
+            <sparkle:version>26</sparkle:version>
+            <sparkle:shortVersionString>0.0.20</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>26.5</sparkle:minimumSystemVersion>
-            <description sparkle:format="markdown"><![CDATA[macOS build below is a universal binary (Apple Silicon & Intel), Developer ID signed and notarized — no Gatekeeper warnings. Unzip and drag Podstash.app to /Applications.
+            <description sparkle:format="markdown"><![CDATA[## What's Changed
+- Bump to 0.0.20
+- Drop notarization blurb from release notes
+- Add podcast search via iTunes Search API
+- Fix crash when duplicate PlaybackRecords share an episodeKey
 
-## What's Changed
-- Bump to 0.0.19
-- Fix crash on launch from unguarded row index in QueueTableView
-- Fix Queue thumbnails missing on cold launch and stale queue badge after unsubscribe
-
-**Full Changelog**: https://github.com/geoffoliver/podstash/compare/v0.0.18...v0.0.19
+**Full Changelog**: https://github.com/geoffoliver/podstash/compare/v0.0.19...v0.0.20
 
 ]]></description>
-            <enclosure url="https://github.com/geoffoliver/podstash/releases/download/v0.0.19/Podstash.app.zip" length="4977016" type="application/octet-stream" sparkle:edSignature="fUpTmf108HAfdMtr8xpNTelt531XFnvMvZf6LWQletIvvBflUIPD/k1Wnl9ZgEl67sXtswyaUDorKNcJMvb3Bw=="/>
+            <enclosure url="https://github.com/geoffoliver/podstash/releases/download/v0.0.20/Podstash.app.zip" length="5028048" type="application/octet-stream" sparkle:edSignature="4QPtSfFmETA1oOOEem/KwnQJy9i6NPp5OmONgKWUGcY37J6mJffX6TYeaveEUTE/0HaIl5y2s4Mcl9vef0B+BQ=="/>
         </item>
         <item>
             <title>0.0.18</title>

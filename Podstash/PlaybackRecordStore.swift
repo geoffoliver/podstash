@@ -45,7 +45,11 @@ enum PlaybackRecordStore {
             predicate: #Predicate { keys.contains($0.episodeKey) }
         )
         let records = (try? context.fetch(descriptor)) ?? []
-        return Dictionary(uniqueKeysWithValues: records.map { ($0.episodeKey, EpisodeState(record: $0)) })
+        // uniquingKeysWith, not uniqueKeysWithValues: a CloudKit merge landing between launch-time
+        // deduplicate() passes can leave two PlaybackRecord rows sharing one episodeKey for a
+        // moment (see deduplicate() below) - crashing this read path on that transient state
+        // would be worse than picking one arbitrarily until the next dedup pass cleans it up.
+        return Dictionary(records.map { ($0.episodeKey, EpisodeState(record: $0)) }, uniquingKeysWith: { first, _ in first })
     }
 
     /// Joins a batch of Episodes to their EpisodeState in one shot, for building [EpisodeDisplay].

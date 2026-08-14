@@ -491,20 +491,14 @@ class AudioPlayerManager: ObservableObject {
     private func saveProgress(for episode: Episode) {
         guard let modelContext else { return }
 
-        // CRITICAL FIX: Only save if progress changed significantly (at least 10 seconds)
-        // This prevents constant @Query updates in SwiftUI views
-        let significantChange = abs(progress.currentTime - lastSavedPosition) >= 10
+        let decision = PlaybackProgressPolicy.decision(
+            currentTime: progress.currentTime,
+            lastSavedPosition: lastSavedPosition,
+            playerMeasuredDuration: progress.duration,
+            episodeDuration: episode.duration
+        )
 
-        // Always save when marking as played
-        // Prefer the AVPlayer-measured duration (progress.duration) over episode.duration,
-        // which comes from the RSS <itunes:duration> tag and can understate the real audio
-        // length (e.g. dynamically inserted ads not reflected in the feed). Using the wrong,
-        // shorter duration here was marking episodes played - and dropping them from the
-        // queue - while minutes of real audio remained.
-        let effectiveDuration: TimeInterval? = progress.duration > 0 ? progress.duration : episode.duration
-        let shouldMarkPlayed = effectiveDuration != nil && progress.currentTime >= effectiveDuration! - 30
-
-        guard significantChange || shouldMarkPlayed else {
+        guard decision.shouldSave else {
             return // Skip save if progress hasn't changed much
         }
 
@@ -513,8 +507,8 @@ class AudioPlayerManager: ObservableObject {
         record.lastPlayedDate = Date()
         lastSavedPosition = progress.currentTime
 
-        // Mark as played if reached within 30 seconds of end
-        if shouldMarkPlayed {
+        // Mark as played if reached within markPlayedThreshold seconds of the end
+        if decision.shouldMarkPlayed {
             record.isPlayed = true
             record.playbackPosition = 0 // Reset position for played episodes
         }

@@ -7,11 +7,24 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		32E4037743FD93FA6D70D384 /* Cocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 8A9FBE1B795CB00205BBE95D /* Cocoa.framework */; };
 		772062096EB1289B23DA440D /* Sparkle in Frameworks */ = {isa = PBXBuildFile; platformFilters = (macos, ); productRef = ABA9225F429DC774F9B72796 /* Sparkle */; };
 /* End PBXBuildFile section */
 
+/* Begin PBXContainerItemProxy section */
+		A642A73C73FE40A23DE1093D /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 6C9955A2301BE5A500F804F3 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 6C9955A9301BE5A500F804F3;
+			remoteInfo = Podstash;
+		};
+/* End PBXContainerItemProxy section */
+
 /* Begin PBXFileReference section */
 		6C9955AA301BE5A500F804F3 /* Podstash.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Podstash.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		8A9FBE1B795CB00205BBE95D /* Cocoa.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Cocoa.framework; path = Platforms/MacOSX.platform/Developer/SDKs/MacOSX15.0.sdk/System/Library/Frameworks/Cocoa.framework; sourceTree = DEVELOPER_DIR; };
+		92896EA2F2CACD57A759465D /* PodstashTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = PodstashTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -51,6 +64,13 @@
 			path = Podstash;
 			sourceTree = "<group>";
 		};
+		E5137583A5687C2EF5D7E237 /* PodstashTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+			);
+			path = PodstashTests;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -62,14 +82,32 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		C055E7E429859AC86644A021 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				32E4037743FD93FA6D70D384 /* Cocoa.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		04AFAEF08D8327F5A8FAA449 /* OS X */ = {
+			isa = PBXGroup;
+			children = (
+				8A9FBE1B795CB00205BBE95D /* Cocoa.framework */,
+			);
+			name = "OS X";
+			sourceTree = "<group>";
+		};
 		6C9955A1301BE5A500F804F3 = {
 			isa = PBXGroup;
 			children = (
 				6C9955AC301BE5A500F804F3 /* Podstash */,
+				E5137583A5687C2EF5D7E237 /* PodstashTests */,
 				6C9955AB301BE5A500F804F3 /* Products */,
+				7020901C4235A16CA0939259 /* Frameworks */,
 			);
 			sourceTree = "<group>";
 		};
@@ -77,13 +115,43 @@
 			isa = PBXGroup;
 			children = (
 				6C9955AA301BE5A500F804F3 /* Podstash.app */,
+				92896EA2F2CACD57A759465D /* PodstashTests.xctest */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		7020901C4235A16CA0939259 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				04AFAEF08D8327F5A8FAA449 /* OS X */,
+			);
+			name = Frameworks;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		01D2A414181B9F802B7C539F /* PodstashTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 2C262E2260073E41F1994B02 /* Build configuration list for PBXNativeTarget "PodstashTests" */;
+			buildPhases = (
+				DE8C3E149A7ED1499AB950FD /* Sources */,
+				C055E7E429859AC86644A021 /* Frameworks */,
+				91FE85905C2B865BB8A06EAA /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				3A64F82DD422097B3D45F79F /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				E5137583A5687C2EF5D7E237 /* PodstashTests */,
+			);
+			name = PodstashTests;
+			productName = PodstashTests;
+			productReference = 92896EA2F2CACD57A759465D /* PodstashTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 		6C9955A9301BE5A500F804F3 /* Podstash */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 6C9955B5301BE5A800F804F3 /* Build configuration list for PBXNativeTarget "Podstash" */;
@@ -118,6 +186,10 @@
 				LastSwiftUpdateCheck = 2660;
 				LastUpgradeCheck = 2660;
 				TargetAttributes = {
+					01D2A414181B9F802B7C539F = {
+						CreatedOnToolsVersion = 26.6;
+						TestTargetID = 6C9955A9301BE5A500F804F3;
+					};
 					6C9955A9301BE5A500F804F3 = {
 						CreatedOnToolsVersion = 26.6;
 					};
@@ -142,12 +214,20 @@
 			projectRoot = "";
 			targets = (
 				6C9955A9301BE5A500F804F3 /* Podstash */,
+				01D2A414181B9F802B7C539F /* PodstashTests */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
 		6C9955A8301BE5A500F804F3 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		91FE85905C2B865BB8A06EAA /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -185,9 +265,48 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		DE8C3E149A7ED1499AB950FD /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
+/* Begin PBXTargetDependency section */
+		3A64F82DD422097B3D45F79F /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = Podstash;
+			target = 6C9955A9301BE5A500F804F3 /* Podstash */;
+			targetProxy = A642A73C73FE40A23DE1093D /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
 /* Begin XCBuildConfiguration section */
+		0F71F7C5CE8323B82658BCAD /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 8F5SLDK3C7;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 26.5;
+				PRODUCT_BUNDLE_IDENTIFIER = me.geoffoliver.PodstashTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Podstash.app/Contents/MacOS/Podstash";
+			};
+			name = Release;
+		};
 		6C9955B3301BE5A800F804F3 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -396,9 +515,41 @@
 			};
 			name = Release;
 		};
+		CDFE1F62C7D31F7434EE5290 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = 8F5SLDK3C7;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@loader_path/Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 26.5;
+				PRODUCT_BUNDLE_IDENTIFIER = me.geoffoliver.PodstashTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Podstash.app/Contents/MacOS/Podstash";
+			};
+			name = Debug;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		2C262E2260073E41F1994B02 /* Build configuration list for PBXNativeTarget "PodstashTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				0F71F7C5CE8323B82658BCAD /* Release */,
+				CDFE1F62C7D31F7434EE5290 /* Debug */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		6C9955A5301BE5A500F804F3 /* Build configuration list for PBXProject "Podstash" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (

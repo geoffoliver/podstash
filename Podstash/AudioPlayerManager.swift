@@ -496,7 +496,13 @@ class AudioPlayerManager: ObservableObject {
         let significantChange = abs(progress.currentTime - lastSavedPosition) >= 10
 
         // Always save when marking as played
-        let shouldMarkPlayed = episode.duration != nil && progress.currentTime >= episode.duration! - 30
+        // Prefer the AVPlayer-measured duration (progress.duration) over episode.duration,
+        // which comes from the RSS <itunes:duration> tag and can understate the real audio
+        // length (e.g. dynamically inserted ads not reflected in the feed). Using the wrong,
+        // shorter duration here was marking episodes played - and dropping them from the
+        // queue - while minutes of real audio remained.
+        let effectiveDuration: TimeInterval? = progress.duration > 0 ? progress.duration : episode.duration
+        let shouldMarkPlayed = effectiveDuration != nil && progress.currentTime >= effectiveDuration! - 30
 
         guard significantChange || shouldMarkPlayed else {
             return // Skip save if progress hasn't changed much
@@ -563,9 +569,11 @@ class AudioPlayerManager: ObservableObject {
                    !duration.isNaN && !duration.isInfinite {
                     self.progress.duration = duration
 
-                    // Update episode duration if not set
-                    if let episode = self.currentEpisode,
-                       episode.duration == nil || episode.duration == 0 {
+                    // Correct episode.duration with the AVPlayer-measured value. This is more
+                    // trustworthy than the RSS <itunes:duration> tag it was originally seeded
+                    // from, which can be wrong or stale (e.g. dynamic ad insertion), so always
+                    // sync it rather than only filling it in when unset.
+                    if let episode = self.currentEpisode, episode.duration != duration {
                         episode.duration = duration
                         try? self.modelContext?.save()
                     }

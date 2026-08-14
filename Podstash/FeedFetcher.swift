@@ -75,8 +75,10 @@ class FeedFetcher {
         )
     }
     
+    // Not private: exercised directly by FeedFetcherTests with hand-built ParsedPodcast/
+    // ParsedEpisode fixtures, bypassing the network fetch in fetchFeed(for:) above.
     @MainActor
-    private func updatePodcastAndEpisodes(
+    func updatePodcastAndEpisodes(
         podcast: Podcast,
         parsedPodcast: ParsedPodcast,
         parsedEpisodes: [ParsedEpisode],

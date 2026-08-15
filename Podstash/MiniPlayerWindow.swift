@@ -158,6 +158,7 @@ struct MiniPlayerView: View {
     weak var windowController: MiniPlayerWindowController?
     
     @State private var isHovering = false
+    @State private var isHoveringCloseButton = false
     @State private var windowSize: CGSize = CGSize(width: 300, height: 300)
     
     // Determine if we should show minimal UI based on size
@@ -258,8 +259,13 @@ struct MiniPlayerView: View {
                     } label: {
                         Image(systemName: "xmark.circle.fill")
                             .font(.system(size: isCompact ? 24 : 28))
-                            .foregroundColor(.white.opacity(0.8))
+                            .foregroundColor(isHoveringCloseButton ? .white : .white.opacity(0.8))
                             .shadow(color: .black.opacity(0.3), radius: 2, x: 0, y: 1)
+                            .onHover{ hovering in
+                                withAnimation(.easeInOut(duration: 0.15)) {
+                                    isHoveringCloseButton = hovering
+                                }
+                            }
                     }
                     .buttonStyle(.plain)
                     .help("Return to Main Window")

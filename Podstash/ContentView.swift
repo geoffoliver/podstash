@@ -856,6 +856,7 @@ private struct AirPlayRoutePickerView: NSViewRepresentable {
 struct TransportControlsBar: View {
     @EnvironmentObject var audioPlayer: AudioPlayerManager
     @EnvironmentObject var playbackProgress: PlaybackProgress
+    @State var hoveringOverArt = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -877,6 +878,24 @@ struct TransportControlsBar: View {
                     .frame(width: 60, height: 60)
                     .cornerRadius(8)
                     .id(episode.id) // Force image to update when episode changes
+                    #if os(macOS)
+                    .shadow(color: .black.opacity(hoveringOverArt ? 0.4 : 0), radius: 3, x: 0, y: 0)
+                    .brightness(hoveringOverArt ? 0.05 : 0)
+                    .help(Text("Click to open Mini Player"))
+                    .onHover { hovering in
+                        withAnimation(.easeInOut(duration: 0.15)) {
+                            hoveringOverArt = hovering
+                            if (hovering) {
+                                NSCursor.pointingHand.push()
+                            } else {
+                                NSCursor.pop()
+                            }
+                        }
+                    }
+                    .onTapGesture {
+                        MenuCoordinator.shared.audioPlayer?.showMiniPlayer()
+                    }
+                    #endif
                 } else {
                     RoundedRectangle(cornerRadius: 8)
                         .fill(Color.gray.opacity(0.2))

@@ -363,7 +363,7 @@ struct FeedSettingsView: View {
                     Text(interval.rawValue).tag(interval.rawValue)
                 }
             }
-            .onChange(of: settings.refreshInterval) { _ in
+            .onChange(of: settings.refreshInterval) {
                 // Restart timer with new interval
                 autoRefreshManager.updateRefreshInterval()
             }

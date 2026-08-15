@@ -1067,7 +1067,7 @@ struct EpisodeDetailView: View {
     }
 
     private var state: EpisodeState {
-        matchingRecords.first.map(EpisodeState.init(record:)) ?? EpisodeState()
+        matchingRecords.first.map { EpisodeState(record: $0) } ?? EpisodeState()
     }
 
     var isCurrentlyPlaying: Bool {

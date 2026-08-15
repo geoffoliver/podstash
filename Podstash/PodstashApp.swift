@@ -844,7 +844,7 @@ struct PodstashApp: App {
         .backgroundTask(.appRefresh(Self.backgroundRefreshTaskIdentifier)) {
             await performBackgroundRefresh()
         }
-        .onChange(of: scenePhase) { newPhase in
+        .onChange(of: scenePhase) { _, newPhase in
             if newPhase == .background {
                 scheduleBackgroundRefresh()
             }

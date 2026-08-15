@@ -146,11 +146,13 @@ final class DownloadManager: NSObject, ObservableObject {
         let descriptor = FetchDescriptor<Episode>(predicate: #Predicate { $0.downloadedFilename != nil })
         let referencedFilenames = Set((try? modelContext.fetch(descriptor))?.compactMap { $0.downloadedFilename } ?? [])
 
-        let cutoff = Date().addingTimeInterval(-60 * 60 * 24)
+        let files = fileURLs.map { url -> (filename: String, modificationDate: Date) in
+            let modificationDate = (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate ?? Date()
+            return (url.lastPathComponent, modificationDate)
+        }
+        let orphaned = DownloadPruningPolicy.orphanedDownloadFilenames(files: files, referencedFilenames: referencedFilenames)
 
-        for fileURL in fileURLs where !referencedFilenames.contains(fileURL.lastPathComponent) {
-            let modificationDate = (try? fileURL.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate ?? Date()
-            guard modificationDate < cutoff else { continue }
+        for fileURL in fileURLs where orphaned.contains(fileURL.lastPathComponent) {
             try? fileManager.removeItem(at: fileURL)
         }
     }
@@ -173,15 +175,13 @@ final class DownloadManager: NSObject, ObservableObject {
             includingPropertiesForKeys: [.contentModificationDateKey, .isRegularFileKey]
         ) else { return }
 
-        let cutoff = Date().addingTimeInterval(-60 * 60)
+        let files = fileURLs.map { url -> (filename: String, modificationDate: Date, isRegularFile: Bool) in
+            let values = try? url.resourceValues(forKeys: [.contentModificationDateKey, .isRegularFileKey])
+            return (url.lastPathComponent, values?.contentModificationDate ?? Date(), values?.isRegularFile ?? false)
+        }
+        let stale = DownloadPruningPolicy.staleTempFilenames(files: files)
 
-        for fileURL in fileURLs where fileURL.pathExtension == "tmp" {
-            let isRegularFile = (try? fileURL.resourceValues(forKeys: [.isRegularFileKey]))?.isRegularFile ?? false
-            guard isRegularFile else { continue }
-
-            let modificationDate = (try? fileURL.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate ?? Date()
-            guard modificationDate < cutoff else { continue }
-
+        for fileURL in fileURLs where stale.contains(fileURL.lastPathComponent) {
             try? fileManager.removeItem(at: fileURL)
         }
     }

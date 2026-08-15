@@ -299,6 +299,7 @@ struct PodcastListView: View {
     @EnvironmentObject var settings: AppSettings
     @EnvironmentObject var addPodcastCoordinator: AddPodcastCoordinator
     @EnvironmentObject var opmlCoordinator: OPMLImportCoordinator
+    @EnvironmentObject var podcastSearchCoordinator: PodcastSearchCoordinator
     @Binding var selectedPodcast: Podcast?
     @Binding var showingQueue: Bool
     @Binding var columnVisibility: NavigationSplitViewVisibility
@@ -489,6 +490,12 @@ struct PodcastListView: View {
             #if !os(macOS)
             ToolbarItem(placement: .navigationBarTrailing) {
                 Menu {
+                    Button {
+                        podcastSearchCoordinator.showDialog()
+                    } label: {
+                        Label("Search Podcasts…", systemImage: "magnifyingglass")
+                    }
+
                     Button {
                         addPodcastCoordinator.showDialog()
                     } label: {

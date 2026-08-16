@@ -63,6 +63,7 @@ struct PlaceholderTextField: View {
         )
         .animation(.easeOut(duration: 0.1), value: isFocused)
         .onSubmit(onSubmit)
+        .submitLabel(isURLField ? .done : .search)
     }
 }
 

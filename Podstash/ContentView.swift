@@ -316,6 +316,13 @@ struct PodcastListView: View {
     @State private var multiSelection = Set<UUID>()
     #endif
     @State private var showingUnsubscribeAlert = false
+    // Podcasts the pending unsubscribe alert will act on. Deliberately separate from
+    // multiSelection: writing to multiSelection drives navigation (see onChange below), so
+    // swipe/context-menu actions on a podcast that isn't already selected must record their
+    // target here instead of via multiSelection, or confirming the alert would race a
+    // NavigationSplitView column transition into the podcast's own detail view and silently
+    // fail to fire (the alert then belongs to a sidebar view that's mid-teardown).
+    @State private var pendingUnsubscribeIDs = Set<UUID>()
     @FocusState private var isFocused: Bool
 
     // Sentinel tag so the Queue row participates in the List's real selection mechanism,
@@ -384,7 +391,7 @@ struct PodcastListView: View {
                             .tag(podcast.id)
                             .swipeActions(edge: .trailing, allowsFullSwipe: false) {
                                 Button(role: .destructive) {
-                                    multiSelection = [podcast.id]
+                                    pendingUnsubscribeIDs = [podcast.id]
                                     showingUnsubscribeAlert = true
                                 } label: {
                                     Image(systemName: "trash")
@@ -416,13 +423,14 @@ struct PodcastListView: View {
 
                                 Button("Unsubscribe", role: .destructive) {
                                     if selectedPodcastIDs.count > 1 && selectedPodcastIDs.contains(podcast.id) {
-                                        // Keep existing multi-selection
-                                        showingUnsubscribeAlert = true
+                                        // Act on the existing multi-selection
+                                        pendingUnsubscribeIDs = selectedPodcastIDs
                                     } else {
-                                        // Single item context menu
-                                        multiSelection = [podcast.id]
-                                        showingUnsubscribeAlert = true
+                                        // Single item context menu - target just this row,
+                                        // without disturbing multiSelection/navigation.
+                                        pendingUnsubscribeIDs = [podcast.id]
                                     }
+                                    showingUnsubscribeAlert = true
                                 }
                             }
                     }
@@ -473,6 +481,7 @@ struct PodcastListView: View {
         #if os(macOS)
         .onDeleteCommand {
             if !selectedPodcastIDs.isEmpty {
+                pendingUnsubscribeIDs = selectedPodcastIDs
                 showingUnsubscribeAlert = true
             }
         }
@@ -521,19 +530,19 @@ struct PodcastListView: View {
             }
             #endif
         }
-        .alert(selectedPodcastIDs.count == 1 ? "Unsubscribe from Podcast?" : "Unsubscribe from \(selectedPodcastIDs.count) Podcasts?",
+        .alert(pendingUnsubscribeIDs.count == 1 ? "Unsubscribe from Podcast?" : "Unsubscribe from \(pendingUnsubscribeIDs.count) Podcasts?",
                isPresented: $showingUnsubscribeAlert) {
             Button("Cancel", role: .cancel) { }
             Button("Unsubscribe", role: .destructive) {
                 unsubscribeSelected()
             }
         } message: {
-            if selectedPodcastIDs.count == 1,
-               let selectedID = selectedPodcastIDs.first,
+            if pendingUnsubscribeIDs.count == 1,
+               let selectedID = pendingUnsubscribeIDs.first,
                let podcast = podcasts.first(where: { $0.id == selectedID }) {
                 Text("Are you sure you want to unsubscribe from \"\(podcast.title)\"? This will delete all downloaded episodes.")
             } else {
-                Text("Are you sure you want to unsubscribe from \(selectedPodcastIDs.count) podcasts? This will delete all downloaded episodes.")
+                Text("Are you sure you want to unsubscribe from \(pendingUnsubscribeIDs.count) podcasts? This will delete all downloaded episodes.")
             }
         }
         #if !os(macOS)
@@ -544,7 +553,7 @@ struct PodcastListView: View {
     }
     
     private func unsubscribeSelected() {
-        let podcastsToDelete = podcasts.filter { selectedPodcastIDs.contains($0.id) }
+        let podcastsToDelete = podcasts.filter { pendingUnsubscribeIDs.contains($0.id) }
 
         // Check if we're deleting a podcast that has the currently playing episode
         if let currentEpisode = audioPlayer.currentEpisode {
@@ -559,8 +568,14 @@ struct PodcastListView: View {
         let subscriptionManager = SubscriptionManager(modelContext: modelContext)
         subscriptionManager.unsubscribe(podcasts: podcastsToDelete)
 
-        multiSelection.removeAll()
-        selectedPodcast = nil
+        // Only clear selection/navigation for podcasts that were actually part of it - a
+        // swipe or single-item context menu action never touched multiSelection/selectedPodcast
+        // in the first place, so there's nothing to unwind there.
+        multiSelection.subtract(pendingUnsubscribeIDs)
+        if let selectedPodcast, pendingUnsubscribeIDs.contains(selectedPodcast.id) {
+            self.selectedPodcast = nil
+        }
+        pendingUnsubscribeIDs.removeAll()
     }
 
     // Only downloaded, not-yet-played episodes - "Mark All as Played" means "I'm done with what

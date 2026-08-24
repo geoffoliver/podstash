@@ -1032,6 +1032,18 @@ struct TransportControlsBar: View {
                 .menuStyle(.borderlessButton)
                 .frame(width: 70)
 
+                if let episode = audioPlayer.currentEpisode,
+                   VideoWindowPolicy.showOpenVideoButton(hasVideoURL: episode.videoURL != nil, isWindowOpen: audioPlayer.isVideoWindowOpen) {
+                    Button {
+                        audioPlayer.openVideo()
+                    } label: {
+                        Image(systemName: "video")
+                            .font(.system(size: 16))
+                    }
+                    .buttonStyle(.plain)
+                    .help("Open Video")
+                }
+
                 AirPlayRoutePickerView()
                     .frame(width: 24, height: 24)
                     .help("AirPlay")

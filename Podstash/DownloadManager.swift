@@ -42,7 +42,7 @@ final class DownloadManager: NSObject, ObservableObject {
         return activeDownloads[episode.id]
     }
 
-    /// Directory downloaded episode audio lives in on this device.
+    /// Directory downloaded episode media (audio or video) lives in on this device.
     static var downloadsDirectory: URL {
         let documentsPath = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         return documentsPath.appendingPathComponent("Downloads", isDirectory: true)
@@ -67,7 +67,7 @@ final class DownloadManager: NSObject, ObservableObject {
             return
         }
 
-        guard URL(string: episode.audioURL ?? "") != nil else { return }
+        guard downloadURLString(for: episode) != nil else { return }
 
         guard downloadTasks.count < maxConcurrentDownloads else {
             pendingDownloadQueue.append(episode)
@@ -78,8 +78,15 @@ final class DownloadManager: NSObject, ObservableObject {
         startDownload(episode)
     }
 
+    // Whichever enclosure would play by default (audio for an audio/mixed episode, video for a
+    // video-only one) - see MediaKindPolicy.downloadURLString. Downloads are one file per
+    // episode, so there's a single URL to pick.
+    private func downloadURLString(for episode: Episode) -> String? {
+        MediaKindPolicy.downloadURLString(defaultMediaKind: episode.defaultMediaKind, audioURL: episode.audioURL, videoURL: episode.videoURL)
+    }
+
     private func startDownload(_ episode: Episode) {
-        guard let url = URL(string: episode.audioURL ?? "") else {
+        guard let urlString = downloadURLString(for: episode), let url = URL(string: urlString) else {
             // Shouldn't happen (validated before queuing), but don't let a bad URL stall the
             // rest of the queue behind it.
             startNextQueuedDownloadIfNeeded()
@@ -212,11 +219,12 @@ final class DownloadManager: NSObject, ObservableObject {
             return
         }
 
-        // Generate unique filename. Derive the extension from the episode's audio URL,
-        // not tempURL - tempURL's extension comes from URLSession's own internal temp
-        // file naming (e.g. "CFNetworkDownload_XXXXXX.tmp"), not the actual audio format.
-        let audioURLExtension = URL(string: episode.audioURL ?? "")?.pathExtension ?? ""
-        let fileExtension = audioURLExtension.isEmpty ? "mp3" : audioURLExtension
+        // Generate unique filename. Derive the extension from the enclosure URL that was
+        // actually downloaded (audio or video - see downloadURLString), not tempURL - tempURL's
+        // extension comes from URLSession's own internal temp file naming (e.g.
+        // "CFNetworkDownload_XXXXXX.tmp"), not the real media format.
+        let downloadedURLExtension = URL(string: downloadURLString(for: episode) ?? "")?.pathExtension ?? ""
+        let fileExtension = downloadedURLExtension.isEmpty ? "mp3" : downloadedURLExtension
         let fileName = "\(episodeID.uuidString).\(fileExtension)"
         let destinationURL = DownloadManager.localFileURL(forStoredFilename: fileName)
         

@@ -91,4 +91,55 @@ struct MediaKindPolicyTests {
         )
         #expect(plan?.shouldAutoplay == false)
     }
+
+    // MARK: - downloadURLString
+
+    @Test("Downloads the audio enclosure for a mixed episode, matching what plays by default")
+    func downloadPrefersAudioForMixedEpisode() {
+        let url = MediaKindPolicy.downloadURLString(
+            defaultMediaKind: .audio,
+            audioURL: "https://example.com/a.mp3",
+            videoURL: "https://example.com/a.mp4"
+        )
+        #expect(url == "https://example.com/a.mp3")
+    }
+
+    @Test("Downloads the video enclosure for a video-only episode, instead of silently no-oping")
+    func downloadFallsBackToVideoForVideoOnlyEpisode() {
+        let url = MediaKindPolicy.downloadURLString(
+            defaultMediaKind: .video,
+            audioURL: nil,
+            videoURL: "https://example.com/a.mp4"
+        )
+        #expect(url == "https://example.com/a.mp4")
+    }
+
+    @Test("downloadURLString falls back to resolvedDefaultKind when defaultMediaKind is nil (pre-migration row)")
+    func downloadResolvesNilDefaultMediaKind() {
+        let url = MediaKindPolicy.downloadURLString(
+            defaultMediaKind: nil,
+            audioURL: nil,
+            videoURL: "https://example.com/a.mp4"
+        )
+        #expect(url == "https://example.com/a.mp4")
+    }
+
+    // MARK: - shouldUseLocalFile
+
+    @Test("A downloaded mixed episode's local file matches the default (audio) kind")
+    func localFileMatchesDefaultKindForMixedEpisode() {
+        #expect(MediaKindPolicy.shouldUseLocalFile(requestedKind: .audio, defaultMediaKind: .audio, hasAudioURL: true) == true)
+    }
+
+    @Test("A downloaded mixed episode's local file does NOT satisfy a request for the non-default kind")
+    func localFileDoesNotMatchNonDefaultKindForMixedEpisode() {
+        // The on-disk file is always the default-kind download (see downloadURLString) - a
+        // user switching a mixed episode to video shouldn't be handed the downloaded audio file.
+        #expect(MediaKindPolicy.shouldUseLocalFile(requestedKind: .video, defaultMediaKind: .audio, hasAudioURL: true) == false)
+    }
+
+    @Test("A downloaded video-only episode's local file matches a request for video")
+    func localFileMatchesVideoOnlyEpisode() {
+        #expect(MediaKindPolicy.shouldUseLocalFile(requestedKind: .video, defaultMediaKind: .video, hasAudioURL: false) == true)
+    }
 }

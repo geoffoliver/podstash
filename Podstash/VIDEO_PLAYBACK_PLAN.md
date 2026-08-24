@@ -1,7 +1,6 @@
 # Video Playback — Implementation Plan
 
-Status: not started. Design settled after review; ready to sequence into
-work once you give the go-ahead. Built with TDD per `CLAUDE.md` — every
+Status: Phases 1-4 complete. Built with TDD per `CLAUDE.md` — every
 phase below starts with tests.
 
 ## Goal

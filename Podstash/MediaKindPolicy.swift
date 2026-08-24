@@ -50,6 +50,25 @@ enum MediaKindPolicy {
             playbackRate: playbackRate
         )
     }
+
+    /// The enclosure URL to download for an episode - whichever kind resolves as the episode's
+    /// default (see resolvedDefaultKind). Downloads are one file per episode
+    /// (Episode.downloadedFilename), so there's a single URL to pick; defaulting to the same
+    /// kind playback would pick keeps "download" and "stream without downloading" consistent,
+    /// and (unlike only ever looking at audioURL) doesn't silently no-op for a video-only
+    /// episode.
+    static func downloadURLString(defaultMediaKind: MediaKind?, audioURL: String?, videoURL: String?) -> String? {
+        let kind = resolvedDefaultKind(defaultMediaKind: defaultMediaKind, hasAudioURL: audioURL != nil)
+        return urlString(for: kind, audioURL: audioURL, videoURL: videoURL)
+    }
+
+    /// Whether a downloaded local file should be used for the given kind - true only when kind
+    /// matches whatever was actually downloaded (always the resolved default kind; see
+    /// downloadURLString above). Guards against handing e.g. a mixed episode's downloaded audio
+    /// file to a video surface after the user explicitly switches that episode to video.
+    static func shouldUseLocalFile(requestedKind: MediaKind, defaultMediaKind: MediaKind?, hasAudioURL: Bool) -> Bool {
+        requestedKind == resolvedDefaultKind(defaultMediaKind: defaultMediaKind, hasAudioURL: hasAudioURL)
+    }
 }
 
 struct MediaSwitchPlan: Equatable {

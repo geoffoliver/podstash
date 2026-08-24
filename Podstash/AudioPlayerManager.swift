@@ -122,19 +122,71 @@ class AudioPlayerManager: ObservableObject {
     
     private func restoreMainWindow() {
         NSApp.activate(ignoringOtherApps: true)
-        
+
         // Find and show main window
         for window in NSApp.windows {
             // Skip the mini player window
             if window is SquareMiniPlayerWindow {
                 continue
             }
-            
+
             // Show the first normal-level window we find (the main app window)
             if !window.isVisible && !window.isSheet && window.styleMask.contains(.titled) {
                 window.makeKeyAndOrderFront(nil)
                 break
             }
+        }
+    }
+
+    // MARK: - Video Window (Phase 4, see VIDEO_PLAYBACK_PLAN.md)
+
+    var videoPlayerController: VideoPlayerWindowController?
+
+    // Drives the "Open Video" button's visibility (VideoWindowPolicy.showOpenVideoButton needs
+    // a reactive read of whether the window is currently open).
+    @Published var isVideoWindowOpen: Bool = false
+
+    // Unlike the mini player, the main window is left alone - this is closer to a QuickTime/
+    // iTunes video window than a companion mini player.
+    func openVideoWindow() {
+        guard currentEpisode != nil else { return }
+        if let existing = videoPlayerController?.window, existing.isVisible {
+            existing.makeKeyAndOrderFront(nil)
+            return
+        }
+        videoPlayerController = VideoPlayerWindowController(audioPlayer: self)
+        videoPlayerController?.window?.makeKeyAndOrderFront(nil)
+        isVideoWindowOpen = true
+    }
+
+    // The "Open Video" button's action: switches the loaded enclosure to video (if available)
+    // and opens the window. The only other place besides auto-open (see openVideoWindowIfNeeded)
+    // that opens this window - always a direct user action.
+    func openVideo() {
+        switchMediaKind(to: .video)
+        openVideoWindow()
+    }
+
+    // Auto-opens the video window when the currently-loaded kind is video and the window isn't
+    // already open - covers a video-only episode (nothing to fall back to on Play) and resuming
+    // an episode that was left at .video by a prior close with no audio to fall back to.
+    private func openVideoWindowIfNeeded() {
+        guard VideoWindowPolicy.shouldOpenVideoWindow(mediaKind: currentMediaKind, isWindowOpen: isVideoWindowOpen) else { return }
+        openVideoWindow()
+    }
+
+    // Called by VideoPlayerWindowController.windowWillClose - the only path that closes this
+    // window, whether via the red close button or a future programmatic close. Closing always
+    // stops playback entirely (see VideoWindowPolicy.closeAction / VIDEO_PLAYBACK_PLAN.md Phase 4).
+    func handleVideoWindowClosed() {
+        videoPlayerController = nil
+        isVideoWindowOpen = false
+
+        pause()
+
+        guard let episode = currentEpisode else { return }
+        if VideoWindowPolicy.closeAction(hasAudioURL: episode.audioURL != nil) == .pauseAndSwitchToAudio {
+            switchMediaKind(to: .audio)
         }
     }
     #endif
@@ -248,11 +300,14 @@ class AudioPlayerManager: ObservableObject {
         
         // Load artwork once (asynchronously, won't block)
         loadNowPlayingArtwork()
+
+        #if os(macOS)
+        openVideoWindowIfNeeded()
+        #endif
     }
     
     // Prefer a downloaded local file over streaming, falling back to nil (streaming) if the
-    // file is missing so a stale/deleted download doesn't silently break playback. Only audio
-    // enclosures can be downloaded today (see DownloadManager) - video always streams.
+    // file is missing so a stale/deleted download doesn't silently break playback.
     private func localFileURL(for episode: Episode) -> URL? {
         guard episode.isDownloaded,
               let filename = episode.downloadedFilename else {
@@ -265,11 +320,14 @@ class AudioPlayerManager: ObservableObject {
         return url
     }
 
-    // Resolves the URL to actually load for a given kind: local download first for audio (the
-    // only kind that can be downloaded today), remote streaming URL otherwise.
+    // Resolves the URL to actually load for a given kind: the local download if there is one
+    // AND it's actually a download of this kind (downloads are one file per episode, always the
+    // resolved default kind - see MediaKindPolicy.shouldUseLocalFile), remote streaming URL
+    // otherwise.
     private func resolvedURL(for kind: MediaKind, episode: Episode) -> URL? {
         let urlString = MediaKindPolicy.urlString(for: kind, audioURL: episode.audioURL, videoURL: episode.videoURL)
-        if kind == .audio, let local = localFileURL(for: episode) {
+        let usesLocal = MediaKindPolicy.shouldUseLocalFile(requestedKind: kind, defaultMediaKind: episode.defaultMediaKind, hasAudioURL: episode.audioURL != nil)
+        if usesLocal, let local = localFileURL(for: episode) {
             return local
         }
         return urlString.flatMap { URL(string: $0) }
@@ -351,6 +409,12 @@ class AudioPlayerManager: ObservableObject {
         objectWillChange.send()
         isPlaying = true
         updateNowPlayingInfo()
+
+        #if os(macOS)
+        // Handles the video-only "closing left mediaKind at .video" case - the next Play
+        // naturally reopens the window (see VideoWindowPolicy.closeAction).
+        openVideoWindowIfNeeded()
+        #endif
     }
     
     func pause() {

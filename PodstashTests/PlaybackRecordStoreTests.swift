@@ -88,4 +88,28 @@ struct PlaybackRecordStoreTests {
         #expect(survivors.count == 1)
         #expect(survivors.first?.queuePosition == 2)
     }
+
+    // MARK: - firstByKey
+
+    @Test("firstByKey keys episodes by episodeKey")
+    func firstByKeyKeysEpisodes() {
+        let episode = Episode(title: "One", audioURL: "https://example.com/e.mp3", guid: "key-1", publishDate: .now, podcastID: UUID())
+
+        let byKey = PlaybackRecordStore.firstByKey([episode])
+
+        #expect(byKey["key-1"] === episode)
+    }
+
+    // Real-world feeds have shipped two items sharing a <guid> (e.g. duplicate art19 locators),
+    // which would otherwise crash Dictionary(uniqueKeysWithValues:) - see QueueView.queuedEpisodes.
+    @Test("firstByKey keeps the first episode when two share an episodeKey, instead of crashing")
+    func firstByKeyKeepsFirstOnDuplicateKey() {
+        let first = Episode(title: "First", audioURL: "https://example.com/a.mp3", guid: "dup-key", publishDate: .now, podcastID: UUID())
+        let second = Episode(title: "Second", audioURL: "https://example.com/b.mp3", guid: "dup-key", publishDate: .now, podcastID: UUID())
+
+        let byKey = PlaybackRecordStore.firstByKey([first, second])
+
+        #expect(byKey.count == 1)
+        #expect(byKey["dup-key"] === first)
+    }
 }

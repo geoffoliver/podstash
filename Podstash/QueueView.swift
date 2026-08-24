@@ -42,7 +42,7 @@ struct QueueView: View {
         let keys = Set(queuedRecords.map(\.episodeKey))
         let episodeDescriptor = FetchDescriptor<Episode>(predicate: #Predicate { keys.contains($0.episodeKey) })
         let episodes = (try? modelContext.fetch(episodeDescriptor)) ?? []
-        let episodeByKey = Dictionary(uniqueKeysWithValues: episodes.map { ($0.episodeKey, $0) })
+        let episodeByKey = PlaybackRecordStore.firstByKey(episodes)
 
         return queuedRecords.compactMap { record in
             guard let episode = episodeByKey[record.episodeKey] else { return nil }

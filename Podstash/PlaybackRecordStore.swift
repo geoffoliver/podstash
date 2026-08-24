@@ -52,6 +52,14 @@ enum PlaybackRecordStore {
         return Dictionary(records.map { ($0.episodeKey, EpisodeState(record: $0)) }, uniquingKeysWith: { first, _ in first })
     }
 
+    /// Keys a batch of Episodes by episodeKey. uniquingKeysWith, not uniqueKeysWithValues: real
+    /// feeds have shipped two items sharing a <guid> (e.g. duplicate art19 locators), which
+    /// crashed this lookup - see QueueView.queuedEpisodes. Keeps the first match arbitrarily,
+    /// same policy as states(forKeys:in:) above for the same reason.
+    static func firstByKey(_ episodes: [Episode]) -> [String: Episode] {
+        Dictionary(episodes.map { ($0.episodeKey, $0) }, uniquingKeysWith: { first, _ in first })
+    }
+
     /// Joins a batch of Episodes to their EpisodeState in one shot, for building [EpisodeDisplay].
     static func display(for episodes: [Episode], in context: ModelContext) -> [EpisodeDisplay] {
         let keys = Set(episodes.map(\.episodeKey))

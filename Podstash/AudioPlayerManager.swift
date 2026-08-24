@@ -30,6 +30,10 @@ class AudioPlayerManager: ObservableObject {
     // without pulling in progress, so they don't re-render every second something is playing.
     @Published var currentEpisode: Episode?
     @Published var isPlaying: Bool = false
+    // Which enclosure is currently loaded. Only ever changes via play(episode:) (resolved from
+    // the episode's defaultMediaKind) or switchMediaKind(to:) (explicit user action) - see
+    // VIDEO_PLAYBACK_PLAN.md's governing rule.
+    @Published var currentMediaKind: MediaKind = .audio
 
     // Owned, not @Published itself - mutating its own @Published fields doesn't trigger this
     // object's objectWillChange, so holding AudioPlayerManager alone doesn't subscribe you to
@@ -196,21 +200,17 @@ class AudioPlayerManager: ObservableObject {
         // Clear stale artwork from the previous episode so it doesn't linger until the new one loads
         MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
         
-        let url = localFileURL(for: episode) ?? URL(string: episode.audioURL ?? "")
-        guard let url else {
-            print("Invalid audio URL: \(episode.audioURL ?? "nil")")
+        let kind = MediaKindPolicy.resolvedDefaultKind(defaultMediaKind: episode.defaultMediaKind, hasAudioURL: episode.audioURL != nil)
+        guard let url = resolvedURL(for: kind, episode: episode) else {
+            print("Invalid \(kind) URL for episode: \(episode.title)")
             return
         }
-        
+        currentMediaKind = kind
+
         // Cleanup old player first
-        if let observer = timeObserver {
-            player?.removeTimeObserver(observer)
-            timeObserver = nil
-        }
+        teardownPlayerItem()
         periodicSaveTimer?.invalidate()
         periodicSaveTimer = nil
-        player?.pause()
-        player = nil
         
         // Create player
         let playerItem = AVPlayerItem(url: url)
@@ -251,7 +251,8 @@ class AudioPlayerManager: ObservableObject {
     }
     
     // Prefer a downloaded local file over streaming, falling back to nil (streaming) if the
-    // file is missing so a stale/deleted download doesn't silently break playback.
+    // file is missing so a stale/deleted download doesn't silently break playback. Only audio
+    // enclosures can be downloaded today (see DownloadManager) - video always streams.
     private func localFileURL(for episode: Episode) -> URL? {
         guard episode.isDownloaded,
               let filename = episode.downloadedFilename else {
@@ -262,6 +263,86 @@ class AudioPlayerManager: ObservableObject {
             return nil
         }
         return url
+    }
+
+    // Resolves the URL to actually load for a given kind: local download first for audio (the
+    // only kind that can be downloaded today), remote streaming URL otherwise.
+    private func resolvedURL(for kind: MediaKind, episode: Episode) -> URL? {
+        let urlString = MediaKindPolicy.urlString(for: kind, audioURL: episode.audioURL, videoURL: episode.videoURL)
+        if kind == .audio, let local = localFileURL(for: episode) {
+            return local
+        }
+        return urlString.flatMap { URL(string: $0) }
+    }
+
+    // Tears down just the AVPlayerItem/player and its time observer - shared by play(episode:)
+    // (which also resets the episode-scoped periodicSaveTimer, so that stays out of here) and
+    // switchMediaKind(to:) (which doesn't, since the episode itself isn't changing).
+    private func teardownPlayerItem() {
+        if let observer = timeObserver {
+            player?.removeTimeObserver(observer)
+            timeObserver = nil
+        }
+        player?.pause()
+        player = nil
+    }
+
+    // The only other place (besides play(episode:)) allowed to change which enclosure is
+    // loaded - always a direct user action (the iOS Audio/Video toggle, or the macOS "Open
+    // Video" flow), never foreground/background or window lifecycle. See
+    // VIDEO_PLAYBACK_PLAN.md's governing rule.
+    func switchMediaKind(to kind: MediaKind) {
+        guard let episode = currentEpisode else { return }
+        guard let plan = MediaKindPolicy.switchPlan(
+            to: kind,
+            audioURL: episode.audioURL,
+            videoURL: episode.videoURL,
+            currentTime: progress.currentTime,
+            isPlaying: isPlaying,
+            playbackRate: progress.playbackRate
+        ) else { return }
+
+        guard let url = resolvedURL(for: plan.kind, episode: episode) else { return }
+
+        teardownPlayerItem()
+        progress.duration = 0 // Reset so the time observer re-measures the new enclosure's duration
+
+        let playerItem = AVPlayerItem(url: url)
+        player = AVPlayer(playerItem: playerItem)
+        player?.rate = plan.playbackRate
+        currentMediaKind = plan.kind
+
+        let time = CMTime(seconds: plan.seekTo, preferredTimescale: 600)
+        player?.seek(to: time)
+
+        setupTimeObserver()
+        setupNotifications()
+
+        if plan.shouldAutoplay {
+            player?.play()
+            isPlaying = true
+        } else {
+            isPlaying = false
+        }
+
+        updateNowPlayingInfo()
+    }
+
+    // Read-only access to the underlying AVPlayer for video-surface views (AVPlayerView on
+    // macOS, an AVPlayerLayer wrapper on iOS - see Phase 4/5) to attach to. This class stays
+    // headless otherwise: progress ticking, remote commands, and Now Playing info don't depend
+    // on whether anything is actually attached to this.
+    var playerForVideoSurface: AVPlayer? { player }
+
+    // Enables/disables the video track of the currently-loaded item without reloading it -
+    // cheaper than a full item swap or track reload. Used by iOS background handling (Phase 5)
+    // to stop decoding video frames while keeping audio playing, without touching what's loaded
+    // or where playback is (no switchMediaKind, no seek).
+    func setVideoTrackEnabled(_ enabled: Bool) {
+        guard let tracks = player?.currentItem?.tracks else { return }
+        for track in tracks where track.assetTrack?.mediaType == .video {
+            track.isEnabled = enabled
+        }
     }
 
     func resume() {
@@ -295,23 +376,18 @@ class AudioPlayerManager: ObservableObject {
     }
     
     func stop() {
-        player?.pause()
         isPlaying = false
-        
+
         // Save progress
         if let episode = currentEpisode {
             saveProgress(for: episode)
         }
-        
+
         // Cleanup
-        if let observer = timeObserver {
-            player?.removeTimeObserver(observer)
-            timeObserver = nil
-        }
+        teardownPlayerItem()
         periodicSaveTimer?.invalidate()
         periodicSaveTimer = nil
-        player = nil
-        
+
         currentEpisode = nil
         
         // Clear Now Playing info
@@ -444,6 +520,11 @@ class AudioPlayerManager: ObservableObject {
         nowPlayingInfo[MPMediaItemPropertyPlaybackDuration] = progress.duration
         nowPlayingInfo[MPNowPlayingInfoPropertyElapsedPlaybackTime] = progress.currentTime
         nowPlayingInfo[MPNowPlayingInfoPropertyPlaybackRate] = isPlaying ? Double(progress.playbackRate) : 0.0
+
+        // Helps Control Center/lock screen present the right chrome (e.g. a video thumbnail
+        // treatment) for video episodes.
+        nowPlayingInfo[MPNowPlayingInfoPropertyMediaType] =
+            (currentMediaKind == .video ? MPNowPlayingInfoMediaType.video : MPNowPlayingInfoMediaType.audio).rawValue
 
         // Artwork is loaded once per episode by loadNowPlayingArtwork() and merged in;
         // preserving the existing dict here (rather than rebuilding from scratch) keeps it.

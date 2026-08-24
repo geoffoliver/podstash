@@ -532,27 +532,16 @@ struct QueueEpisodeRow: View {
     private var rowContent: some View {
         HStack(spacing: 12) {
             // Episode artwork or podcast artwork
-            if let podcast,
-               let artworkURL = podcast.artworkURL,
-               let url = URL(string: artworkURL) {
-                CachedAsyncImage(url: url) { image in
-                    image
-                        .resizable()
-                        .aspectRatio(contentMode: .fill)
-                } placeholder: {
-                    Color.gray.opacity(0.2)
-                }
-                .frame(width: 60, height: 60)
-                .cornerRadius(8)
-            } else {
+            EpisodeThumbnail(artworkURLString: podcast?.artworkURL, videoURL: episode.videoURL) {
                 RoundedRectangle(cornerRadius: 8)
                     .fill(Color.gray.opacity(0.2))
-                    .frame(width: 60, height: 60)
                     .overlay(
                         Image(systemName: "music.note")
                             .foregroundStyle(.secondary)
                     )
             }
+            .frame(width: 60, height: 60)
+            .cornerRadius(8)
 
             // Episode info
             VStack(alignment: .leading, spacing: 4) {

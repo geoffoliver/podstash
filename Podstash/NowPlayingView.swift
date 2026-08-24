@@ -58,29 +58,19 @@ struct NowPlayingView: View {
                 Spacer()
 
                 // Episode artwork
-                if let artworkURL = episode.artworkURL ?? audioPlayer.currentPodcast?.artworkURL,
-                   let url = URL(string: artworkURL) {
-                    CachedAsyncImage(url: url) { image in
-                        image
-                            .resizable()
-                            .aspectRatio(contentMode: .fill)
-                    } placeholder: {
-                        Color.gray.opacity(0.2)
-                    }
-                    .frame(width: 250, height: 250)
-                    .cornerRadius(12)
-                    .shadow(radius: 8)
-                    .id(episode.id)
-                } else {
+                EpisodeThumbnail(episode: episode, podcast: audioPlayer.currentPodcast) {
                     RoundedRectangle(cornerRadius: 12)
                         .fill(Color.gray.opacity(0.2))
-                        .frame(width: 250, height: 250)
                         .overlay(
                             Image(systemName: "music.note")
                                 .font(.system(size: 48))
                                 .foregroundStyle(.secondary)
                         )
                 }
+                .frame(width: 250, height: 250)
+                .cornerRadius(12)
+                .shadow(radius: 8)
+                .id(episode.id)
 
                 // Episode Info
                 VStack(spacing: 8) {
@@ -248,27 +238,17 @@ struct CompactPlayerBar: View {
         if let episode = audioPlayer.currentEpisode {
             HStack(spacing: 12) {
                 // Episode artwork thumbnail
-                if let artworkURL = episode.artworkURL ?? audioPlayer.currentPodcast?.artworkURL,
-                   let url = URL(string: artworkURL) {
-                    CachedAsyncImage(url: url) { image in
-                        image
-                            .resizable()
-                            .aspectRatio(contentMode: .fill)
-                    } placeholder: {
-                        Color.gray.opacity(0.2)
-                    }
-                    .frame(width: 40, height: 40)
-                    .cornerRadius(6)
-                    .id(episode.id)
-                } else {
+                EpisodeThumbnail(episode: episode, podcast: audioPlayer.currentPodcast) {
                     RoundedRectangle(cornerRadius: 6)
                         .fill(Color.gray.opacity(0.2))
-                        .frame(width: 40, height: 40)
                         .overlay(
                             Image(systemName: "music.note")
                                 .foregroundStyle(.secondary)
                         )
                 }
+                .frame(width: 40, height: 40)
+                .cornerRadius(6)
+                .id(episode.id)
 
                 // Episode Info
                 VStack(alignment: .leading, spacing: 2) {

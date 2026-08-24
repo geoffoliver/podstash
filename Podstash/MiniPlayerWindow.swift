@@ -174,20 +174,11 @@ struct MiniPlayerView: View {
                 
                 // Artwork or placeholder
                 if let episode = audioPlayer.currentEpisode {
-                    if let artworkURL = episode.artworkURL ?? audioPlayer.currentPodcast?.artworkURL,
-                       let url = URL(string: artworkURL) {
-                        CachedAsyncImage(url: url) { image in
-                            image
-                                .resizable()
-                                .aspectRatio(contentMode: .fill)
-                                .frame(width: geometry.size.width, height: geometry.size.height)
-                                .clipped()
-                        } placeholder: {
-                            podcastPlaceholder
-                        }
-                    } else {
+                    EpisodeThumbnail(episode: episode, podcast: audioPlayer.currentPodcast) {
                         podcastPlaceholder
                     }
+                    .frame(width: geometry.size.width, height: geometry.size.height)
+                    .clipped()
                 } else {
                     emptyStatePlaceholder
                 }

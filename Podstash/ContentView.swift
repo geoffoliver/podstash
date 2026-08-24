@@ -669,21 +669,11 @@ struct PodcastRowView: View {
     var body: some View {
         HStack(spacing: 12) {
             // Podcast artwork thumbnail
-            if let artworkURL = podcast.artworkURL, let url = URL(string: artworkURL) {
-                CachedAsyncImage(url: url) { image in
-                    image
-                        .resizable()
-                        .aspectRatio(contentMode: .fill)
-                } placeholder: {
-                    podcastPlaceholder
-                }
-                .frame(width: iconSize, height: iconSize)
-                .cornerRadius(6)
-            } else {
+            EpisodeThumbnail(artworkURLString: podcast.artworkURL) {
                 podcastPlaceholder
-                    .frame(width: iconSize, height: iconSize)
-                    .cornerRadius(6)
             }
+            .frame(width: iconSize, height: iconSize)
+            .cornerRadius(6)
             
             Text(podcast.title)
                 .font(.system(size: fontSize * dynamicTypeScale))
@@ -881,13 +871,8 @@ struct TransportControlsBar: View {
                 // Episode artwork thumbnail
                 if let episode = audioPlayer.currentEpisode,
                    let podcast = audioPlayer.currentPodcast,
-                   let artworkURL = podcast.artworkURL,
-                   let url = URL(string: artworkURL) {
-                    CachedAsyncImage(url: url) { image in
-                        image
-                            .resizable()
-                            .aspectRatio(contentMode: .fill)
-                    } placeholder: {
+                   podcast.artworkURL != nil {
+                    EpisodeThumbnail(artworkURLString: podcast.artworkURL, videoURL: episode.videoURL) {
                         Color.gray.opacity(0.2)
                     }
                     .frame(width: 60, height: 60)
@@ -1117,24 +1102,16 @@ struct EpisodeDetailView: View {
             ScrollView {
                 VStack(spacing: 24) {
                     // Artwork
-                    if let artworkURL = episode.artworkURL ?? podcastDirectory.podcast(for: episode.podcastID)?.artworkURL,
-                       let url = URL(string: artworkURL) {
-                        CachedAsyncImage(url: url) { image in
-                            image
-                                .resizable()
-                                .aspectRatio(contentMode: .fit)
-                        } placeholder: {
-                            artworkPlaceholder
-                        }
-                        .frame(maxWidth: 300, maxHeight: 300)
-                        .cornerRadius(16)
-                        .shadow(radius: 10)
-                    } else {
+                    EpisodeThumbnail(
+                        episode: episode,
+                        podcast: podcastDirectory.podcast(for: episode.podcastID),
+                        contentMode: .fit
+                    ) {
                         artworkPlaceholder
-                            .frame(width: 300, height: 300)
-                            .cornerRadius(16)
-                            .shadow(radius: 10)
                     }
+                    .frame(maxWidth: 300, maxHeight: 300)
+                    .cornerRadius(16)
+                    .shadow(radius: 10)
                     
                     // Episode Info
                     VStack(spacing: 16) {

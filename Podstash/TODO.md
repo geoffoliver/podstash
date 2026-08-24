@@ -59,7 +59,7 @@
 - [ ] Add video playback support - macOS: video opens in a separate QuickTime-style window (AVPlayerView); iOS: video plays inline in Now Playing with fullscreen toggle. Design finalized, see VIDEO_PLAYBACK_PLAN.md.
   - [x] Phase 1 - Feed parsing: detect video enclosures (plain `<enclosure>`, `<media:content>`, `podcast:alternateEnclosure`/`source`, HLS skipped), store `videoURL`/`defaultMediaKind` on `Episode`
   - [x] Phase 2 - Playback core: `switchMediaKind(to:)`, player/layer exposure, video-track enable/disable API
-  - [ ] Phase 3 - Shared `EpisodeThumbnail` view (replaces 5 ad hoc `CachedAsyncImage` sites) with video badge overlay
+  - [x] Phase 3 - Shared `EpisodeThumbnail` view (replaces 5 ad hoc `CachedAsyncImage` sites) with video badge overlay
   - [ ] Phase 4 - macOS `VideoPlayerWindowController` (mirrors `MiniPlayerWindowController`) + close/reopen state machine (closing window stops playback entirely; next Play defaults to audio if available, else reopens video)
   - [ ] Phase 5 - iOS: video surface + Audio/Video segmented toggle in `NowPlayingView`, fullscreen presentation/toggle, background = keep playing via video track disabled (not a media-kind switch)
   - [ ] Phase 6 - Settings: "Wi-Fi only for video downloads" toggle (mirrors `refreshOnlyOnWiFi`)

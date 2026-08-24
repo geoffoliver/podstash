@@ -547,23 +547,12 @@ struct PodcastHeaderView: View {
 
     @ViewBuilder
     private var artworkView: some View {
-        if let artworkURL = podcast.artworkURL, let url = URL(string: artworkURL) {
-            CachedAsyncImage(url: url) { image in
-                image
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
-            } placeholder: {
-                podcastPlaceholder
-            }
-            .frame(width: artworkSize, height: artworkSize)
-            .cornerRadius(12)
-            .shadow(radius: 3)
-        } else {
+        EpisodeThumbnail(artworkURLString: podcast.artworkURL) {
             podcastPlaceholder
-                .frame(width: artworkSize, height: artworkSize)
-                .cornerRadius(12)
-                .shadow(radius: 3)
         }
+        .frame(width: artworkSize, height: artworkSize)
+        .cornerRadius(12)
+        .shadow(radius: 3)
     }
 
     private var actionButtons: some View {

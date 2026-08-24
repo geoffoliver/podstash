@@ -9,22 +9,28 @@ import SwiftData
 @testable import Podstash
 
 @MainActor
-@Suite("FeedFetcher episode matching")
+// .serialized: each test creates its own in-memory ModelContainer. Left to run concurrently
+// (Swift Testing's default), several containers end up alive at once and race CoreData's SQLite
+// connection pool - crashes intermittently with "No eligible connection available" on some
+// macOS/Xcode betas. Serializing avoids the race regardless of the underlying bug.
+@Suite("FeedFetcher episode matching", .serialized)
 struct FeedFetcherTests {
 
     private func makeContext() throws -> ModelContext {
         let schema = Schema([Podcast.self, Episode.self, PlaybackRecord.self])
-        let configuration = ModelConfiguration(isStoredInMemoryOnly: true)
+        let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".sqlite")
+        let configuration = ModelConfiguration(schema: schema, url: tempURL)
         let container = try ModelContainer(for: schema, configurations: [configuration])
         return ModelContext(container)
     }
 
     private func makeParsedEpisode(
-        audioURL: String,
+        audioURL: String? = nil,
+        videoURL: String? = nil,
         guid: String? = nil,
         publishDate: Date = .now
     ) -> ParsedEpisode {
-        ParsedEpisode(title: "Episode", description: nil, audioURL: audioURL, guid: guid, duration: nil, publishDate: publishDate, artworkURL: nil)
+        ParsedEpisode(title: "Episode", description: nil, audioURL: audioURL, videoURL: videoURL, guid: guid, duration: nil, publishDate: publishDate, artworkURL: nil)
     }
 
     private func makeParsedPodcast(episodes: [ParsedEpisode]) -> ParsedPodcast {
@@ -101,6 +107,52 @@ struct FeedFetcherTests {
         )
 
         #expect(try context.fetch(FetchDescriptor<Episode>()).count == 1)
+    }
+
+    @Test("Two video-only episodes with distinct guids in the same refresh are not conflated by a shared nil audioURL")
+    func videoOnlyEpisodesAreNotConflatedAcrossItems() async throws {
+        let context = try makeContext()
+        let podcast = Podcast(title: "Video Show", feedURL: "https://example.com/feed.xml")
+        context.insert(podcast)
+        try context.save()
+
+        let fetcher = FeedFetcher(modelContext: context, settings: AppSettings())
+        let parsed1 = makeParsedEpisode(videoURL: "https://example.com/ep1.mp4", guid: "v-1")
+        let parsed2 = makeParsedEpisode(videoURL: "https://example.com/ep2.mp4", guid: "v-2")
+
+        await fetcher.updatePodcastAndEpisodes(
+            podcast: podcast,
+            parsedPodcast: makeParsedPodcast(episodes: [parsed1, parsed2]),
+            parsedEpisodes: [parsed1, parsed2],
+            updateTimestamp: false,
+            shouldSave: false
+        )
+
+        #expect(try context.fetch(FetchDescriptor<Episode>()).count == 2)
+    }
+
+    @Test("An item previously matched only by videoURL gets its guid backfilled")
+    func videoURLMatchBackfillsGUID() async throws {
+        let context = try makeContext()
+        let podcast = Podcast(title: "Video Show", feedURL: "https://example.com/feed.xml")
+        context.insert(podcast)
+        context.insert(Episode(title: "Ep", audioURL: nil, videoURL: "https://example.com/ep.mp4", guid: nil, publishDate: .now, podcastID: podcast.id))
+        try context.save()
+
+        let fetcher = FeedFetcher(modelContext: context, settings: AppSettings())
+        let parsed = makeParsedEpisode(videoURL: "https://example.com/ep.mp4", guid: "v-1")
+
+        await fetcher.updatePodcastAndEpisodes(
+            podcast: podcast,
+            parsedPodcast: makeParsedPodcast(episodes: [parsed]),
+            parsedEpisodes: [parsed],
+            updateTimestamp: false,
+            shouldSave: false
+        )
+
+        let all = try context.fetch(FetchDescriptor<Episode>())
+        #expect(all.count == 1)
+        #expect(all.first?.guid == "v-1")
     }
 
     @Test("newestKnownPublishDate advances to the newest item seen, even when nothing new is created")

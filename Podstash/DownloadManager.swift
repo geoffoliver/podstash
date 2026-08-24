@@ -67,7 +67,7 @@ final class DownloadManager: NSObject, ObservableObject {
             return
         }
 
-        guard URL(string: episode.audioURL) != nil else { return }
+        guard URL(string: episode.audioURL ?? "") != nil else { return }
 
         guard downloadTasks.count < maxConcurrentDownloads else {
             pendingDownloadQueue.append(episode)
@@ -79,7 +79,7 @@ final class DownloadManager: NSObject, ObservableObject {
     }
 
     private func startDownload(_ episode: Episode) {
-        guard let url = URL(string: episode.audioURL) else {
+        guard let url = URL(string: episode.audioURL ?? "") else {
             // Shouldn't happen (validated before queuing), but don't let a bad URL stall the
             // rest of the queue behind it.
             startNextQueuedDownloadIfNeeded()
@@ -215,7 +215,7 @@ final class DownloadManager: NSObject, ObservableObject {
         // Generate unique filename. Derive the extension from the episode's audio URL,
         // not tempURL - tempURL's extension comes from URLSession's own internal temp
         // file naming (e.g. "CFNetworkDownload_XXXXXX.tmp"), not the actual audio format.
-        let audioURLExtension = URL(string: episode.audioURL)?.pathExtension ?? ""
+        let audioURLExtension = URL(string: episode.audioURL ?? "")?.pathExtension ?? ""
         let fileExtension = audioURLExtension.isEmpty ? "mp3" : audioURLExtension
         let fileName = "\(episodeID.uuidString).\(fileExtension)"
         let destinationURL = DownloadManager.localFileURL(forStoredFilename: fileName)

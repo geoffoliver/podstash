@@ -102,6 +102,222 @@ struct RSSFeedParserTests {
         #expect(episode.publishDate == Date.distantPast)
     }
 
+    @Test("A video-only enclosure is captured as videoURL, with no audioURL, and the episode is not skipped")
+    func capturesVideoOnlyEnclosure() throws {
+        let xml = """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <rss version="2.0"><channel>
+          <title>Video Show</title>
+          <item>
+            <title>Video Only Episode</title>
+            <guid>video-only</guid>
+            <pubDate>Mon, 03 Aug 2026 10:00:00 GMT</pubDate>
+            <enclosure url="https://example.com/ep.mp4" type="video/mp4" length="789"/>
+          </item>
+        </channel></rss>
+        """
+        let parser = RSSFeedParser()
+        let podcast = try #require(parser.parse(data: Data(xml.utf8)))
+        let episode = try #require(podcast.episodes.first)
+
+        #expect(episode.audioURL == nil)
+        #expect(episode.videoURL == "https://example.com/ep.mp4")
+    }
+
+    @Test("An item with both audio and video enclosures captures both URLs")
+    func capturesMixedAudioAndVideoEnclosures() throws {
+        let xml = """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <rss version="2.0" xmlns:media="http://search.yahoo.com/mrss/"><channel>
+          <title>Mixed Show</title>
+          <item>
+            <title>Mixed Episode</title>
+            <guid>mixed</guid>
+            <pubDate>Mon, 03 Aug 2026 10:00:00 GMT</pubDate>
+            <enclosure url="https://example.com/ep-audio.mp3" type="audio/mpeg"/>
+            <media:content url="https://example.com/ep-video.mp4" medium="video"/>
+          </item>
+        </channel></rss>
+        """
+        let parser = RSSFeedParser()
+        let podcast = try #require(parser.parse(data: Data(xml.utf8)))
+        let episode = try #require(podcast.episodes.first)
+
+        #expect(episode.audioURL == "https://example.com/ep-audio.mp3")
+        #expect(episode.videoURL == "https://example.com/ep-video.mp4")
+        // The plain <enclosure> is audio, media:content is the extra - audio is the default.
+        #expect(episode.defaultMediaKind == .audio)
+    }
+
+    @Test("When the main enclosure is video and media:content supplies audio, video is the default")
+    func mainEnclosureVideoTakesPrecedenceOverMediaContentAudio() throws {
+        let xml = """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <rss version="2.0" xmlns:media="http://search.yahoo.com/mrss/"><channel>
+          <title>Video-First Show</title>
+          <item>
+            <title>Video-First Episode</title>
+            <guid>video-first</guid>
+            <pubDate>Mon, 03 Aug 2026 10:00:00 GMT</pubDate>
+            <enclosure url="https://example.com/ep-video.mp4" type="video/mp4"/>
+            <media:content url="https://example.com/ep-audio.mp3" medium="audio"/>
+          </item>
+        </channel></rss>
+        """
+        let parser = RSSFeedParser()
+        let podcast = try #require(parser.parse(data: Data(xml.utf8)))
+        let episode = try #require(podcast.episodes.first)
+
+        #expect(episode.audioURL == "https://example.com/ep-audio.mp3")
+        #expect(episode.videoURL == "https://example.com/ep-video.mp4")
+        #expect(episode.defaultMediaKind == .video)
+    }
+
+    @Test("When the main enclosure is audio and alternateEnclosure supplies video, audio is the default")
+    func mainEnclosureAudioTakesPrecedenceOverAlternateVideo() throws {
+        let xml = """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <rss version="2.0" xmlns:podcast="https://podcastindex.org/namespace/1.0"><channel>
+          <title>Audio-First Show</title>
+          <item>
+            <title>Audio-First Episode</title>
+            <guid>audio-first</guid>
+            <pubDate>Mon, 03 Aug 2026 10:00:00 GMT</pubDate>
+            <enclosure url="https://example.com/ep-audio.mp3" type="audio/mpeg"/>
+            <podcast:alternateEnclosure type="video/mp4">
+              <podcast:source uri="https://example.com/ep-video.mp4"/>
+            </podcast:alternateEnclosure>
+          </item>
+        </channel></rss>
+        """
+        let parser = RSSFeedParser()
+        let podcast = try #require(parser.parse(data: Data(xml.utf8)))
+        let episode = try #require(podcast.episodes.first)
+
+        #expect(episode.defaultMediaKind == .audio)
+    }
+
+    @Test("When the main enclosure is video and alternateEnclosure supplies audio, video is the default")
+    func mainEnclosureVideoTakesPrecedenceOverAlternateAudio() throws {
+        let xml = """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <rss version="2.0" xmlns:podcast="https://podcastindex.org/namespace/1.0"><channel>
+          <title>Video-First Show</title>
+          <item>
+            <title>Video-First Episode</title>
+            <guid>video-first-alt</guid>
+            <pubDate>Mon, 03 Aug 2026 10:00:00 GMT</pubDate>
+            <enclosure url="https://example.com/ep-video.mp4" type="video/mp4"/>
+            <podcast:alternateEnclosure type="audio/mpeg">
+              <podcast:source uri="https://example.com/ep-audio.mp3"/>
+            </podcast:alternateEnclosure>
+          </item>
+        </channel></rss>
+        """
+        let parser = RSSFeedParser()
+        let podcast = try #require(parser.parse(data: Data(xml.utf8)))
+        let episode = try #require(podcast.episodes.first)
+
+        #expect(episode.audioURL == "https://example.com/ep-audio.mp3")
+        #expect(episode.videoURL == "https://example.com/ep-video.mp4")
+        #expect(episode.defaultMediaKind == .video)
+    }
+
+    @Test("A video-only episode defaults to video, with no main enclosure to consult")
+    func videoOnlyEpisodeDefaultsToVideo() throws {
+        let xml = """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <rss version="2.0"><channel>
+          <title>Video Show</title>
+          <item>
+            <title>Video Only</title>
+            <guid>video-only-default</guid>
+            <pubDate>Mon, 03 Aug 2026 10:00:00 GMT</pubDate>
+            <enclosure url="https://example.com/ep.mp4" type="video/mp4"/>
+          </item>
+        </channel></rss>
+        """
+        let parser = RSSFeedParser()
+        let podcast = try #require(parser.parse(data: Data(xml.utf8)))
+        let episode = try #require(podcast.episodes.first)
+
+        #expect(episode.defaultMediaKind == .video)
+    }
+
+    @Test("A podcast:alternateEnclosure video variant's podcast:source uri is captured as videoURL")
+    func capturesVideoFromAlternateEnclosure() throws {
+        let xml = """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <rss version="2.0" xmlns:podcast="https://podcastindex.org/namespace/1.0"><channel>
+          <title>Alt Enclosure Show</title>
+          <item>
+            <title>Episode With Video Alternate</title>
+            <guid>alt-video</guid>
+            <pubDate>Mon, 03 Aug 2026 10:00:00 GMT</pubDate>
+            <enclosure url="https://example.com/ep-audio.mp3" type="audio/mpeg"/>
+            <podcast:alternateEnclosure type="video/mp4" length="123456">
+              <podcast:source uri="https://example.com/ep-video.mp4"/>
+            </podcast:alternateEnclosure>
+          </item>
+        </channel></rss>
+        """
+        let parser = RSSFeedParser()
+        let podcast = try #require(parser.parse(data: Data(xml.utf8)))
+        let episode = try #require(podcast.episodes.first)
+
+        #expect(episode.audioURL == "https://example.com/ep-audio.mp3")
+        #expect(episode.videoURL == "https://example.com/ep-video.mp4")
+    }
+
+    @Test("An HLS podcast:alternateEnclosure (application/x-mpegURL) is skipped, not captured as videoURL")
+    func skipsHLSAlternateEnclosure() throws {
+        let xml = """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <rss version="2.0" xmlns:podcast="https://podcastindex.org/namespace/1.0"><channel>
+          <title>HLS Show</title>
+          <item>
+            <title>Episode With HLS Alternate</title>
+            <guid>alt-hls</guid>
+            <pubDate>Mon, 03 Aug 2026 10:00:00 GMT</pubDate>
+            <enclosure url="https://example.com/ep-audio.mp3" type="audio/mpeg"/>
+            <podcast:alternateEnclosure type="application/x-mpegURL" length="0">
+              <podcast:source uri="https://example.com/ep.m3u8"/>
+            </podcast:alternateEnclosure>
+          </item>
+        </channel></rss>
+        """
+        let parser = RSSFeedParser()
+        let podcast = try #require(parser.parse(data: Data(xml.utf8)))
+        let episode = try #require(podcast.episodes.first)
+
+        #expect(episode.audioURL == "https://example.com/ep-audio.mp3")
+        #expect(episode.videoURL == nil)
+    }
+
+    @Test("Only the first podcast:source uri within an alternateEnclosure block is used")
+    func usesFirstSourceInAlternateEnclosure() throws {
+        let xml = """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <rss version="2.0" xmlns:podcast="https://podcastindex.org/namespace/1.0"><channel>
+          <title>Multi Source Show</title>
+          <item>
+            <title>Episode With Multiple Sources</title>
+            <guid>multi-source</guid>
+            <pubDate>Mon, 03 Aug 2026 10:00:00 GMT</pubDate>
+            <podcast:alternateEnclosure type="video/mp4" length="123456">
+              <podcast:source uri="https://example.com/primary.mp4"/>
+              <podcast:source uri="ipfs://someRandomVideoFile"/>
+            </podcast:alternateEnclosure>
+          </item>
+        </channel></rss>
+        """
+        let parser = RSSFeedParser()
+        let podcast = try #require(parser.parse(data: Data(xml.utf8)))
+        let episode = try #require(podcast.episodes.first)
+
+        #expect(episode.videoURL == "https://example.com/primary.mp4")
+    }
+
     @Test(
         "RFC 822 date formats with named and numeric time zones all parse",
         arguments: [

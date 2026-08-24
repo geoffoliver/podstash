@@ -123,11 +123,20 @@ class FeedFetcher {
 
         var existingByGUID: [String: Episode] = [:]
         var existingByAudioURL: [String: Episode] = [:]
+        var existingByVideoURL: [String: Episode] = [:]
         for episode in existingEpisodes {
             if let guid = episode.guid {
                 existingByGUID[guid] = episode
             }
-            existingByAudioURL[episode.audioURL] = episode
+            // Guarded on non-nil - unlike the old non-optional `audioURL: String = ""`, a shared
+            // "" key here would silently conflate every video-only episode (nil audioURL) with
+            // whichever one happened to be indexed first.
+            if let audioURL = episode.audioURL {
+                existingByAudioURL[audioURL] = episode
+            }
+            if let videoURL = episode.videoURL {
+                existingByVideoURL[videoURL] = episode
+            }
         }
 
         // The newest publishDate this device has ever seen for this feed, captured before any
@@ -145,13 +154,20 @@ class FeedFetcher {
         // do) doesn't create two Episode rows for it in a single refresh.
         var stagedGUIDs: Set<String> = []
         var stagedAudioURLs: Set<String> = []
+        var stagedVideoURLs: Set<String> = []
 
         var newEpisodeData: [ParsedEpisode] = []
         for parsedEpisode in parsedEpisodes {
             if let guid = parsedEpisode.guid, existingByGUID[guid] != nil {
                 continue
             }
-            if let existing = existingByAudioURL[parsedEpisode.audioURL] {
+            if let audioURL = parsedEpisode.audioURL, let existing = existingByAudioURL[audioURL] {
+                if existing.guid == nil, let guid = parsedEpisode.guid {
+                    existing.guid = guid
+                }
+                continue
+            }
+            if let videoURL = parsedEpisode.videoURL, let existing = existingByVideoURL[videoURL] {
                 if existing.guid == nil, let guid = parsedEpisode.guid {
                     existing.guid = guid
                 }
@@ -160,14 +176,22 @@ class FeedFetcher {
             if let guid = parsedEpisode.guid, stagedGUIDs.contains(guid) {
                 continue
             }
-            if stagedAudioURLs.contains(parsedEpisode.audioURL) {
+            if let audioURL = parsedEpisode.audioURL, stagedAudioURLs.contains(audioURL) {
+                continue
+            }
+            if let videoURL = parsedEpisode.videoURL, stagedVideoURLs.contains(videoURL) {
                 continue
             }
 
             if let guid = parsedEpisode.guid {
                 stagedGUIDs.insert(guid)
             }
-            stagedAudioURLs.insert(parsedEpisode.audioURL)
+            if let audioURL = parsedEpisode.audioURL {
+                stagedAudioURLs.insert(audioURL)
+            }
+            if let videoURL = parsedEpisode.videoURL {
+                stagedVideoURLs.insert(videoURL)
+            }
             newEpisodeData.append(parsedEpisode)
         }
 
@@ -178,6 +202,8 @@ class FeedFetcher {
                 title: parsedEpisode.title,
                 episodeDescription: parsedEpisode.description,
                 audioURL: parsedEpisode.audioURL,
+                videoURL: parsedEpisode.videoURL,
+                defaultMediaKind: parsedEpisode.defaultMediaKind,
                 guid: parsedEpisode.guid,
                 duration: parsedEpisode.duration,
                 publishDate: parsedEpisode.publishDate,

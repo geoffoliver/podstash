@@ -57,6 +57,15 @@ final class Podcast {
     }
 }
 
+// Which enclosure an Episode with both audio and video should play by default. Resolved once at
+// parse time (see RSSFeedParser) from whichever medium the feed's actual <enclosure> tag
+// declared - not a user preference, and not re-derived later. A user-initiated switch (Phase 4/5
+// of VIDEO_PLAYBACK_PLAN.md) changes what's currently playing, never this stored default.
+enum MediaKind: String, Codable {
+    case audio
+    case video
+}
+
 // NOT CloudKit-mirrored - purely local metadata cache, independently derived from RSS by every
 // device. Cross-device state (played/position/queue) lives in PlaybackRecord instead, joined by
 // `episodeKey`. No relationship to Podcast: a synced model and a local-only model can't be
@@ -67,17 +76,38 @@ final class Episode {
     var id: UUID = UUID()
     var title: String = ""
     var episodeDescription: String?
-    var audioURL: String = ""
+    // Optional - a video-only episode (no audio enclosure at all) has none. At least one of
+    // audioURL/videoURL is guaranteed non-nil by the parser (see RSSFeedParser); an episode
+    // with neither is never created.
+    var audioURL: String?
+    // The episode's video enclosure, if the feed offers one (plain <enclosure type="video/*">,
+    // <media:content medium="video">, or a non-HLS <podcast:alternateEnclosure> - see
+    // RSSFeedParser). HLS variants (application/x-mpegURL) are deliberately never captured here:
+    // AVPlayer could stream them, but they're not a single downloadable file, and download
+    // support is the only reason this app tracks a URL up front rather than resolving one at
+    // play time.
+    var videoURL: String?
+    // Which of audioURL/videoURL plays by default when both are present - see MediaKind. Set to
+    // .audio or .video (never left nil) for every episode this app creates - see the init below.
+    //
+    // Declared Optional, with no inline default, purely so SwiftData's lightweight migration
+    // leaves existing on-disk rows (from before this column existed) as nil rather than crashing:
+    // a non-optional enum-typed attribute here made SwiftData's migration backfill the wrong
+    // (empty) value for old rows, which then failed to decode as MediaKind at all ("Could not
+    // cast value of type 'Optional<Any>' to 'MediaKind'"). A reader without a real signal to
+    // consult (nil here means "created before this column existed") should treat nil the same
+    // as the init's own fallback: audio if audioURL is set, else video.
+    var defaultMediaKind: MediaKind?
     // RSS <guid> - the feed's own stable identifier for this item, used (in preference to
-    // audioURL) to recognize an episode across refreshes. Nil for feeds that omit guid (rare -
-    // Apple's podcast requirements mandate it, and it was present on every item across every
-    // feed this app was tested against); those fall back to matching by audioURL.
+    // audioURL/videoURL) to recognize an episode across refreshes. Nil for feeds that omit guid
+    // (rare - Apple's podcast requirements mandate it, and it was present on every item across
+    // every feed this app was tested against); those fall back to matching by audioURL/videoURL.
     var guid: String?
-    // Stable join key to PlaybackRecord: `guid ?? audioURL` at creation time, fixed forever -
-    // never recomputed even if a guid is later backfilled onto a row originally matched by
-    // audioURL alone, so an episode never "moves" to a different PlaybackRecord mid-life.
-    // Stored as a real field (not a computed property) so it can be used directly in
-    // #Predicate equality/`.contains` - SwiftData predicates can't evaluate `??`.
+    // Stable join key to PlaybackRecord: `guid ?? audioURL ?? videoURL` at creation time, fixed
+    // forever - never recomputed even if a guid is later backfilled onto a row originally
+    // matched by audioURL/videoURL alone, so an episode never "moves" to a different
+    // PlaybackRecord mid-life. Stored as a real field (not a computed property) so it can be
+    // used directly in #Predicate equality/`.contains` - SwiftData predicates can't evaluate `??`.
     var episodeKey: String = ""
     var duration: TimeInterval?
     var publishDate: Date = Date()
@@ -97,7 +127,9 @@ final class Episode {
         id: UUID = UUID(),
         title: String,
         episodeDescription: String? = nil,
-        audioURL: String,
+        audioURL: String? = nil,
+        videoURL: String? = nil,
+        defaultMediaKind: MediaKind? = nil,
         guid: String? = nil,
         duration: TimeInterval? = nil,
         publishDate: Date,
@@ -110,8 +142,10 @@ final class Episode {
         self.title = title
         self.episodeDescription = episodeDescription
         self.audioURL = audioURL
+        self.videoURL = videoURL
+        self.defaultMediaKind = defaultMediaKind ?? (audioURL != nil ? .audio : .video)
         self.guid = guid
-        self.episodeKey = guid ?? audioURL
+        self.episodeKey = guid ?? audioURL ?? videoURL ?? ""
         self.duration = duration
         self.publishDate = publishDate
         self.artworkURL = artworkURL

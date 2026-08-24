@@ -56,14 +56,30 @@
 - [ ] TestFlight distribution
 - [ ] AppStore submission
 - [x] Bug (iOS) - Queue scrolling is incorrect when the Now Playing view is visible. Scrolling the queue all the way up leaves the last item partially hidden under the Now Playing view.
+- [ ] Add video playback support - macOS: video opens in a separate QuickTime-style window (AVPlayerView); iOS: video plays inline in Now Playing with fullscreen toggle. Design finalized, see VIDEO_PLAYBACK_PLAN.md.
+  - [ ] Phase 1 - Feed parsing: detect video enclosures (`type="video/*"` or `<media:content>`), store `videoURL`/`mediaKind` on `Episode`
+  - [ ] Phase 2 - Playback core: `switchMediaKind(to:)`, player/layer exposure, video-track enable/disable API
+  - [ ] Phase 3 - Shared `EpisodeThumbnail` view (replaces 5 ad hoc `CachedAsyncImage` sites) with video badge overlay
+  - [ ] Phase 4 - macOS `VideoPlayerWindowController` (mirrors `MiniPlayerWindowController`) + close/reopen state machine (closing window stops playback entirely; next Play defaults to audio if available, else reopens video)
+  - [ ] Phase 5 - iOS: video surface + Audio/Video segmented toggle in `NowPlayingView`, fullscreen presentation/toggle, background = keep playing via video track disabled (not a media-kind switch)
+  - [ ] Phase 6 - Settings: "Wi-Fi only for video downloads" toggle (mirrors `refreshOnlyOnWiFi`)
+- [ ] UI weirdness - "Unplayed" view in podcast detail view and "Queue" view list downloaded and unplayed episodes, which is by design. Unfortunately it causes confusion if someone does not have auto-download enabled, as new episodes only appear in the "All" tab of a podcast detail view, and users must manually go through each podcast and hunt for new episodes and download them to get them into the queue. The "Unplayed" and the "Queue" views logic need updating (along with the logic that adds the unplayed count badge to the sidebar items) so that they can include episodes that match any of the following criteria:
+  - [ ] Downloaded and unplayed files
+  - [ ] Any episode in a feed that is unplayed and newer than the most recently played episode in the same feed
+  - [ ] If adding a feed for the first time, the most recent episode of a show
+- [ ] Add ability to unsubscribe from "Search Podcasts" dialog in case someone subscribes to something on accident
+- [ ] CarPlay UI
+- [ ] Bug - When in use in the car, playback does not get paused when Maps gives directions or when Siri speaks
+- [ ] Reorganize transport controls on compact player bar on mobile
+  - [ ] Move Play/Pause where Airplay button is
+  - [ ] Add fast foward and rewind controls around play/pause button
+- [ ] New feature: Download Missing Episodes - This should be an option in the queue that would let users download any episodes that are in the queue, but have not been downloaded
+- [ ] New feature: "downloads" manager - Maybe we can just use the queue for this? Show a progress circle like on podcast detail with option to cancel?
 
 # Maybe
 
-- [ ] "downloads" window/view/whatever - maybe we can just use the queue for this? show progress circle like on podcast detail with option to cancel?
 - [ ] Activity window - show sync status
-- [ ] can this play videos?
 - [ ] "window" menu flashes different content when app is playing - shows extra options for maximizing/fullscreening window
 - [ ] macOS queue drag/drop ghost is a plain blue bar with title only - could match the real row look instead (artwork thumbnail, rounded corners, stacked title/podcast text)
 - [ ] macOS "Search Episodes" field (podcast detail) has a lighter background than "Search Queue" (queue view) - same `.searchable()` usage but they render with different bezel colors. Ruled out: toolbar item presence, explicit vs automatic placement, focus state. Suspect it's tied to podcast detail using a real SwiftUI `List` vs queue's NSTableView wrapper - try swapping the episode List to ScrollView/LazyVStack to test.
 - [x] UI enhancement (iOS) - podcast detail view's search field is always visible right below the title, unlike Queue's "drag down to reveal" search. The header (artwork/description) and Unplayed/All picker sit in a fixed VStack above a separate List, rather than inside the same scrollable container as the episode list, so the nav bar can't track scroll position to drive the reveal behavior. Fixing this means folding the header + picker into the episode List itself (e.g. as a Section), which would also let them scroll off-screen - worth doing anyway since the header eats a lot of vertical space on iPhone.
-- [ ] CarPlay UI

@@ -196,9 +196,9 @@ class AudioPlayerManager: ObservableObject {
         // Clear stale artwork from the previous episode so it doesn't linger until the new one loads
         MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
         
-        let url = localFileURL(for: episode) ?? URL(string: episode.audioURL)
+        let url = localFileURL(for: episode) ?? URL(string: episode.audioURL ?? "")
         guard let url else {
-            print("Invalid audio URL: \(episode.audioURL)")
+            print("Invalid audio URL: \(episode.audioURL ?? "nil")")
             return
         }
         

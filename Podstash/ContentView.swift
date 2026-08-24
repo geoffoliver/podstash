@@ -1253,7 +1253,7 @@ struct EpisodeDetailView: View {
                         }
                         
                         // Audio URL (for debugging or advanced users)
-                        if let url = URL(string: episode.audioURL) {
+                        if let url = URL(string: episode.audioURL ?? "") {
                             VStack(alignment: .leading, spacing: 8) {
                                 Text("Audio File")
                                     .font(.headline)

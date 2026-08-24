@@ -9,12 +9,18 @@ import SwiftData
 @testable import Podstash
 
 @MainActor
-@Suite("EpisodeCleanupManager")
+// .serialized - see the comment on FeedFetcherTests' @Suite for why (each test creates its own
+// in-memory ModelContainer; concurrent tests race CoreData's connection pool).
+@Suite("EpisodeCleanupManager", .serialized)
 struct EpisodeCleanupManagerTests {
 
+    // Uses a temp on-disk store, not isStoredInMemoryOnly: true - the in-memory configuration
+    // reliably crashes ("No eligible connection available") on the macOS 27 beta SDK this
+    // targets. See the identical comment/fix in FeedFetcherTests.swift.
     private func makeContext() throws -> ModelContext {
         let schema = Schema([Podcast.self, Episode.self, PlaybackRecord.self])
-        let configuration = ModelConfiguration(isStoredInMemoryOnly: true)
+        let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".sqlite")
+        let configuration = ModelConfiguration(schema: schema, url: tempURL)
         let container = try ModelContainer(for: schema, configurations: [configuration])
         return ModelContext(container)
     }

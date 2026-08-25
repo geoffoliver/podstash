@@ -71,6 +71,14 @@ struct QueueTableView: NSViewRepresentable {
         scrollView.documentView = tableView
         scrollView.hasVerticalScroller = true
         scrollView.drawsBackground = false
+        // Without this, NSScrollView periodically recalculates contentInsets itself (based on
+        // titlebar/toolbar, which it manages automatically) and silently overwrites whatever we
+        // set below - it has no idea FloatingPlayerBar (a SwiftUI overlay, not something AppKit's
+        // layout knows about) needs bottom clearance. That's what made the last queue row
+        // intermittently disappear behind the bar: our contentInsets.bottom assignment in
+        // updateNSView would apply for a moment, then get clobbered by the next automatic
+        // recalculation, with nothing forcing another updateNSView pass to reapply it.
+        scrollView.automaticallyAdjustsContentInsets = false
         scrollView.contentInsets.bottom = bottomContentInset
 
         context.coordinator.tableView = tableView

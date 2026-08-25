@@ -4,6 +4,23 @@
         <title>Podstash</title>
         <item>
             <title>0.0.21</title>
+            <pubDate>Tue, 25 Aug 2026 15:24:53 +0000</pubDate>
+            <link>https://geoffoliver.github.io/podstash/</link>
+            <sparkle:version>30</sparkle:version>
+            <sparkle:shortVersionString>0.0.21</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>26.5</sparkle:minimumSystemVersion>
+            <description sparkle:format="markdown"><![CDATA[## What's Changed
+- Bump build number for TestFlight/Sparkle (marketing version unchanged)
+- Fix last Queue row hidden behind the floating transport bar on macOS
+- Fix severe refresh slowdown and a render-loop hang
+
+**Full Changelog**: https://github.com/geoffoliver/podstash/compare/v0.0.21-2...v0.0.21-3
+
+]]></description>
+            <enclosure url="https://github.com/geoffoliver/podstash/releases/download/v0.0.21-3/Podstash.app.zip" length="5117645" type="application/octet-stream" sparkle:edSignature="5s6z36N7dP6P7sr7+KVmNr50p5FwUjRk0ZJJ9faUFu9vKOoLP/ZgdrZ9A7GkOAOCLbAjKOYTFQti2uYNpQ+hBQ=="/>
+        </item>
+        <item>
+            <title>0.0.21</title>
             <pubDate>Tue, 25 Aug 2026 07:01:24 +0000</pubDate>
             <link>https://geoffoliver.github.io/podstash/</link>
             <sparkle:version>29</sparkle:version>
@@ -59,27 +76,6 @@
 
 ]]></description>
             <enclosure url="https://github.com/geoffoliver/podstash/releases/download/v0.0.21-1/Podstash.app.zip" length="5103439" type="application/octet-stream" sparkle:edSignature="XAS01nkpP+vcxRM5X+/lECXw+ho8SewybQY8GLXbY6/As6yMb1azdPpa5fdYkALPHmzhrWR192pjbu0ftgCvBQ=="/>
-        </item>
-        <item>
-            <title>0.0.21</title>
-            <pubDate>Sat, 15 Aug 2026 04:01:47 +0000</pubDate>
-            <link>https://geoffoliver.github.io/podstash/</link>
-            <sparkle:version>27</sparkle:version>
-            <sparkle:shortVersionString>0.0.21</sparkle:shortVersionString>
-            <sparkle:minimumSystemVersion>26.5</sparkle:minimumSystemVersion>
-            <description sparkle:format="markdown"><![CDATA[## What's Changed
-- Bump to 0.0.21
-- Add Tier 3 tests: subscribe/unsubscribe and download-pruning cutoffs
-- Extract PlaybackProgressPolicy and add regression tests for d300731
-- Add Tier 1 tests: episode retention cleanup and feed-refresh matching
-- Add PodstashTests target with parser and playback-record-store tests
-- fixed issue with episodes disappearing from queue
-- Update iOS launch screen icon to match the new app icon
-
-**Full Changelog**: https://github.com/geoffoliver/podstash/compare/v0.0.20...v0.0.21
-
-]]></description>
-            <enclosure url="https://github.com/geoffoliver/podstash/releases/download/v0.0.21/Podstash.app.zip" length="5035179" type="application/octet-stream" sparkle:edSignature="GKQDtx+kGqNX5oonVvYPkQWQHAgT2o2RBTSDzsk5mnpvHfz6TGxfk/kFZCb3mz1tLzqV68q5L4vxfdkVzDzlBw=="/>
         </item>
     </channel>
 </rss>

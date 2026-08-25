@@ -4,6 +4,47 @@
         <title>Podstash</title>
         <item>
             <title>0.0.21</title>
+            <pubDate>Tue, 25 Aug 2026 06:49:42 +0000</pubDate>
+            <link>https://geoffoliver.github.io/podstash/</link>
+            <sparkle:version>28</sparkle:version>
+            <sparkle:shortVersionString>0.0.21</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>26.5</sparkle:minimumSystemVersion>
+            <description sparkle:format="markdown"><![CDATA[## What's Changed
+- Bump build number for TestFlight (marketing version unchanged)
+- Float the transport bar like Apple Podcasts, fix bugs found along the way
+- Redesign iOS Now Playing to mirror Apple Podcasts, simplify compact bar
+- Add tap-to-toggle time remaining on the elapsed playback label
+- Add ability to unsubscribe from Search Podcasts dialog
+- tweaked TODO
+- Add iOS Settings Done button; widen Unplayed/Queue eligibility
+- Mark video playback support TODO item complete
+- Enable Sparkle's Installer Launcher XPC service in Info.plist
+- Add video download settings: Wi-Fi-only gating and auto-download opt-in (Phase 6)
+- Fix video badge overflowing small episode thumbnails
+- Fix Storage row showing 0 MB for a downloaded episode with no measured duration
+- Add iOS inline video playback with Audio/Video toggle (Phase 5)
+- Add macOS video window (Phase 4 of VIDEO_PLAYBACK_PLAN.md)
+- Add shared EpisodeThumbnail view (Phase 3 of VIDEO_PLAYBACK_PLAN.md)
+- Add video playback core (Phase 2 of VIDEO_PLAYBACK_PLAN.md)
+- Fix crash from duplicate episodeKey when building the queue lookup
+- Mark video playback Phase 1 (feed parsing) done in TODO
+- Lay groundwork for video playback support (Phase 1)
+- Bump build number to 3 for TestFlight
+- Fix swipe-to-unsubscribe navigating to detail view instead of confirming
+- UI improvements - search button on keyboard for searching podcasts
+- little ui tweaks
+- Apply Xcode's recommended project settings
+- Fix build warnings before release
+- Bump build number to 2 for TestFlight
+- Add iTunes podcast search to iOS "+" menu
+
+**Full Changelog**: https://github.com/geoffoliver/podstash/compare/v0.0.21...v0.0.21-1
+
+]]></description>
+            <enclosure url="https://github.com/geoffoliver/podstash/releases/download/v0.0.21-1/Podstash.app.zip" length="5103439" type="application/octet-stream" sparkle:edSignature="XAS01nkpP+vcxRM5X+/lECXw+ho8SewybQY8GLXbY6/As6yMb1azdPpa5fdYkALPHmzhrWR192pjbu0ftgCvBQ=="/>
+        </item>
+        <item>
+            <title>0.0.21</title>
             <pubDate>Sat, 15 Aug 2026 04:01:47 +0000</pubDate>
             <link>https://geoffoliver.github.io/podstash/</link>
             <sparkle:version>27</sparkle:version>
@@ -40,24 +81,6 @@
 
 ]]></description>
             <enclosure url="https://github.com/geoffoliver/podstash/releases/download/v0.0.20/Podstash.app.zip" length="5028048" type="application/octet-stream" sparkle:edSignature="4QPtSfFmETA1oOOEem/KwnQJy9i6NPp5OmONgKWUGcY37J6mJffX6TYeaveEUTE/0HaIl5y2s4Mcl9vef0B+BQ=="/>
-        </item>
-        <item>
-            <title>0.0.18</title>
-            <pubDate>Mon, 10 Aug 2026 04:56:07 +0000</pubDate>
-            <link>https://geoffoliver.github.io/podstash/</link>
-            <sparkle:version>23</sparkle:version>
-            <sparkle:shortVersionString>0.0.18</sparkle:shortVersionString>
-            <sparkle:minimumSystemVersion>26.5</sparkle:minimumSystemVersion>
-            <description sparkle:format="markdown"><![CDATA[macOS build below is a universal binary (Apple Silicon & Intel), Developer ID signed and notarized — no Gatekeeper warnings. Unzip and drag Podstash.app to /Applications.
-
-## What's Changed
-- Bump to 0.0.18
-- Shrink CloudKit sync to queue/progress/subscriptions; fix perf regressions this exposed
-
-**Full Changelog**: https://github.com/geoffoliver/podstash/compare/v0.0.17...v0.0.18
-
-]]></description>
-            <enclosure url="https://github.com/geoffoliver/podstash/releases/download/v0.0.18/Podstash.app.zip" length="4975060" type="application/octet-stream" sparkle:edSignature="qsSTD6ChYzyt4NzxJ9jHmq9bNICG4fd6zRtNT5p3QvZ/0brveetD892hubSvCiW9Sucv1JB6sUAPuiYoWt/yAg=="/>
         </item>
     </channel>
 </rss>

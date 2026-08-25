@@ -76,6 +76,7 @@
   - [x] Add fast foward and rewind controls around play/pause button
 - [x] UI enhancement - Make the compact transport bar "float" like Apple Podcasts: an inset rounded-rect card with margins and a shadow, rather than a full-width bar flush against the edge. iOS and desktop both.
 - [ ] New feature: Download Missing Episodes - This should be an option in the queue that would let users download any episodes that are in the queue, but have not been downloaded. If this would cause any videos to download, prompt the user and ask them if they also want to download the videos -- we don't want to clog up their storage. It would also be rad if the menu item could show a count. So like, "Download 20 Missing Episodes".
+- [ ] Mobile UI enhancement - make list views more compact (edges of list should go to screen edges, for example).
 - [ ] CarPlay UI
 - [ ] Bug - When in use in the car, playback does not get paused when Maps gives directions or when Siri speaks
 - [ ] New feature: "downloads" manager - Maybe we can just use the queue for this since all the "unplayed" stuff shows up there automatically? Show a progress circle with an option to cancel just like on podcast detail view.

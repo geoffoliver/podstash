@@ -302,14 +302,14 @@ struct MiniPlayerView: View {
                     // Only show skip buttons if not compact
                     if !isCompact {
                         Button {
-                            audioPlayer.skip(by: -15)
+                            audioPlayer.skipBackward()
                         } label: {
-                            Image(systemName: "gobackward.15")
+                            Image(systemName: "gobackward")
                                 .font(.system(size: 32))
                                 .foregroundColor(.white)
                         }
                         .buttonStyle(.plain)
-                        .help("Skip back 15 seconds")
+                        .help("Skip back")
                     }
                     
                     // Play/Pause (always shown, bigger)
@@ -326,14 +326,14 @@ struct MiniPlayerView: View {
                     // Only show skip buttons if not compact
                     if !isCompact {
                         Button {
-                            audioPlayer.skip(by: 30)
+                            audioPlayer.skipForward()
                         } label: {
-                            Image(systemName: "goforward.30")
+                            Image(systemName: "goforward")
                                 .font(.system(size: 32))
                                 .foregroundColor(.white)
                         }
                         .buttonStyle(.plain)
-                        .help("Skip forward 30 seconds")
+                        .help("Skip forward")
                     }
                 }
                 .frame(maxWidth: .infinity) // Center the button in compact mode

@@ -60,7 +60,10 @@ final class DownloadManager: NSObject, ObservableObject {
         downloadsDirectory.appendingPathComponent(filename)
     }
 
-    func downloadEpisode(_ episode: Episode) {
+    // isManual defaults to true since every UI call site (PodcastDetailView, ContentView) is a
+    // user's explicit "Download" tap; FeedFetcher's auto-download pass is the one call site that
+    // passes false.
+    func downloadEpisode(_ episode: Episode, isManual: Bool = true) {
         guard !isDownloading(episode) else { return }
 
         // isDownloaded is purely local state (Episode isn't CloudKit-mirrored), so this should
@@ -75,12 +78,14 @@ final class DownloadManager: NSObject, ObservableObject {
         guard downloadURLString(for: episode) != nil else { return }
 
         // Video downloads can be sizeable - respect the user's Wi-Fi-only-for-video setting the
-        // same way feed refresh respects refreshOnlyOnWiFi. Audio downloads are never gated.
+        // same way feed refresh respects refreshOnlyOnWiFi, but only for automatic downloads.
+        // Audio downloads, and any manual "Download" tap, are never gated.
         let resolvedMediaKind = MediaKindPolicy.resolvedDefaultKind(defaultMediaKind: episode.defaultMediaKind, hasAudioURL: episode.audioURL != nil)
         guard VideoDownloadPolicy.shouldDownloadNow(
             mediaKind: resolvedMediaKind,
             downloadVideoOnWiFiOnly: settings?.downloadVideoOnWiFiOnly ?? true,
-            isOnWiFi: NetworkMonitor.shared.isOnWiFi
+            isOnWiFi: NetworkMonitor.shared.isOnWiFi,
+            isManual: isManual
         ) else { return }
 
         guard downloadTasks.count < maxConcurrentDownloads else {

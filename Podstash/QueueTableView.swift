@@ -24,6 +24,10 @@ struct QueueTableView: NSViewRepresentable {
     let onShowInfo: ((Episode) -> Void)? // NEW: Callback for showing episode info
     let currentlyPlayingID: UUID?
     let isPlaying: Bool
+    // FloatingPlayerBar floats over this list rather than reserving its own layout row, so the
+    // scroll view needs an explicit bottom content inset (measured from the bar's actual
+    // rendered height) to let the last row scroll fully clear of it.
+    let bottomContentInset: CGFloat
 
     func makeCoordinator() -> Coordinator {
         Coordinator(self)
@@ -67,6 +71,7 @@ struct QueueTableView: NSViewRepresentable {
         scrollView.documentView = tableView
         scrollView.hasVerticalScroller = true
         scrollView.drawsBackground = false
+        scrollView.contentInsets.bottom = bottomContentInset
 
         context.coordinator.tableView = tableView
 
@@ -75,6 +80,8 @@ struct QueueTableView: NSViewRepresentable {
 
     func updateNSView(_ scrollView: NSScrollView, context: Context) {
         guard let tableView = scrollView.documentView as? NSTableView else { return }
+
+        scrollView.contentInsets.bottom = bottomContentInset
 
         let oldParent = context.coordinator.parent
         context.coordinator.parent = self

@@ -532,13 +532,11 @@ class AudioPlayerManager: ObservableObject {
     }
     
     func skipForward() {
-        let interval = TimeInterval(settings?.skipForwardInterval ?? 30)
-        skip(by: interval)
+        skip(by: SkipIntervalPolicy.forwardInterval(configured: settings?.skipForwardInterval))
     }
-    
+
     func skipBackward() {
-        let interval = TimeInterval(settings?.skipBackwardInterval ?? 15)
-        skip(by: -interval)
+        skip(by: -SkipIntervalPolicy.backwardInterval(configured: settings?.skipBackwardInterval))
     }
     
     func setPlaybackRate(_ rate: Float) {

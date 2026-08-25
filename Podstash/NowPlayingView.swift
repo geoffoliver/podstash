@@ -300,9 +300,9 @@ struct NowPlayingView: View {
 
     private var rewindButton: some View {
         Button {
-            audioPlayer.skip(by: -15)
+            audioPlayer.skipBackward()
         } label: {
-            Image(systemName: "gobackward.15")
+            Image(systemName: "gobackward")
                 .font(.system(size: 26))
                 .foregroundStyle(.primary)
                 .frame(width: 44, height: 44)
@@ -326,9 +326,9 @@ struct NowPlayingView: View {
 
     private var forwardButton: some View {
         Button {
-            audioPlayer.skip(by: 30)
+            audioPlayer.skipForward()
         } label: {
-            Image(systemName: "goforward.30")
+            Image(systemName: "goforward")
                 .font(.system(size: 26))
                 .foregroundStyle(.primary)
                 .frame(width: 44, height: 44)
@@ -430,9 +430,9 @@ struct NowPlayingView: View {
 
             HStack(spacing: 40) {
                 Button {
-                    audioPlayer.skip(by: -15)
+                    audioPlayer.skipBackward()
                 } label: {
-                    Image(systemName: "gobackward.15")
+                    Image(systemName: "gobackward")
                         .font(.title)
                         .frame(minWidth: 44, minHeight: 44)
                         .contentShape(Rectangle())
@@ -446,9 +446,9 @@ struct NowPlayingView: View {
                 }
 
                 Button {
-                    audioPlayer.skip(by: 30)
+                    audioPlayer.skipForward()
                 } label: {
-                    Image(systemName: "goforward.30")
+                    Image(systemName: "goforward")
                         .font(.title)
                         .frame(minWidth: 44, minHeight: 44)
                         .contentShape(Rectangle())
@@ -502,99 +502,19 @@ struct NowPlayingView: View {
     }
 }
 
-// MARK: - Compact Player Bar (for iOS bottom bar)
+// MARK: - Reserve space for FloatingPlayerBar
 
-#if !os(macOS)
 extension View {
-    // NavigationSplitView manages its own per-column safe areas, so the safeAreaInset
-    // ContentView applies around the whole split view for CompactPlayerBar never reaches a
-    // column's List content inset - every List in a sidebar/detail column (Queue, podcast
-    // detail's episode list, the podcast sidebar) scrolls its last row half-hidden behind the
-    // bar without this. Apply directly to each List; reserves the bar's actual measured height.
+    // FloatingPlayerBar is a floating overlay (not layout-reserving), and on iOS
+    // NavigationSplitView manages its own per-column safe areas - a safeAreaInset applied around
+    // the whole split view never reaches a column's List content inset. Every List in a sidebar/
+    // detail column (Queue, podcast detail's episode list, the podcast sidebar) needs this applied
+    // directly so its last row can scroll fully clear of the bar. The bar is always shown (even
+    // as a disabled "Nothing Playing" placeholder - see FloatingPlayerPolicy), so this always
+    // reserves space rather than only when an episode is loaded.
     func reservePlayerBarSpace(_ audioPlayer: AudioPlayerManager) -> some View {
         safeAreaInset(edge: .bottom) {
-            if audioPlayer.currentEpisode != nil {
-                Color.clear.frame(height: audioPlayer.progress.compactPlayerBarHeight)
-            }
-        }
-    }
-}
-#endif
-
-struct CompactPlayerBar: View {
-    @EnvironmentObject var audioPlayer: AudioPlayerManager
-    @EnvironmentObject var playbackProgress: PlaybackProgress
-    @State private var showingNowPlaying = false
-
-    var body: some View {
-        if let episode = audioPlayer.currentEpisode {
-            HStack(spacing: 12) {
-                // Episode artwork thumbnail
-                EpisodeThumbnail(episode: episode, podcast: audioPlayer.currentPodcast) {
-                    RoundedRectangle(cornerRadius: 6)
-                        .fill(Color.gray.opacity(0.2))
-                        .overlay(
-                            Image(systemName: "music.note")
-                                .foregroundStyle(.secondary)
-                        )
-                }
-                .frame(width: 40, height: 40)
-                .cornerRadius(6)
-                .id(episode.id)
-
-                // Episode Info
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(episode.title)
-                        .font(.subheadline)
-                        .fontWeight(.medium)
-                        .lineLimit(1)
-
-                    if let podcast = audioPlayer.currentPodcast {
-                        Text(podcast.title)
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                    }
-                }
-
-                Spacer()
-
-                // Play/Pause Button
-                Button {
-                    audioPlayer.togglePlayPause()
-                } label: {
-                    Image(systemName: audioPlayer.isPlaying ? "pause.fill" : "play.fill")
-                        .font(.title3)
-                        .frame(minWidth: 44, minHeight: 44)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-
-                // Skip Forward 30s
-                Button {
-                    audioPlayer.skip(by: 30)
-                } label: {
-                    Image(systemName: "goforward.30")
-                        .font(.body)
-                        .frame(minWidth: 44, minHeight: 44)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-            }
-            .padding()
-            .background(.regularMaterial)
-            .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { height in
-                playbackProgress.compactPlayerBarHeight = height
-            }
-            .contentShape(Rectangle())
-            .onTapGesture {
-                showingNowPlaying = true
-            }
-            .sheet(isPresented: $showingNowPlaying) {
-                NowPlayingView()
-                    .environmentObject(audioPlayer)
-                    .presentationDragIndicator(.visible)
-            }
+            Color.clear.frame(height: audioPlayer.progress.floatingPlayerBarHeight)
         }
     }
 }

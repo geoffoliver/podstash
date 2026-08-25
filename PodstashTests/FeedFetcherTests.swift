@@ -155,6 +155,95 @@ struct FeedFetcherTests {
         #expect(all.first?.guid == "v-1")
     }
 
+    // MARK: - Legacy rows (created before video support existed, or before defaultMediaKind/
+    // videoURL existed on the model) get backfilled on refresh - matched-but-stale episodes were
+    // previously left untouched (just `continue`d past), permanently stuck with defaultMediaKind
+    // and videoURL nil even once the feed's real video enclosure was available, which silently
+    // broke downloading and playing them (MediaKindPolicy resolution fell back to a bogus
+    // "audio" kind with no real audioURL to play).
+
+    @Test("A guid-matched legacy row gets videoURL and defaultMediaKind backfilled from the fresh parse")
+    func guidMatchBackfillsVideoSupportFields() async throws {
+        let context = try makeContext()
+        let podcast = Podcast(title: "Video Show", feedURL: "https://example.com/feed.xml")
+        context.insert(podcast)
+        // audioURL: "" mirrors the app's old non-optional `audioURL: String = ""` default - real
+        // legacy rows have this exact value, not nil, per the old schema. defaultMediaKind is
+        // nulled out after construction (rather than passed to init, which would just re-derive
+        // it from audioURL) since a real legacy row never runs through init at all - SwiftData's
+        // lightweight migration hydrates it directly from a column that didn't exist yet, leaving
+        // it genuinely nil.
+        let legacyEpisode = Episode(title: "Ep", audioURL: "", guid: "legacy-1", publishDate: .now, podcastID: podcast.id)
+        legacyEpisode.defaultMediaKind = nil
+        context.insert(legacyEpisode)
+        try context.save()
+
+        let fetcher = FeedFetcher(modelContext: context, settings: AppSettings())
+        let parsed = ParsedEpisode(title: "Ep", description: nil, audioURL: nil, videoURL: "https://example.com/ep.mp4", defaultMediaKind: .video, guid: "legacy-1", duration: nil, publishDate: .now, artworkURL: nil)
+
+        await fetcher.updatePodcastAndEpisodes(
+            podcast: podcast,
+            parsedPodcast: makeParsedPodcast(episodes: [parsed]),
+            parsedEpisodes: [parsed],
+            updateTimestamp: false,
+            shouldSave: false
+        )
+
+        let all = try context.fetch(FetchDescriptor<Episode>())
+        #expect(all.count == 1)
+        #expect(all.first?.videoURL == "https://example.com/ep.mp4")
+        #expect(all.first?.defaultMediaKind == .video)
+    }
+
+    @Test("An audioURL-matched legacy row gets defaultMediaKind backfilled from the fresh parse")
+    func audioURLMatchBackfillsMediaKind() async throws {
+        let context = try makeContext()
+        let podcast = Podcast(title: "Show", feedURL: "https://example.com/feed.xml")
+        context.insert(podcast)
+        let legacyEpisode = Episode(title: "Ep", audioURL: "https://example.com/ep.mp3", guid: nil, publishDate: .now, podcastID: podcast.id)
+        legacyEpisode.defaultMediaKind = nil
+        context.insert(legacyEpisode)
+        try context.save()
+
+        let fetcher = FeedFetcher(modelContext: context, settings: AppSettings())
+        let parsed = ParsedEpisode(title: "Ep", description: nil, audioURL: "https://example.com/ep.mp3", videoURL: nil, defaultMediaKind: .audio, guid: "ep-audio", duration: nil, publishDate: .now, artworkURL: nil)
+
+        await fetcher.updatePodcastAndEpisodes(
+            podcast: podcast,
+            parsedPodcast: makeParsedPodcast(episodes: [parsed]),
+            parsedEpisodes: [parsed],
+            updateTimestamp: false,
+            shouldSave: false
+        )
+
+        let all = try context.fetch(FetchDescriptor<Episode>())
+        #expect(all.count == 1)
+        #expect(all.first?.defaultMediaKind == .audio)
+    }
+
+    @Test("Backfill never overwrites a real, already-populated videoURL")
+    func backfillDoesNotOverwriteExistingVideoURL() async throws {
+        let context = try makeContext()
+        let podcast = Podcast(title: "Video Show", feedURL: "https://example.com/feed.xml")
+        context.insert(podcast)
+        context.insert(Episode(title: "Ep", audioURL: nil, videoURL: "https://example.com/original.mp4", defaultMediaKind: .video, guid: "v-1", publishDate: .now, podcastID: podcast.id))
+        try context.save()
+
+        let fetcher = FeedFetcher(modelContext: context, settings: AppSettings())
+        let parsed = ParsedEpisode(title: "Ep", description: nil, audioURL: nil, videoURL: "https://example.com/rotated.mp4", defaultMediaKind: .video, guid: "v-1", duration: nil, publishDate: .now, artworkURL: nil)
+
+        await fetcher.updatePodcastAndEpisodes(
+            podcast: podcast,
+            parsedPodcast: makeParsedPodcast(episodes: [parsed]),
+            parsedEpisodes: [parsed],
+            updateTimestamp: false,
+            shouldSave: false
+        )
+
+        let all = try context.fetch(FetchDescriptor<Episode>())
+        #expect(all.first?.videoURL == "https://example.com/original.mp4")
+    }
+
     @Test("newestKnownPublishDate advances to the newest item seen, even when nothing new is created")
     func watermarkAdvancesEvenWithoutNewEpisodes() async throws {
         let context = try makeContext()

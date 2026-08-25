@@ -78,6 +78,24 @@ class FeedFetcher {
     // Not private: exercised directly by FeedFetcherTests with hand-built ParsedPodcast/
     // ParsedEpisode fixtures, bypassing the network fetch in fetchFeed(for:) above.
     @MainActor
+    // Fills in videoURL/defaultMediaKind on an existing (matched, not recreated) episode row
+    // when the fresh parse has them but the stored row doesn't - covers rows created before
+    // video support existed, where SwiftData's lightweight migration left these columns nil
+    // rather than backfilling a real value (they never run back through Episode.init, which is
+    // the only place that would otherwise derive defaultMediaKind from audioURL). Without this,
+    // such a row is stuck forever with defaultMediaKind/videoURL nil even once the feed's real
+    // video enclosure becomes available, which silently breaks downloading and playing it -
+    // MediaKindPolicy resolution falls back to a bogus "audio" kind with no real audioURL to
+    // play. Only ever fills a nil field - never overwrites one that already has a real value.
+    private func backfillVideoSupportFields(on existing: Episode, from parsed: ParsedEpisode) {
+        if existing.videoURL == nil, let videoURL = parsed.videoURL {
+            existing.videoURL = videoURL
+        }
+        if existing.defaultMediaKind == nil {
+            existing.defaultMediaKind = parsed.defaultMediaKind
+        }
+    }
+
     func updatePodcastAndEpisodes(
         podcast: Podcast,
         parsedPodcast: ParsedPodcast,
@@ -158,19 +176,22 @@ class FeedFetcher {
 
         var newEpisodeData: [ParsedEpisode] = []
         for parsedEpisode in parsedEpisodes {
-            if let guid = parsedEpisode.guid, existingByGUID[guid] != nil {
+            if let guid = parsedEpisode.guid, let existing = existingByGUID[guid] {
+                backfillVideoSupportFields(on: existing, from: parsedEpisode)
                 continue
             }
             if let audioURL = parsedEpisode.audioURL, let existing = existingByAudioURL[audioURL] {
                 if existing.guid == nil, let guid = parsedEpisode.guid {
                     existing.guid = guid
                 }
+                backfillVideoSupportFields(on: existing, from: parsedEpisode)
                 continue
             }
             if let videoURL = parsedEpisode.videoURL, let existing = existingByVideoURL[videoURL] {
                 if existing.guid == nil, let guid = parsedEpisode.guid {
                     existing.guid = guid
                 }
+                backfillVideoSupportFields(on: existing, from: parsedEpisode)
                 continue
             }
             if let guid = parsedEpisode.guid, stagedGUIDs.contains(guid) {
@@ -236,7 +257,7 @@ class FeedFetcher {
             where !episode.isDownloaded && !downloadManager.isDownloading(episode) {
                 let resolvedMediaKind = MediaKindPolicy.resolvedDefaultKind(defaultMediaKind: episode.defaultMediaKind, hasAudioURL: episode.audioURL != nil)
                 guard VideoDownloadPolicy.shouldAutoDownload(mediaKind: resolvedMediaKind, autoDownloadVideoEpisodes: settings.autoDownloadVideoEpisodes) else { continue }
-                downloadManager.downloadEpisode(episode)
+                downloadManager.downloadEpisode(episode, isManual: false)
             }
         }
 

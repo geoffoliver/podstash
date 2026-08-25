@@ -20,6 +20,7 @@ struct QueueView: View {
     ) private var queuedRecords: [PlaybackRecord]
 
     @EnvironmentObject var audioPlayer: AudioPlayerManager
+    @EnvironmentObject var playbackProgress: PlaybackProgress
     @State private var multiSelection = Set<UUID>()
     @State private var showingRemoveAlert = false
     @State private var episodeForInfoSheet: Episode?
@@ -148,7 +149,8 @@ struct QueueView: View {
                             episodeForInfoSheet = episode
                         },
                         currentlyPlayingID: audioPlayer.currentEpisode?.id,
-                        isPlaying: audioPlayer.isPlaying
+                        isPlaying: audioPlayer.isPlaying,
+                        bottomContentInset: playbackProgress.floatingPlayerBarHeight
                     )
                 }
             }
@@ -307,7 +309,7 @@ struct QueueView: View {
         .reservePlayerBarSpace(audioPlayer)
         .navigationTitle("Queue")
         // .navigationBarDrawer placement (rather than automatic): iOS 26 otherwise docks the
-        // search field to the bottom of the screen, where it collides with CompactPlayerBar's
+        // search field to the bottom of the screen, where it collides with FloatingPlayerBar's
         // safeAreaInset and ends up hidden behind it whenever an episode is playing/paused.
         // displayMode: .automatic (not .always) - .always forces the drawer to stay expanded,
         // which fights .searchToolbarBehavior(.minimize) below and stops it from collapsing.

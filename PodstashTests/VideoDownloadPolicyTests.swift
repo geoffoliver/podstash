@@ -9,6 +9,22 @@ import Testing
 @Suite("VideoDownloadPolicy")
 struct VideoDownloadPolicyTests {
 
+    // MARK: - Manual downloads (a user's explicit "Download" tap) always proceed - same
+    // precedent as refreshOnlyOnWiFi gating only AutoRefreshManager's background refresh, never
+    // a user-initiated manual refresh. Only automatic downloads (FeedFetcher's post-refresh
+    // auto-download pass) are ever deferred by the Wi-Fi-only-for-video setting.
+
+    @Test("Manual video download proceeds on cellular even when the Wi-Fi-only setting is on")
+    func manualVideoDownloadProceedsOnCellularWithSettingOn() {
+        let shouldDownload = VideoDownloadPolicy.shouldDownloadNow(
+            mediaKind: .video,
+            downloadVideoOnWiFiOnly: true,
+            isOnWiFi: false,
+            isManual: true
+        )
+        #expect(shouldDownload == true)
+    }
+
     // MARK: - Audio downloads are never gated by the Wi-Fi-only-for-video setting
 
     @Test("Audio download proceeds on cellular even when the Wi-Fi-only setting is on")
@@ -16,7 +32,8 @@ struct VideoDownloadPolicyTests {
         let shouldDownload = VideoDownloadPolicy.shouldDownloadNow(
             mediaKind: .audio,
             downloadVideoOnWiFiOnly: true,
-            isOnWiFi: false
+            isOnWiFi: false,
+            isManual: false
         )
         #expect(shouldDownload == true)
     }
@@ -26,49 +43,54 @@ struct VideoDownloadPolicyTests {
         let shouldDownload = VideoDownloadPolicy.shouldDownloadNow(
             mediaKind: .audio,
             downloadVideoOnWiFiOnly: true,
-            isOnWiFi: true
+            isOnWiFi: true,
+            isManual: false
         )
         #expect(shouldDownload == true)
     }
 
-    // MARK: - Video downloads are gated only when the setting is on AND not on Wi-Fi
+    // MARK: - Automatic video downloads are gated only when the setting is on AND not on Wi-Fi
 
-    @Test("Video download proceeds on Wi-Fi with the setting on")
+    @Test("Automatic video download proceeds on Wi-Fi with the setting on")
     func videoDownloadProceedsOnWiFiWithSettingOn() {
         let shouldDownload = VideoDownloadPolicy.shouldDownloadNow(
             mediaKind: .video,
             downloadVideoOnWiFiOnly: true,
-            isOnWiFi: true
+            isOnWiFi: true,
+            isManual: false
         )
         #expect(shouldDownload == true)
     }
 
-    @Test("Video download is blocked on cellular with the setting on")
+    @Test("Automatic video download is blocked on cellular with the setting on")
     func videoDownloadBlockedOnCellularWithSettingOn() {
         let shouldDownload = VideoDownloadPolicy.shouldDownloadNow(
             mediaKind: .video,
             downloadVideoOnWiFiOnly: true,
-            isOnWiFi: false
+            isOnWiFi: false,
+            isManual: false
         )
         #expect(shouldDownload == false)
     }
 
-    @Test("Video download proceeds on cellular when the setting is off")
+    @Test("Automatic video download proceeds on cellular when the setting is off")
     func videoDownloadProceedsOnCellularWithSettingOff() {
         let shouldDownload = VideoDownloadPolicy.shouldDownloadNow(
             mediaKind: .video,
             downloadVideoOnWiFiOnly: false,
-            isOnWiFi: false
+            isOnWiFi: false,
+            isManual: false
         )
         #expect(shouldDownload == true)
     }
 
-    @Test("Video download proceeds on Wi-Fi when the setting is off")
+    @Test("Automatic video download proceeds on Wi-Fi when the setting is off")
     func videoDownloadProceedsOnWiFiWithSettingOff() {
         let shouldDownload = VideoDownloadPolicy.shouldDownloadNow(
             mediaKind: .video,
             downloadVideoOnWiFiOnly: false,
-            isOnWiFi: true
+            isOnWiFi: true,
+            isManual: false
         )
         #expect(shouldDownload == true)
     }

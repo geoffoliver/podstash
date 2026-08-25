@@ -352,8 +352,13 @@ private struct PodcastSearchResultRow: View {
                 ProgressView()
                     .controlSize(.small)
             case .subscribed:
-                Button("Unsubscribe", role: .destructive) {
+                // Icon-only (not a text "Unsubscribe" button) - the word doesn't fit this row's
+                // available width on narrow screens and wraps the button to two lines.
+                Button(role: .destructive) {
                     showingUnsubscribeAlert = true
+                } label: {
+                    Label("Unsubscribe", systemImage: "xmark.circle.fill")
+                        .labelStyle(.iconOnly)
                 }
                 .buttonStyle(.bordered)
                 .disabled(coordinator.addingFeedURL != nil || coordinator.removingFeedURL != nil)

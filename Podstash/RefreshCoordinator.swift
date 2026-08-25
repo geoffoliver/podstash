@@ -16,7 +16,12 @@ class RefreshCoordinator: ObservableObject {
     @Published var currentPodcastTitle: String?
     @Published var progress: (current: Int, total: Int)?
     @Published var refreshCompleted: String?
-    
+    // Measured height of RefreshStatusBar when it's showing, on iOS only - NavigationSplitView's
+    // detail column doesn't shrink in response to a `.safeAreaInset` applied around the whole
+    // split view (same quirk as reservePlayerBarSpace), so FloatingPlayerBar there needs this to
+    // explicitly clear it rather than relying on layout to keep them apart.
+    @Published var statusBarHeight: CGFloat = 0
+
     private var modelContext: ModelContext?
     private var settings: AppSettings?
     private var downloadManager: DownloadManager?

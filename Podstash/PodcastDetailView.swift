@@ -213,6 +213,7 @@ struct PodcastDetailView: View {
                     }
                 }
                 .listStyle(.plain)
+                .reservePlayerBarSpace(audioPlayer)
                 }
             }
         }

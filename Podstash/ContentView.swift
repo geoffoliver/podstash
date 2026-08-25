@@ -21,6 +21,13 @@ struct ContentView: View {
     @EnvironmentObject var opmlCoordinator: OPMLImportCoordinator
     @EnvironmentObject var refreshCoordinator: RefreshCoordinator
     @EnvironmentObject var audioPlayer: AudioPlayerManager
+    // On compact width (iPhone), NavigationSplitView collapses sidebar/detail into a single-
+    // column push/pop stack rather than showing them side by side - only the topmost column is
+    // ever actually visible, so FloatingPlayerBar needs to be attached to both, or it vanishes
+    // whenever the sidebar (Podcasts list) is the page on screen. On regular width (iPad
+    // split, macOS) both columns render simultaneously, so it's scoped to the detail column only
+    // - same reasoning as the macOS fix, so it doesn't span across the sidebar too.
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @State private var showingImportProgress = false
     @State private var importCompletedMessage: String?
     @State private var selectedPodcast: Podcast?
@@ -38,22 +45,34 @@ struct ContentView: View {
             NavigationSplitView(columnVisibility: $columnVisibility) {
                 PodcastListView(selectedPodcast: $selectedPodcast, showingQueue: $showingQueue, columnVisibility: $columnVisibility)
             } detail: {
-                if let podcast = selectedPodcast, !showingQueue {
-                    PodcastDetailView(podcast: podcast)
-                        .id(podcast.id) // Force new view when podcast changes
-                } else {
-                    // Queue is the default/fallback detail view (also covers the case where
-                    // a podcast gets deselected without Queue being clicked directly - see
-                    // showingQueue's default-true comment above). NowPlayingView is no longer
-                    // reachable here now that Queue is the default view; it's still used as
-                    // the iOS sheet from CompactPlayerBar.
-                    QueueView()
-                        .id("queue") // Force refresh when switching to queue
+                // FloatingPlayerBar overlays just the detail column here (not the whole window)
+                // so it spans only the content area's width, not the sidebar too.
+                Group {
+                    if let podcast = selectedPodcast, !showingQueue {
+                        PodcastDetailView(podcast: podcast)
+                            .id(podcast.id) // Force new view when podcast changes
+                    } else {
+                        // Queue is the default/fallback detail view (also covers the case where
+                        // a podcast gets deselected without Queue being clicked directly - see
+                        // showingQueue's default-true comment above). NowPlayingView is no longer
+                        // reachable here now that Queue is the default view; it's still used as
+                        // the iOS sheet from FloatingPlayerBar.
+                        QueueView()
+                            .id("queue") // Force refresh when switching to queue
+                    }
+                }
+                .overlay(alignment: .bottom) {
+                    FloatingPlayerBar()
+                        .environmentObject(audioPlayer)
                 }
             }
             .frame(minWidth: 700, minHeight: 500)
-            
-            // Refresh status bar (above transport controls)
+
+            // Refresh status bar, docked full-width at the bottom - stays flush rather than
+            // floating (unlike FloatingPlayerBar above, which is scoped to the detail column
+            // only) since it's a transient system-style banner, not a persistent player. It
+            // reserves its own layout row here, below the whole NavigationSplitView, so it can
+            // never overlap the floating player bar.
             if refreshCoordinator.isRefreshing {
                 RefreshStatusBar(
                     currentPodcastTitle: refreshCoordinator.currentPodcastTitle,
@@ -72,12 +91,6 @@ struct ContentView: View {
                     }
                 )
                 .transition(.move(edge: .bottom).combined(with: .opacity))
-            }
-            
-            // Transport controls bar at bottom
-            if audioPlayer.currentEpisode != nil {
-                TransportControlsBar()
-                    .environmentObject(audioPlayer)
             }
         }
         .overlay {
@@ -155,20 +168,41 @@ struct ContentView: View {
         NavigationSplitView(columnVisibility: $columnVisibility) {
             PodcastListView(selectedPodcast: $selectedPodcast, showingQueue: $showingQueue, columnVisibility: $columnVisibility)
         } detail: {
-            if let podcast = selectedPodcast, !showingQueue {
-                PodcastDetailView(podcast: podcast)
-                    .id(podcast.id) // Force new view when podcast changes
-            } else {
-                // Queue is the default/fallback detail view here too (see the macOS branch
-                // above for why). NowPlayingView is still used as the iPhone sheet from
-                // CompactPlayerBar - that path is untouched.
-                QueueView()
-                    .id("queue") // Force refresh when switching to queue
+            // On regular width (iPad split), sidebar and detail render side by side, so the bar
+            // is scoped here to avoid spanning across the sidebar too (matches the macOS fix).
+            // On compact width (iPhone) it's the other overlay below instead - NOT this one -
+            // because NavigationSplitView collapses to a push/pop stack there, and a column-level
+            // overlay gets swept along with that column's own slide transition (tied to the page,
+            // sliding in/out with it) instead of staying visually fixed like Apple's own mini
+            // player. Attaching it outside the NavigationSplitView entirely, as a sibling rather
+            // than a descendant of either column, is what keeps it put across navigation.
+            Group {
+                if let podcast = selectedPodcast, !showingQueue {
+                    PodcastDetailView(podcast: podcast)
+                        .id(podcast.id) // Force new view when podcast changes
+                } else {
+                    // Queue is the default/fallback detail view here too (see the macOS branch
+                    // above for why). NowPlayingView is still used as the iPhone sheet from
+                    // FloatingPlayerBar - that path is untouched.
+                    QueueView()
+                        .id("queue") // Force refresh when switching to queue
+                }
+            }
+            .overlay(alignment: .bottom) {
+                if horizontalSizeClass != .compact {
+                    FloatingPlayerBar()
+                        .environmentObject(audioPlayer)
+                }
             }
         }
+        // Refresh status bar, docked full-width at the bottom - stays flush rather than floating
+        // (unlike FloatingPlayerBar) since it's a transient system-style banner, not a persistent
+        // player. Its height is tracked so the floating player bar can position itself above it
+        // instead of overlapping - NavigationSplitView's columns don't shrink in response to a
+        // `.safeAreaInset` applied around the whole split view (see reservePlayerBarSpace's doc
+        // comment for the same quirk), so this can't be left to layout the way it can on macOS.
         .safeAreaInset(edge: .bottom) {
-            VStack(spacing: 0) {
-                // Refresh status bar (above player)
+            Group {
                 if refreshCoordinator.isRefreshing {
                     RefreshStatusBar(
                         currentPodcastTitle: refreshCoordinator.currentPodcastTitle,
@@ -188,11 +222,19 @@ struct ContentView: View {
                     )
                     .transition(.move(edge: .bottom).combined(with: .opacity))
                 }
-
-                if audioPlayer.currentEpisode != nil {
-                    CompactPlayerBar()
-                        .environmentObject(audioPlayer)
-                }
+            }
+            .onGeometryChange(for: CGFloat.self, of: { $0.size.height }) { height in
+                refreshCoordinator.statusBarHeight = height
+            }
+        }
+        // Compact width (iPhone) only - a single instance attached here, as a sibling of the
+        // NavigationSplitView rather than living inside either of its columns, so it stays fixed
+        // on screen through the sidebar<->detail push/pop navigation instead of being tied to
+        // whichever column currently owns it.
+        .overlay(alignment: .bottom) {
+            if horizontalSizeClass == .compact {
+                FloatingPlayerBar()
+                    .environmentObject(audioPlayer)
             }
         }
         .fileImporter(isPresented: $opmlCoordinator.isImporting, allowedContentTypes: [.opml]) { result in
@@ -823,6 +865,11 @@ struct EpisodeRowView: View {
                 }
             }
             .padding(.vertical, 4)
+            // Without this the VStack only claims as much width as its text needs, so the
+            // wrapping "play" Button in episodeRow (PodcastDetailView) - whose hit area is just
+            // this label's own bounds - leaves the rest of the row dead to clicks/taps.
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
 
             // Info button
             Button {
@@ -883,229 +930,6 @@ struct EpisodeRowView: View {
     }
 }
 
-#if os(macOS)
-private struct AirPlayRoutePickerView: NSViewRepresentable {
-    func makeNSView(context: Context) -> AVRoutePickerView {
-        let view = AVRoutePickerView()
-        view.isRoutePickerButtonBordered = false
-        return view
-    }
-
-    func updateNSView(_ nsView: AVRoutePickerView, context: Context) {}
-}
-
-struct TransportControlsBar: View {
-    @EnvironmentObject var audioPlayer: AudioPlayerManager
-    @EnvironmentObject var playbackProgress: PlaybackProgress
-    @State var hoveringOverArt = false
-    @State private var showingTimeRemaining = false
-
-    var body: some View {
-        VStack(spacing: 0) {
-            Divider()
-            
-            HStack(spacing: 16) {
-                // Episode artwork thumbnail
-                if let episode = audioPlayer.currentEpisode,
-                   let podcast = audioPlayer.currentPodcast,
-                   podcast.artworkURL != nil {
-                    EpisodeThumbnail(artworkURLString: podcast.artworkURL, videoURL: episode.videoURL) {
-                        Color.gray.opacity(0.2)
-                    }
-                    .frame(width: 60, height: 60)
-                    .cornerRadius(8)
-                    .id(episode.id) // Force image to update when episode changes
-                    #if os(macOS)
-                    .shadow(color: .black.opacity(hoveringOverArt ? 0.4 : 0), radius: 3, x: 0, y: 0)
-                    .brightness(hoveringOverArt ? 0.05 : 0)
-                    .help(Text("Click to open Mini Player"))
-                    .onHover { hovering in
-                        withAnimation(.easeInOut(duration: 0.15)) {
-                            hoveringOverArt = hovering
-                            if (hovering) {
-                                NSCursor.pointingHand.push()
-                            } else {
-                                NSCursor.pop()
-                            }
-                        }
-                    }
-                    .onTapGesture {
-                        MenuCoordinator.shared.audioPlayer?.showMiniPlayer()
-                    }
-                    #endif
-                } else {
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(Color.gray.opacity(0.2))
-                        .frame(width: 60, height: 60)
-                        .overlay(
-                            Image(systemName: "music.note")
-                                .foregroundStyle(.secondary)
-                        )
-                }
-                
-                // Episode info
-                VStack(alignment: .leading, spacing: 2) {
-                    if let episode = audioPlayer.currentEpisode {
-                        Text(episode.title)
-                            .font(.appSubheadline)
-                            .fontWeight(.medium)
-                            .lineLimit(1)
-
-                        if let podcast = audioPlayer.currentPodcast {
-                            Text(podcast.title)
-                                .font(.appFootnote)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
-                        }
-                    }
-                }
-                .frame(width: 200, alignment: .leading)
-
-                Spacer()
-
-                // Playback controls
-                HStack(spacing: 20) {
-                    // Skip backward
-                    Button {
-                        audioPlayer.skipBackward()
-                    } label: {
-                        Image(systemName: "gobackward.15")
-                            .font(.system(size: 20))
-                            .frame(minWidth: 32, minHeight: 32)
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .help("Skip backward 15 seconds")
-
-                    // Play/Pause
-                    Button {
-                        audioPlayer.togglePlayPause()
-                    } label: {
-                        Image(systemName: audioPlayer.isPlaying ? "pause.circle.fill" : "play.circle.fill")
-                            .font(.system(size: 40))
-                    }
-                    .buttonStyle(.plain)
-                    .help(audioPlayer.isPlaying ? "Pause" : "Play")
-
-                    // Skip forward
-                    Button {
-                        audioPlayer.skipForward()
-                    } label: {
-                        Image(systemName: "goforward.30")
-                            .font(.system(size: 20))
-                            .frame(minWidth: 32, minHeight: 32)
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .help("Skip forward 30 seconds")
-                }
-                
-                Spacer()
-                
-                // Progress and time
-                VStack(spacing: 4) {
-                    // Progress bar
-                    GeometryReader { geometry in
-                        ZStack(alignment: .leading) {
-                            // Background
-                            RoundedRectangle(cornerRadius: 2)
-                                .fill(Color.gray.opacity(0.3))
-                                .frame(height: 4)
-                            
-                            // Progress
-                            RoundedRectangle(cornerRadius: 2)
-                                .fill(Color.accentColor)
-                                .frame(
-                                    width: geometry.size.width * CGFloat(progressFraction),
-                                    height: 4
-                                )
-                        }
-                        .onTapGesture { location in
-                            let progress = location.x / geometry.size.width
-                            audioPlayer.seek(to: playbackProgress.duration * Double(progress))
-                        }
-                    }
-                    .frame(height: 4)
-                    
-                    // Time labels
-                    HStack {
-                        Text(PlaybackTimeDisplayPolicy.elapsedLabel(
-                            currentTime: playbackProgress.currentTime,
-                            duration: playbackProgress.duration,
-                            showingRemaining: showingTimeRemaining
-                        ))
-                            .font(.appCaption)
-                            .monospacedDigit()
-                            .foregroundStyle(.secondary)
-                            .contentShape(Rectangle())
-                            .onTapGesture { showingTimeRemaining.toggle() }
-
-                        Spacer()
-
-                        Text(PlaybackTimeDisplayPolicy.format(playbackProgress.duration))
-                            .font(.appCaption)
-                            .monospacedDigit()
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                .frame(width: 200)
-
-                // Playback speed menu
-                Menu {
-                    ForEach([0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0], id: \.self) { speed in
-                        Button(action: {
-                            audioPlayer.setPlaybackRate(Float(speed))
-                        }) {
-                            HStack {
-                                Text("\(speed, specifier: "%.2f")x")
-                                if abs(playbackProgress.playbackRate - Float(speed)) < 0.01 {
-                                    Image(systemName: "checkmark")
-                                }
-                            }
-                        }
-                    }
-                } label: {
-                    HStack(spacing: 4) {
-                        Image(systemName: "gauge")
-                        Text("\(playbackProgress.playbackRate, specifier: "%.2f")x")
-                    }
-                    .font(.appFootnote)
-                    .foregroundStyle(.secondary)
-                }
-                .menuStyle(.borderlessButton)
-                .frame(width: 70)
-
-                if let episode = audioPlayer.currentEpisode,
-                   VideoWindowPolicy.showOpenVideoButton(hasVideoURL: episode.videoURL != nil, isWindowOpen: audioPlayer.isVideoWindowOpen) {
-                    Button {
-                        audioPlayer.openVideo()
-                    } label: {
-                        Image(systemName: "video")
-                            .font(.system(size: 16))
-                    }
-                    .buttonStyle(.plain)
-                    .help("Open Video")
-                }
-
-                AirPlayRoutePickerView()
-                    .frame(width: 24, height: 24)
-                    .help("AirPlay")
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 8)
-        }
-        .background(.regularMaterial)
-    }
-    
-    // `duration` starts at 0 and is only populated asynchronously once the
-    // player item's duration resolves, so guard against that window to avoid
-    // a momentary full-width flash of the progress bar.
-    private var progressFraction: Double {
-        guard playbackProgress.duration > 0 else { return 0 }
-        return min(playbackProgress.currentTime / playbackProgress.duration, 1)
-    }
-}
-#endif
 
 // MARK: - Episode Detail View
 

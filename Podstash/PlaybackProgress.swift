@@ -13,7 +13,7 @@ import Combine
 /// property, so any view holding AudioPlayerManager directly re-renders on every one of its
 /// @Published changes - including this one - regardless of whether that view's body actually
 /// reads currentTime/duration/playbackRate. Only the views that render live progress
-/// (TransportControlsBar, NowPlayingView, CompactPlayerBar, MiniPlayerWindow) hold this object;
+/// (FloatingPlayerBar, NowPlayingView, MiniPlayerWindow) hold this object;
 /// everything else (sidebar, queue, podcast/episode detail) holds AudioPlayerManager itself for
 /// currentEpisode/isPlaying, which only change on user actions, not once a second.
 @MainActor
@@ -21,9 +21,10 @@ final class PlaybackProgress: ObservableObject {
     @Published var currentTime: TimeInterval = 0
     @Published var duration: TimeInterval = 0
     @Published var playbackRate: Float = 1.0
-    // Measured height of CompactPlayerBar (iOS), so scrollable lists placed underneath it via
-    // NavigationSplitView can reserve enough bottom content inset to fully clear it - the
-    // safeAreaInset applied around the NavigationSplitView doesn't propagate into a detail
-    // column's List content inset (NavigationSplitView manages its own column safe areas).
-    @Published var compactPlayerBarHeight: CGFloat = 0
+    // Measured height of FloatingPlayerBar (including its own bottom margin), so scrollable
+    // lists placed underneath it can reserve enough bottom content inset to fully clear it - the
+    // bar is a floating overlay rather than a layout-reserving inset, and on iOS the safeAreaInset
+    // applied around the NavigationSplitView doesn't propagate into a detail column's List content
+    // inset (NavigationSplitView manages its own column safe areas) even when it did reserve space.
+    @Published var floatingPlayerBarHeight: CGFloat = 0
 }

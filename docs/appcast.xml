@@ -4,6 +4,23 @@
         <title>Podstash</title>
         <item>
             <title>0.0.21</title>
+            <pubDate>Tue, 25 Aug 2026 07:01:24 +0000</pubDate>
+            <link>https://geoffoliver.github.io/podstash/</link>
+            <sparkle:version>29</sparkle:version>
+            <sparkle:shortVersionString>0.0.21</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>26.5</sparkle:minimumSystemVersion>
+            <description sparkle:format="markdown"><![CDATA[## What's Changed
+- Bump build number for TestFlight/Sparkle (marketing version unchanged)
+- Fix refresh CPU spike: batch the per-podcast unplayed-count fetch
+- updated TODO
+
+**Full Changelog**: https://github.com/geoffoliver/podstash/compare/v0.0.21-1...v0.0.21-2
+
+]]></description>
+            <enclosure url="https://github.com/geoffoliver/podstash/releases/download/v0.0.21-2/Podstash.app.zip" length="5103529" type="application/octet-stream" sparkle:edSignature="PPjumuFtL9OIg9ItzsIcd/pfCHheJA+B7cn46vUcJs7qPu5GCdOvSUV+TJEqOo/EFHRrUnoMz6AlWJpgvX65AQ=="/>
+        </item>
+        <item>
+            <title>0.0.21</title>
             <pubDate>Tue, 25 Aug 2026 06:49:42 +0000</pubDate>
             <link>https://geoffoliver.github.io/podstash/</link>
             <sparkle:version>28</sparkle:version>
@@ -63,24 +80,6 @@
 
 ]]></description>
             <enclosure url="https://github.com/geoffoliver/podstash/releases/download/v0.0.21/Podstash.app.zip" length="5035179" type="application/octet-stream" sparkle:edSignature="GKQDtx+kGqNX5oonVvYPkQWQHAgT2o2RBTSDzsk5mnpvHfz6TGxfk/kFZCb3mz1tLzqV68q5L4vxfdkVzDzlBw=="/>
-        </item>
-        <item>
-            <title>0.0.20</title>
-            <pubDate>Mon, 10 Aug 2026 06:28:02 +0000</pubDate>
-            <link>https://geoffoliver.github.io/podstash/</link>
-            <sparkle:version>26</sparkle:version>
-            <sparkle:shortVersionString>0.0.20</sparkle:shortVersionString>
-            <sparkle:minimumSystemVersion>26.5</sparkle:minimumSystemVersion>
-            <description sparkle:format="markdown"><![CDATA[## What's Changed
-- Bump to 0.0.20
-- Drop notarization blurb from release notes
-- Add podcast search via iTunes Search API
-- Fix crash when duplicate PlaybackRecords share an episodeKey
-
-**Full Changelog**: https://github.com/geoffoliver/podstash/compare/v0.0.19...v0.0.20
-
-]]></description>
-            <enclosure url="https://github.com/geoffoliver/podstash/releases/download/v0.0.20/Podstash.app.zip" length="5028048" type="application/octet-stream" sparkle:edSignature="4QPtSfFmETA1oOOEem/KwnQJy9i6NPp5OmONgKWUGcY37J6mJffX6TYeaveEUTE/0HaIl5y2s4Mcl9vef0B+BQ=="/>
         </item>
     </channel>
 </rss>

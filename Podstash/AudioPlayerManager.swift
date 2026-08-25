@@ -206,8 +206,56 @@ class AudioPlayerManager: ObservableObject {
         } catch {
             print("Failed to configure audio session: \(error)")
         }
+
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleAudioSessionInterruption(_:)),
+            name: AVAudioSession.interruptionNotification,
+            object: AVAudioSession.sharedInstance()
+        )
         #endif
     }
+
+    #if !os(macOS)
+    // Whether playback was active right before the interruption currently in progress began -
+    // so .ended doesn't resume playback the user had already paused themselves. Only meaningful
+    // between a .began and its matching .ended.
+    private var wasPlayingBeforeInterruption = false
+
+    // Handles interruptions from Siri, Maps turn-by-turn directions, phone calls, etc. - without
+    // this, the audio session is silently taken over (or handed back) and the transport controls
+    // fall out of sync with what's actually audible. See AudioInterruptionPolicy for the pure
+    // decision logic this defers to.
+    @objc private func handleAudioSessionInterruption(_ notification: Notification) {
+        guard let userInfo = notification.userInfo,
+              let typeValue = userInfo[AVAudioSessionInterruptionTypeKey] as? UInt,
+              let type = AVAudioSession.InterruptionType(rawValue: typeValue) else { return }
+
+        Task { @MainActor in
+            switch type {
+            case .began:
+                wasPlayingBeforeInterruption = isPlaying
+                let action = AudioInterruptionPolicy.action(for: .began, isPlaying: isPlaying, wasPlayingBeforeInterruption: wasPlayingBeforeInterruption)
+                if action == .pause {
+                    pause()
+                }
+
+            case .ended:
+                let optionsValue = (userInfo[AVAudioSessionInterruptionOptionKey] as? UInt) ?? 0
+                let shouldResume = AVAudioSession.InterruptionOptions(rawValue: optionsValue).contains(.shouldResume)
+                let action = AudioInterruptionPolicy.action(for: .ended(shouldResume: shouldResume), isPlaying: isPlaying, wasPlayingBeforeInterruption: wasPlayingBeforeInterruption)
+                wasPlayingBeforeInterruption = false
+                if action == .resume {
+                    try? AVAudioSession.sharedInstance().setActive(true)
+                    resume()
+                }
+
+            @unknown default:
+                break
+            }
+        }
+    }
+    #endif
     
     func setModelContext(_ context: ModelContext) {
         self.modelContext = context

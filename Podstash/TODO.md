@@ -56,7 +56,7 @@
 - [ ] TestFlight distribution
 - [ ] AppStore submission
 - [x] Bug (iOS) - Queue scrolling is incorrect when the Now Playing view is visible. Scrolling the queue all the way up leaves the last item partially hidden under the Now Playing view.
-- [ ] Add video playback support - macOS: video opens in a separate QuickTime-style window (AVPlayerView); iOS: video plays inline in Now Playing with fullscreen toggle. Design finalized, see VIDEO_PLAYBACK_PLAN.md.
+- [x] Add video playback support - macOS: video opens in a separate QuickTime-style window (AVPlayerView); iOS: video plays inline in Now Playing with fullscreen toggle. Design finalized, see VIDEO_PLAYBACK_PLAN.md.
   - [x] Phase 1 - Feed parsing: detect video enclosures (plain `<enclosure>`, `<media:content>`, `podcast:alternateEnclosure`/`source`, HLS skipped), store `videoURL`/`defaultMediaKind` on `Episode`
   - [x] Phase 2 - Playback core: `switchMediaKind(to:)`, player/layer exposure, video-track enable/disable API
   - [x] Phase 3 - Shared `EpisodeThumbnail` view (replaces 5 ad hoc `CachedAsyncImage` sites) with video badge overlay

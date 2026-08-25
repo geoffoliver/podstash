@@ -234,6 +234,8 @@ class FeedFetcher {
 
             for episode in recentEpisodes
             where !episode.isDownloaded && !downloadManager.isDownloading(episode) {
+                let resolvedMediaKind = MediaKindPolicy.resolvedDefaultKind(defaultMediaKind: episode.defaultMediaKind, hasAudioURL: episode.audioURL != nil)
+                guard VideoDownloadPolicy.shouldAutoDownload(mediaKind: resolvedMediaKind, autoDownloadVideoEpisodes: settings.autoDownloadVideoEpisodes) else { continue }
                 downloadManager.downloadEpisode(episode)
             }
         }

@@ -676,6 +676,7 @@ struct PodstashApp: App {
                 audioPlayer.setSettings(settings)
                 audioPlayer.setPodcastDirectory(podcastDirectory)
                 downloadManager.setModelContext(context)
+                downloadManager.setSettings(settings)
 
                 // Collapse any PlaybackRecords duplicated by a CloudKit sync race (e.g. two
                 // devices each first-touching the same episode before either's row synced to

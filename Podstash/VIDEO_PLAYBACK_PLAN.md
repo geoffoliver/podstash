@@ -1,6 +1,6 @@
 # Video Playback — Implementation Plan
 
-Status: Phases 1-5 complete. Built with TDD per `CLAUDE.md` — every
+Status: Phases 1-6 complete. Built with TDD per `CLAUDE.md` — every
 phase below starts with tests.
 
 ## Goal
@@ -181,11 +181,37 @@ so it's called out here rather than buried in one phase.
 
 - `AppSettings`: add `downloadVideoOnWiFiOnly: Bool` (default `true`),
   following the exact existing pattern of `refreshOnlyOnWiFi`.
-- `DownloadManager`: gate video-enclosure downloads on this setting the
-  same way feed refresh is gated on `refreshOnlyOnWiFi` (needs a look at
-  `DownloadManager`'s current network-reachability check to confirm the
-  exact hook point before writing tests).
-- Settings UI: toggle placed near the existing Wi-Fi-only setting.
+- `DownloadManager`: gate video-enclosure downloads on this setting.
+  Turned out `refreshOnlyOnWiFi` has no actual reachability check behind it
+  (`AutoRefreshManager.shouldRefreshNow()` is a `// TODO: Add network
+  reachability check` stub that always returns `true`) — so there was no
+  existing hook point to mirror. Added `NetworkMonitor` (thin
+  `NWPathMonitor` wrapper, `NetworkMonitor.shared.isOnWiFi`) and the pure,
+  testable `VideoDownloadPolicy.shouldDownloadNow(mediaKind:
+  downloadVideoOnWiFiOnly:isOnWiFi:)`, which only ever gates a *video*
+  download (audio is unaffected) and only when the setting is on and the
+  device isn't on Wi-Fi. `DownloadManager.downloadEpisode(_:)` checks this
+  before queuing/starting, using `MediaKindPolicy.resolvedDefaultKind` to
+  determine which enclosure kind would actually be downloaded. Blocked
+  downloads simply don't start (no auto-retry-on-reconnect — same as
+  `refreshOnlyOnWiFi`'s existing scope).
+- Settings UI: "Wi-Fi only for video downloads" toggle added to the
+  Episode/Download settings section, next to Auto-download.
+
+### Follow-up: auto-download opt-in for video
+
+Video enclosures can be a lot bigger than audio - auto-downloading them
+unattended risked eating someone's storage before they noticed. Added
+`AppSettings.autoDownloadVideoEpisodes: Bool` (default `false`) and
+`VideoDownloadPolicy.shouldAutoDownload(mediaKind:autoDownloadVideoEpisodes:)`
+(pure, tested), applied only at `FeedFetcher`'s single auto-download call
+site (`updatePodcastAndEpisodes`, gated by `autoDownloadNewEpisodes`) -
+audio episodes are always included, video episodes only when opted in.
+Manual "download this episode" taps (`PodcastDetailView`, `ContentView`)
+call `DownloadManager.downloadEpisode(_:)` directly and never go through
+this check, so a video episode can always be downloaded on purpose
+regardless of the auto-download setting. Toggle added next to the
+Wi-Fi-only-for-video setting in the Episode/Download settings section.
 
 ## Suggested sequencing
 

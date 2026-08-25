@@ -14,6 +14,7 @@ final class DownloadManager: NSObject, ObservableObject {
     @Published var activeDownloads: [UUID: Double] = [:] // Episode ID -> Progress (0.0 to 1.0)
     
     private var modelContext: ModelContext?
+    private var settings: AppSettings?
     private var downloadTasks: [UUID: URLSessionDownloadTask] = [:]
     private var urlSession: URLSession!
 
@@ -32,6 +33,10 @@ final class DownloadManager: NSObject, ObservableObject {
     
     func setModelContext(_ context: ModelContext) {
         self.modelContext = context
+    }
+
+    func setSettings(_ settings: AppSettings) {
+        self.settings = settings
     }
 
     func isDownloading(_ episode: Episode) -> Bool {
@@ -68,6 +73,15 @@ final class DownloadManager: NSObject, ObservableObject {
         }
 
         guard downloadURLString(for: episode) != nil else { return }
+
+        // Video downloads can be sizeable - respect the user's Wi-Fi-only-for-video setting the
+        // same way feed refresh respects refreshOnlyOnWiFi. Audio downloads are never gated.
+        let resolvedMediaKind = MediaKindPolicy.resolvedDefaultKind(defaultMediaKind: episode.defaultMediaKind, hasAudioURL: episode.audioURL != nil)
+        guard VideoDownloadPolicy.shouldDownloadNow(
+            mediaKind: resolvedMediaKind,
+            downloadVideoOnWiFiOnly: settings?.downloadVideoOnWiFiOnly ?? true,
+            isOnWiFi: NetworkMonitor.shared.isOnWiFi
+        ) else { return }
 
         guard downloadTasks.count < maxConcurrentDownloads else {
             pendingDownloadQueue.append(episode)

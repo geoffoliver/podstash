@@ -110,6 +110,10 @@ class AppSettings: ObservableObject {
 
     // MARK: - Download Settings
     @AppStorage("autoDownloadNewEpisodes") var autoDownloadNewEpisodes: Bool = true
+    // Video enclosures can be sizeable, so auto-download leaves them out unless the user opts in
+    // - manual "download this episode" taps are unaffected either way (see VideoDownloadPolicy).
+    @AppStorage("autoDownloadVideoEpisodes") var autoDownloadVideoEpisodes: Bool = false
+    @AppStorage("downloadVideoOnWiFiOnly") var downloadVideoOnWiFiOnly: Bool = true
 
     // MARK: - Playback Settings
     @AppStorage("defaultPlaybackSpeed") var defaultPlaybackSpeed: Double = 1.0
@@ -150,6 +154,8 @@ class AppSettings: ObservableObject {
         autoDeleteAfterDays = 7
 
         autoDownloadNewEpisodes = true
+        autoDownloadVideoEpisodes = false
+        downloadVideoOnWiFiOnly = true
 
         defaultPlaybackSpeed = 1.0
         skipForwardInterval = 30

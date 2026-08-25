@@ -502,7 +502,17 @@ struct EpisodeSettingsView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
+
+                SettingsCheckboxRow(label: "Auto-download video episodes", isOn: $settings.autoDownloadVideoEpisodes)
+
+                SettingsFreeformRow {
+                    Text("Off by default - video can be sizeable. You can still download a video episode manually at any time.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
+
+            SettingsCheckboxRow(label: "Wi-Fi only for video downloads", isOn: $settings.downloadVideoOnWiFiOnly)
         }
         .onAppear {
             loadStorageInfo()
@@ -569,7 +579,15 @@ struct EpisodeSettingsView: View {
                 Text("When new episodes are found, only the most recent \(settings.maxEpisodesToDownload) episode\(settings.maxEpisodesToDownload == 1 ? "" : "s") will be downloaded automatically.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+
+                Toggle("Auto-download video episodes", isOn: $settings.autoDownloadVideoEpisodes)
+
+                Text("Off by default - video can be sizeable. You can still download a video episode manually at any time.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
+
+            Toggle("Wi-Fi only for video downloads", isOn: $settings.downloadVideoOnWiFiOnly)
         }
         .onAppear {
             loadStorageInfo()

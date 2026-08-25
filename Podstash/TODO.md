@@ -71,12 +71,12 @@
   - [x] If adding a feed for the first time, the most recent episode of a show
 - [ ] Add ability to unsubscribe from "Search Podcasts" dialog in case someone subscribes to something on accident
 - [ ] UI enhancement - Click/tap current time to change to time remaining and vise versa
-- [ ] CarPlay UI
-- [ ] Bug - When in use in the car, playback does not get paused when Maps gives directions or when Siri speaks
 - [ ] Reorganize transport controls on compact player bar on mobile
   - [ ] Move Play/Pause where Airplay button is
   - [ ] Add fast foward and rewind controls around play/pause button
 - [ ] New feature: Download Missing Episodes - This should be an option in the queue that would let users download any episodes that are in the queue, but have not been downloaded
+- [ ] CarPlay UI
+- [ ] Bug - When in use in the car, playback does not get paused when Maps gives directions or when Siri speaks
 - [ ] New feature: "downloads" manager - Maybe we can just use the queue for this? Show a progress circle like on podcast detail with option to cancel?
 
 # Maybe

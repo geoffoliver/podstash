@@ -160,6 +160,7 @@ struct MiniPlayerView: View {
     @State private var isHovering = false
     @State private var isHoveringCloseButton = false
     @State private var windowSize: CGSize = CGSize(width: 300, height: 300)
+    @State private var showingTimeRemaining = false
     
     // Determine if we should show minimal UI based on size
     private var isCompact: Bool {
@@ -351,14 +352,20 @@ struct MiniPlayerView: View {
 
                         if !isCompact {
                             HStack {
-                                Text(formatTime(playbackProgress.currentTime))
+                                Text(PlaybackTimeDisplayPolicy.elapsedLabel(
+                                    currentTime: playbackProgress.currentTime,
+                                    duration: playbackProgress.duration,
+                                    showingRemaining: showingTimeRemaining
+                                ))
                                     .font(.caption2)
                                     .foregroundColor(.white.opacity(0.8))
                                     .monospacedDigit()
+                                    .contentShape(Rectangle())
+                                    .onTapGesture { showingTimeRemaining.toggle() }
 
                                 Spacer()
 
-                                Text(formatTime(playbackProgress.duration))
+                                Text(PlaybackTimeDisplayPolicy.format(playbackProgress.duration))
                                     .font(.caption2)
                                     .foregroundColor(.white.opacity(0.8))
                                     .monospacedDigit()
@@ -371,19 +378,7 @@ struct MiniPlayerView: View {
             }
         }
     }
-    
-    private func formatTime(_ time: TimeInterval) -> String {
-        let hours = Int(time) / 3600
-        let minutes = (Int(time) % 3600) / 60
-        let seconds = Int(time) % 60
-        
-        if hours > 0 {
-            return String(format: "%d:%02d:%02d", hours, minutes, seconds)
-        } else {
-            return String(format: "%d:%02d", minutes, seconds)
-        }
-    }
-    
+
     private func returnToMainWindow() {
         // Use the audioPlayer's method to properly close and restore
         audioPlayer.hideMiniPlayer()

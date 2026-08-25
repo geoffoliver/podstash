@@ -898,6 +898,7 @@ struct TransportControlsBar: View {
     @EnvironmentObject var audioPlayer: AudioPlayerManager
     @EnvironmentObject var playbackProgress: PlaybackProgress
     @State var hoveringOverArt = false
+    @State private var showingTimeRemaining = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -1028,14 +1029,20 @@ struct TransportControlsBar: View {
                     
                     // Time labels
                     HStack {
-                        Text(formatTime(playbackProgress.currentTime))
+                        Text(PlaybackTimeDisplayPolicy.elapsedLabel(
+                            currentTime: playbackProgress.currentTime,
+                            duration: playbackProgress.duration,
+                            showingRemaining: showingTimeRemaining
+                        ))
                             .font(.appCaption)
                             .monospacedDigit()
                             .foregroundStyle(.secondary)
+                            .contentShape(Rectangle())
+                            .onTapGesture { showingTimeRemaining.toggle() }
 
                         Spacer()
 
-                        Text(formatTime(playbackProgress.duration))
+                        Text(PlaybackTimeDisplayPolicy.format(playbackProgress.duration))
                             .font(.appCaption)
                             .monospacedDigit()
                             .foregroundStyle(.secondary)
@@ -1090,18 +1097,6 @@ struct TransportControlsBar: View {
         .background(.regularMaterial)
     }
     
-    private func formatTime(_ time: TimeInterval) -> String {
-        let hours = Int(time) / 3600
-        let minutes = (Int(time) % 3600) / 60
-        let seconds = Int(time) % 60
-
-        if hours > 0 {
-            return String(format: "%d:%02d:%02d", hours, minutes, seconds)
-        } else {
-            return String(format: "%d:%02d", minutes, seconds)
-        }
-    }
-
     // `duration` starts at 0 and is only populated asynchronously once the
     // player item's duration resolves, so guard against that window to avoid
     // a momentary full-width flash of the progress bar.

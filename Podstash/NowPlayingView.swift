@@ -37,6 +37,7 @@ struct NowPlayingView: View {
     @EnvironmentObject var audioPlayer: AudioPlayerManager
     @EnvironmentObject var playbackProgress: PlaybackProgress
     @State private var isFullscreenPresented = false
+    @State private var showingTimeRemaining = false
     // Measured once via the background GeometryReader below, not read inline where the video
     // surface is laid out - a GeometryReader used as content (rather than a background probe)
     // has no fixed ideal size of its own, so it gets squeezed by the VStack's Spacers competing
@@ -115,14 +116,20 @@ struct NowPlayingView: View {
                     .padding(.horizontal)
 
                     HStack {
-                        Text(formatTime(playbackProgress.currentTime))
+                        Text(PlaybackTimeDisplayPolicy.elapsedLabel(
+                            currentTime: playbackProgress.currentTime,
+                            duration: playbackProgress.duration,
+                            showingRemaining: showingTimeRemaining
+                        ))
                             .font(.footnote)
                             .monospacedDigit()
                             .foregroundStyle(.secondary)
+                            .contentShape(Rectangle())
+                            .onTapGesture { showingTimeRemaining.toggle() }
 
                         Spacer()
 
-                        Text(formatTime(playbackProgress.duration))
+                        Text(PlaybackTimeDisplayPolicy.format(playbackProgress.duration))
                             .font(.footnote)
                             .monospacedDigit()
                             .foregroundStyle(.secondary)
@@ -277,17 +284,6 @@ struct NowPlayingView: View {
         .shadow(radius: 8)
     }
 
-    private func formatTime(_ time: TimeInterval) -> String {
-        let hours = Int(time) / 3600
-        let minutes = (Int(time) % 3600) / 60
-        let seconds = Int(time) % 60
-        
-        if hours > 0 {
-            return String(format: "%d:%02d:%02d", hours, minutes, seconds)
-        } else {
-            return String(format: "%d:%02d", minutes, seconds)
-        }
-    }
 }
 
 // MARK: - Compact Player Bar (for iOS bottom bar)

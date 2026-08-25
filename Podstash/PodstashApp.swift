@@ -848,6 +848,7 @@ struct PodstashApp: App {
             if newPhase == .background {
                 scheduleBackgroundRefresh()
             }
+            audioPlayer.setAppActive(newPhase == .active)
         }
         #endif
     }

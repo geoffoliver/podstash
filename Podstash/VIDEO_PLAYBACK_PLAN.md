@@ -1,6 +1,6 @@
 # Video Playback — Implementation Plan
 
-Status: Phases 1-4 complete. Built with TDD per `CLAUDE.md` — every
+Status: Phases 1-5 complete. Built with TDD per `CLAUDE.md` — every
 phase below starts with tests.
 
 ## Goal
@@ -147,8 +147,20 @@ so it's called out here rather than buried in one phase.
   `AVPlayerLayer` wrapper given the existing custom controls.
 - **Audio/Video toggle**: a segmented control labeled "Audio" / "Video",
   styled like the existing Filter buttons on the podcast detail view.
-  Visible only when the episode has both enclosures. Selecting a segment
-  calls `switchMediaKind(to:)` (Phase 2) — position carries over.
+  Visible whenever the episode has a video enclosure at all — including a
+  video-only episode with no separate audio enclosure. What selecting a
+  segment *does* depends on whether there's actually something to switch
+  to (see `VideoDisplayPolicy`):
+  - Mixed episode (both enclosures exist): a real source switch, same as
+    always — calls `switchMediaKind(to:)` (Phase 2), position carries over.
+  - Video-only episode: "Audio" has nothing to switch to, so it just hides
+    the video frame (falling back to episode artwork) while the same video
+    item keeps playing — no `switchMediaKind()` call, no seek. Matches
+    Apple Podcasts' behavior and gives users an "audio-only" affordance
+    even though, mechanically, they could get the same result by just not
+    looking at the screen. Also disables the video `AVPlayerItemTrack`
+    (same mechanism as the background-behavior bullet below) since there's
+    no reason to keep decoding frames nobody's displaying.
 - **Fullscreen toggle**: present `AVPlayerViewController` modally
   (`UIViewControllerRepresentable` + `.fullScreenCover`, or push via
   `UIHostingController`), or drive fullscreen via

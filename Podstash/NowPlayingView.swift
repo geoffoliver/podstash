@@ -36,7 +36,13 @@ struct AirPlayButton: View {
 struct NowPlayingView: View {
     @EnvironmentObject var audioPlayer: AudioPlayerManager
     @EnvironmentObject var playbackProgress: PlaybackProgress
-    
+    @State private var isFullscreenPresented = false
+    // Measured once via the background GeometryReader below, not read inline where the video
+    // surface is laid out - a GeometryReader used as content (rather than a background probe)
+    // has no fixed ideal size of its own, so it gets squeezed by the VStack's Spacers competing
+    // for vertical space instead of actually reflecting the panel's width.
+    @State private var panelWidth: CGFloat = 0
+
     var body: some View {
         if let episode = audioPlayer.currentEpisode {
             VStack(spacing: 20) {
@@ -57,20 +63,27 @@ struct NowPlayingView: View {
 
                 Spacer()
 
-                // Episode artwork
-                EpisodeThumbnail(episode: episode, podcast: audioPlayer.currentPodcast) {
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(Color.gray.opacity(0.2))
-                        .overlay(
-                            Image(systemName: "music.note")
-                                .font(.system(size: 48))
-                                .foregroundStyle(.secondary)
-                        )
+                // Episode artwork, or (iOS, video episodes) the inline video surface
+                artworkOrVideoSurface(episode: episode)
+                    .id(episode.id)
+
+                // Audio/Video toggle - shown whenever the episode has a video enclosure at all.
+                // For a video-only episode, selecting "Audio" doesn't switch sources (there's
+                // nothing to switch to) - it hides the video frame so the user can listen without
+                // looking at it. See VideoDisplayPolicy.
+                #if !os(macOS)
+                if VideoInlinePolicy.showMediaKindToggle(hasVideoURL: episode.videoURL != nil) {
+                    Picker("Media", selection: Binding(
+                        get: { (audioPlayer.currentMediaKind == .video && audioPlayer.isVideoFrameVisible) ? MediaKind.video : .audio },
+                        set: { audioPlayer.setDisplayMediaKind($0) }
+                    )) {
+                        Text("Audio").tag(MediaKind.audio)
+                        Text("Video").tag(MediaKind.video)
+                    }
+                    .pickerStyle(.segmented)
+                    .padding(.horizontal)
                 }
-                .frame(width: 250, height: 250)
-                .cornerRadius(12)
-                .shadow(radius: 8)
-                .id(episode.id)
+                #endif
 
                 // Episode Info
                 VStack(spacing: 8) {
@@ -177,6 +190,24 @@ struct NowPlayingView: View {
                 Spacer()
             }
             .padding()
+            .background(
+                // A probe, not the sized content itself - reading geometry here (where this
+                // VStack's width is dictated by the sheet, not by its own children) is what
+                // avoids the Spacer-squeeze problem above.
+                GeometryReader { geometry in
+                    Color.clear
+                        .onAppear { panelWidth = geometry.size.width }
+                        .onChange(of: geometry.size.width) { _, newValue in panelWidth = newValue }
+                }
+            )
+            #if !os(macOS)
+            .onAppear { audioPlayer.setNowPlayingSurfaceVisible(true) }
+            .onDisappear { audioPlayer.setNowPlayingSurfaceVisible(false) }
+            .fullScreenCover(isPresented: $isFullscreenPresented) {
+                FullscreenVideoPlayerView(player: audioPlayer.playerForVideoSurface)
+                    .ignoresSafeArea()
+            }
+            #endif
         } else {
             // Empty State
             VStack(spacing: 16) {
@@ -197,6 +228,55 @@ struct NowPlayingView: View {
         }
     }
     
+    @ViewBuilder
+    private func artworkOrVideoSurface(episode: Episode) -> some View {
+        #if !os(macOS)
+        if audioPlayer.currentMediaKind == .video && audioPlayer.isVideoFrameVisible {
+            // Explicit width/height from panelWidth (measured by the background GeometryReader
+            // above), not .aspectRatio(fit) negotiating against the VStack's Spacers - that
+            // negotiation is driven by proposed *height*, which shrinks whenever a sibling like
+            // the Audio/Video toggle takes more vertical space, squeezing the video along with
+            // it even though there's plenty of width to spare.
+            let width = max(panelWidth - 32, 0)
+            VideoPlayerSurface(player: audioPlayer.playerForVideoSurface)
+                .frame(width: width, height: width * 9.0 / 16.0)
+                .cornerRadius(12)
+                .shadow(radius: 8)
+                .overlay(alignment: .topTrailing) {
+                    Button {
+                        isFullscreenPresented = true
+                    } label: {
+                        Image(systemName: "arrow.up.left.and.arrow.down.right")
+                            .font(.body)
+                            .foregroundStyle(.white)
+                            .padding(8)
+                            .background(.black.opacity(0.5), in: Circle())
+                    }
+                    .padding(8)
+                }
+        } else {
+            episodeThumbnail(episode: episode)
+        }
+        #else
+        episodeThumbnail(episode: episode)
+        #endif
+    }
+
+    private func episodeThumbnail(episode: Episode) -> some View {
+        EpisodeThumbnail(episode: episode, podcast: audioPlayer.currentPodcast) {
+            RoundedRectangle(cornerRadius: 12)
+                .fill(Color.gray.opacity(0.2))
+                .overlay(
+                    Image(systemName: "music.note")
+                        .font(.system(size: 48))
+                        .foregroundStyle(.secondary)
+                )
+        }
+        .frame(width: 250, height: 250)
+        .cornerRadius(12)
+        .shadow(radius: 8)
+    }
+
     private func formatTime(_ time: TimeInterval) -> String {
         let hours = Int(time) / 3600
         let minutes = (Int(time) % 3600) / 60

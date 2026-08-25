@@ -258,6 +258,7 @@ class AudioPlayerManager: ObservableObject {
             return
         }
         currentMediaKind = kind
+        isVideoFrameVisible = true // a previous episode's "hide the frame" choice never carries over
 
         // Cleanup old player first
         teardownPlayerItem()
@@ -304,6 +305,7 @@ class AudioPlayerManager: ObservableObject {
         #if os(macOS)
         openVideoWindowIfNeeded()
         #endif
+        updateVideoTrackEnabled()
     }
     
     // Prefer a downloaded local file over streaming, falling back to nil (streaming) if the
@@ -367,7 +369,6 @@ class AudioPlayerManager: ObservableObject {
 
         let playerItem = AVPlayerItem(url: url)
         player = AVPlayer(playerItem: playerItem)
-        player?.rate = plan.playbackRate
         currentMediaKind = plan.kind
 
         let time = CMTime(seconds: plan.seekTo, preferredTimescale: 600)
@@ -376,14 +377,18 @@ class AudioPlayerManager: ObservableObject {
         setupTimeObserver()
         setupNotifications()
 
-        if plan.shouldAutoplay {
-            player?.play()
-            isPlaying = true
-        } else {
-            isPlaying = false
-        }
+        // effectiveRate, not an unconditional player?.rate = plan.playbackRate followed by a
+        // conditional player?.play() - setting AVPlayer.rate to a nonzero value starts playback
+        // immediately, so doing that unconditionally (even briefly, "before" the shouldAutoplay
+        // check) started playback regardless of shouldAutoplay. That's what let audio from a
+        // closed macOS video window keep playing even though the transport controls correctly
+        // showed paused (see VideoWindowPolicy.closeAction - pause() runs first, so isPlaying,
+        // and therefore shouldAutoplay, is already false by the time this runs).
+        player?.rate = plan.effectiveRate
+        isPlaying = plan.shouldAutoplay
 
         updateNowPlayingInfo()
+        updateVideoTrackEnabled()
     }
 
     // Read-only access to the underlying AVPlayer for video-surface views (AVPlayerView on
@@ -401,6 +406,57 @@ class AudioPlayerManager: ObservableObject {
         for track in tracks where track.assetTrack?.mediaType == .video {
             track.isEnabled = enabled
         }
+    }
+
+    // MARK: - iOS video track visibility (Phase 5, see VIDEO_PLAYBACK_PLAN.md)
+
+    // Both default true/false to match reality at launch: the app is active, and no Now Playing
+    // surface is visible yet (nothing has requested one). Neither is @Published - nothing reads
+    // these directly, they only drive setVideoTrackEnabled via VideoInlinePolicy.
+    private var isAppActive: Bool = true
+    private var isNowPlayingSurfaceVisible: Bool = false
+
+    // The user's own choice of whether to look at the video frame, independent of
+    // currentMediaKind - see VideoDisplayPolicy. Reset to true whenever a new episode starts
+    // (play(episode:)) so a previous episode's "hide the frame" choice never carries over.
+    // @Published so NowPlayingView's Audio/Video Picker binding can read it directly.
+    @Published private(set) var isVideoFrameVisible: Bool = true
+
+    // Called from PodstashApp's scenePhase observer (iOS only).
+    func setAppActive(_ active: Bool) {
+        isAppActive = active
+        updateVideoTrackEnabled()
+    }
+
+    // Called from NowPlayingView's video surface appearing/disappearing (iOS only) - covers both
+    // the sheet opening/closing and the user swiping it away.
+    func setNowPlayingSurfaceVisible(_ visible: Bool) {
+        isNowPlayingSurfaceVisible = visible
+        updateVideoTrackEnabled()
+    }
+
+    // The Audio/Video toggle's action (iOS only) - see VideoDisplayPolicy for why this means
+    // different things for a mixed vs. video-only episode.
+    func setDisplayMediaKind(_ kind: MediaKind) {
+        guard let episode = currentEpisode else { return }
+        switch VideoDisplayPolicy.plan(requestedKind: kind, currentMediaKind: currentMediaKind, hasAudioURL: episode.audioURL != nil) {
+        case .switchSource(let target):
+            switchMediaKind(to: target)
+            isVideoFrameVisible = true
+        case .setFrameVisible(let visible):
+            isVideoFrameVisible = visible
+            updateVideoTrackEnabled()
+        }
+    }
+
+    private func updateVideoTrackEnabled() {
+        let enabled = VideoInlinePolicy.shouldEnableVideoTrack(
+            mediaKind: currentMediaKind,
+            isAppActive: isAppActive,
+            isNowPlayingSurfaceVisible: isNowPlayingSurfaceVisible,
+            isVideoFrameVisible: isVideoFrameVisible
+        )
+        setVideoTrackEnabled(enabled)
     }
 
     func resume() {

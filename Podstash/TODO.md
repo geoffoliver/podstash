@@ -61,8 +61,9 @@
   - [x] Phase 2 - Playback core: `switchMediaKind(to:)`, player/layer exposure, video-track enable/disable API
   - [x] Phase 3 - Shared `EpisodeThumbnail` view (replaces 5 ad hoc `CachedAsyncImage` sites) with video badge overlay
   - [x] Phase 4 - macOS `VideoPlayerWindowController` (mirrors `MiniPlayerWindowController`) + close/reopen state machine (closing window stops playback entirely; next Play defaults to audio if available, else reopens video)
-  - [ ] Phase 5 - iOS: video surface + Audio/Video segmented toggle in `NowPlayingView`, fullscreen presentation/toggle, background = keep playing via video track disabled (not a media-kind switch)
+  - [x] Phase 5 - iOS: video surface + Audio/Video segmented toggle in `NowPlayingView`, fullscreen presentation/toggle, background = keep playing via video track disabled (not a media-kind switch)
   - [ ] Phase 6 - Settings: "Wi-Fi only for video downloads" toggle (mirrors `refreshOnlyOnWiFi`)
+- [ ] UI weirdness - Add "Done" button to settings UI on iOS. Currently the only way to get rid of it is to swipe it away, which works, but isn't immediately obvious.
 - [ ] UI weirdness - "Unplayed" view in podcast detail view and "Queue" view list downloaded and unplayed episodes, which is by design. Unfortunately it causes confusion if someone does not have auto-download enabled, as new episodes only appear in the "All" tab of a podcast detail view, and users must manually go through each podcast and hunt for new episodes and download them to get them into the queue. The "Unplayed" and the "Queue" views logic need updating (along with the logic that adds the unplayed count badge to the sidebar items) so that they can include episodes that match any of the following criteria:
   - [ ] Downloaded and unplayed files
   - [ ] Any episode in a feed that is unplayed and newer than the most recently played episode in the same feed

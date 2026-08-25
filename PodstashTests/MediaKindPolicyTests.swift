@@ -92,6 +92,20 @@ struct MediaKindPolicyTests {
         #expect(plan?.shouldAutoplay == false)
     }
 
+    // MARK: - MediaSwitchPlan.effectiveRate
+
+    @Test("effectiveRate is the carried-over playback rate when the plan should autoplay")
+    func effectiveRateIsPlaybackRateWhenAutoplaying() {
+        let plan = MediaSwitchPlan(kind: .audio, urlString: "https://example.com/a.mp3", seekTo: 10, shouldAutoplay: true, playbackRate: 1.5)
+        #expect(plan.effectiveRate == 1.5)
+    }
+
+    @Test("effectiveRate is zero when the plan should not autoplay, regardless of playbackRate - AVPlayer.rate must never go nonzero for a paused switch, or it silently starts playing")
+    func effectiveRateIsZeroWhenNotAutoplaying() {
+        let plan = MediaSwitchPlan(kind: .audio, urlString: "https://example.com/a.mp3", seekTo: 10, shouldAutoplay: false, playbackRate: 1.5)
+        #expect(plan.effectiveRate == 0)
+    }
+
     // MARK: - downloadURLString
 
     @Test("Downloads the audio enclosure for a mixed episode, matching what plays by default")

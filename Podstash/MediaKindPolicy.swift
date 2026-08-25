@@ -77,4 +77,13 @@ struct MediaSwitchPlan: Equatable {
     let seekTo: TimeInterval
     let shouldAutoplay: Bool
     let playbackRate: Float
+
+    /// The rate to assign the freshly-created AVPlayer for this switch - 0 unless shouldAutoplay.
+    /// Setting AVPlayer.rate to a nonzero value starts playback immediately, so this must never
+    /// be nonzero when shouldAutoplay is false (a caller that sets .rate = playbackRate
+    /// unconditionally, "because we'll pause it right after," is still wrong - the moment it's
+    /// set, playback has already started).
+    var effectiveRate: Float {
+        shouldAutoplay ? playbackRate : 0
+    }
 }

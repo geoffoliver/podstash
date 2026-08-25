@@ -132,24 +132,19 @@ class EpisodeCleanupManager {
             return (0, 0, "0 MB")
         }
 
-        let downloadedCount = episodes.filter { $0.isDownloaded }.count
+        let downloadedEpisodes = episodes.filter { $0.isDownloaded }
 
-        // Rough estimate: 1 MB per minute of audio at medium quality
-        let totalMinutes = episodes.reduce(0.0) { result, episode in
-            if episode.isDownloaded, let duration = episode.duration {
-                return result + (duration / 60.0)
-            }
-            return result
+        // Actual file size on disk, not a duration-based estimate - a never-played download has
+        // no measured duration, and video runs far more than audio's "1 MB per minute" anyway.
+        let fileSizes: [Int64] = downloadedEpisodes.compactMap { episode -> Int64? in
+            guard let filename = episode.downloadedFilename else { return nil }
+            let url = DownloadManager.localFileURL(forStoredFilename: filename)
+            guard let attributes = try? FileManager.default.attributesOfItem(atPath: url.path) else { return nil }
+            return (attributes[.size] as? NSNumber)?.int64Value
         }
 
-        let estimatedMB = Int(totalMinutes)
-        let sizeString: String
-        if estimatedMB > 1024 {
-            sizeString = String(format: "%.1f GB", Double(estimatedMB) / 1024.0)
-        } else {
-            sizeString = "\(estimatedMB) MB"
-        }
+        let sizeString = StorageInfoPolicy.formattedSize(bytes: StorageInfoPolicy.totalBytes(downloadedFileSizes: fileSizes))
 
-        return (episodes.count, downloadedCount, sizeString)
+        return (episodes.count, downloadedEpisodes.count, sizeString)
     }
 }

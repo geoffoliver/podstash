@@ -11,7 +11,7 @@
 /// later item in the same feed should hit on the first try instead of re-running the full
 /// cascade. Falls back to a full scan (in original order) whenever the remembered candidate
 /// doesn't match, so a feed that mixes formats across items still parses correctly, just slower.
-struct OrderedFallbackParser<Input, Output> {
+nonisolated struct OrderedFallbackParser<Input, Output> {
     private let parsers: [(Input) -> Output?]
     private var preferredIndex: Int?
 

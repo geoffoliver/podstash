@@ -20,24 +20,26 @@ class AutoRefreshManager: ObservableObject {
     }
     
     func startAutoRefresh() {
-        Task { @MainActor in
-            stopAutoRefresh() // Clear any existing timer
-            
-            guard let interval = settings.refreshIntervalEnum.timeInterval else {
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+
+            self.stopAutoRefresh() // Clear any existing timer
+
+            guard let interval = self.settings.refreshIntervalEnum.timeInterval else {
                 // Manual refresh only
                 return
             }
-            
+
             // Create repeating timer
-            refreshTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
+            self.refreshTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
                 Task { @MainActor in
                     await self?.performScheduledRefresh()
                 }
             }
-            
+
             // Trigger immediate refresh if auto-refresh on launch is enabled
-            if settings.autoRefreshOnLaunch {
-                await performScheduledRefresh()
+            if self.settings.autoRefreshOnLaunch {
+                await self.performScheduledRefresh()
             }
         }
     }

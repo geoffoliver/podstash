@@ -7,7 +7,7 @@
 
 import Foundation
 
-struct ParsedPodcast {
+nonisolated struct ParsedPodcast {
     let title: String
     let description: String?
     let artworkURL: String?
@@ -16,7 +16,7 @@ struct ParsedPodcast {
     let episodes: [ParsedEpisode]
 }
 
-struct ParsedEpisode {
+nonisolated struct ParsedEpisode {
     let title: String
     let description: String?
     let audioURL: String?

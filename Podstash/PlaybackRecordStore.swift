@@ -88,6 +88,36 @@ enum PlaybackRecordStore {
         return record
     }
 
+    /// Marks an episode played and advances its podcast's `mostRecentlyPlayedDate` watermark
+    /// (see UnplayedEligibilityPolicy) - the single place this should happen, so every "mark
+    /// played" call site (playback completion, context menu, swipe action, bulk actions) keeps
+    /// that watermark in sync without duplicating the lookup/update logic.
+    @discardableResult
+    static func markPlayed(episode: Episode, in context: ModelContext) -> PlaybackRecord {
+        let record = recordForMutation(episodeKey: episode.episodeKey, in: context)
+        record.isPlayed = true
+
+        let podcastID = episode.podcastID
+        let descriptor = FetchDescriptor<Podcast>(predicate: #Predicate { $0.id == podcastID })
+        if let podcast = (try? context.fetch(descriptor))?.first {
+            podcast.mostRecentlyPlayedDate = UnplayedEligibilityPolicy.advancedMostRecentlyPlayedDate(
+                current: podcast.mostRecentlyPlayedDate,
+                newlyPlayedDate: episode.publishDate
+            )
+        }
+
+        return record
+    }
+
+    /// The queuePosition to assign the next item appended to the queue - one past the current
+    /// maximum, or 0 if nothing is queued. Shared by every "add to queue" call site (manual
+    /// "Add All Unplayed", auto-queue on refresh) so they can't disagree on ordering.
+    static func nextQueuePosition(in context: ModelContext) -> Int {
+        let descriptor = FetchDescriptor<PlaybackRecord>(predicate: #Predicate { $0.queuePosition != nil })
+        let queued = (try? context.fetch(descriptor)) ?? []
+        return (queued.compactMap(\.queuePosition).max() ?? -1) + 1
+    }
+
     /// Periodic dedup for the CloudKit-uniqueness gap: SwiftData doesn't support
     /// @Attribute(.unique) under CloudKit mirroring, so two devices each first-touching the same
     /// episode before either's row syncs can produce two PlaybackRecord rows for one episodeKey.

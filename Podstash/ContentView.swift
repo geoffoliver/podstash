@@ -357,13 +357,49 @@ struct PodcastListView: View {
     /// tens), so scope the PlaybackRecord lookup to just those keys via
     /// PlaybackRecordStore.states(forKeys:in:), which becomes a cheap SQL IN-clause instead of
     /// pulling and hashing the entire played-history table in Swift.
+    // Beyond the downloaded set above, UnplayedEligibilityPolicy also admits a non-downloaded
+    // episode newer than its podcast's mostRecentlyPlayedDate (or, with no play history yet, the
+    // single newest known episode). That candidate set can't be expressed as one global query -
+    // the threshold differs per podcast - so it's one small bounded fetch per podcast (scoped to
+    // `publishDate >= threshold`, never the whole feed's back-catalog) rather than a full
+    // Episode-table scan, keeping this on the same footing as the original downloaded-only fetch
+    // performance-wise.
     private func computeDownloadedUnplayedCounts() -> [UUID: Int] {
-        guard !downloadedEpisodesQuery.isEmpty else { return [:] }
-        let downloadedKeys = Set(downloadedEpisodesQuery.map(\.episodeKey))
-        let states = PlaybackRecordStore.states(forKeys: downloadedKeys, in: modelContext)
+        var candidateEpisodes = downloadedEpisodesQuery
+
+        for podcast in podcasts {
+            guard let threshold = podcast.mostRecentlyPlayedDate ?? podcast.newestKnownPublishDate else { continue }
+            let podcastID = podcast.id
+            let descriptor = FetchDescriptor<Episode>(
+                predicate: #Predicate<Episode> { $0.podcastID == podcastID && $0.publishDate >= threshold }
+            )
+            if let recent = try? modelContext.fetch(descriptor) {
+                candidateEpisodes.append(contentsOf: recent)
+            }
+        }
+
+        guard !candidateEpisodes.isEmpty else { return [:] }
+
+        // An episode can appear in both the downloaded query and a per-podcast recency fetch
+        // above - dedupe by episodeKey before joining state, same helper QueueView.queuedEpisodes
+        // uses for the same reason.
+        let deduped = PlaybackRecordStore.firstByKey(candidateEpisodes).values
+        let states = PlaybackRecordStore.states(forKeys: Set(deduped.map(\.episodeKey)), in: modelContext)
+        let podcastsByID = Dictionary(uniqueKeysWithValues: podcasts.map { ($0.id, $0) })
+
         var counts: [UUID: Int] = [:]
-        for episode in downloadedEpisodesQuery where !(states[episode.episodeKey]?.isPlayed ?? false) {
-            counts[episode.podcastID, default: 0] += 1
+        for episode in deduped {
+            let podcast = podcastsByID[episode.podcastID]
+            let eligible = UnplayedEligibilityPolicy.isEligible(
+                isDownloaded: episode.isDownloaded,
+                isPlayed: states[episode.episodeKey]?.isPlayed ?? false,
+                publishDate: episode.publishDate,
+                mostRecentlyPlayedDate: podcast?.mostRecentlyPlayedDate,
+                newestKnownPublishDate: podcast?.newestKnownPublishDate
+            )
+            if eligible {
+                counts[episode.podcastID, default: 0] += 1
+            }
         }
         return counts
     }
@@ -600,7 +636,7 @@ struct PodcastListView: View {
         guard !episodesToMark.isEmpty else { return }
 
         for episode in episodesToMark {
-            PlaybackRecordStore.recordForMutation(episodeKey: episode.episodeKey, in: modelContext).isPlayed = true
+            PlaybackRecordStore.markPlayed(episode: episode, in: modelContext)
         }
         try? modelContext.save()
     }
@@ -825,7 +861,7 @@ struct EpisodeRowView: View {
                 }
             } else {
                 Button {
-                    PlaybackRecordStore.recordForMutation(episodeKey: episode.episodeKey, in: modelContext).isPlayed = true
+                    PlaybackRecordStore.markPlayed(episode: episode, in: modelContext)
                     try? modelContext.save()
                 } label: {
                     Label("Mark as Played", systemImage: "checkmark.circle.fill")
@@ -1326,7 +1362,7 @@ struct EpisodeDetailView: View {
                             }
                         } else {
                             Button {
-                                PlaybackRecordStore.recordForMutation(episodeKey: episode.episodeKey, in: modelContext).isPlayed = true
+                                PlaybackRecordStore.markPlayed(episode: episode, in: modelContext)
                                 try? modelContext.save()
                             } label: {
                                 Label("Mark as Played", systemImage: "checkmark.circle")

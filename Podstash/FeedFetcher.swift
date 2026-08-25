@@ -240,6 +240,33 @@ class FeedFetcher {
             }
         }
 
+        // Auto-queue genuinely new episodes per UnplayedEligibilityPolicy - same
+        // publishDate > watermarkBeforeRefresh pre-filter as auto-download above, for the same
+        // reason (don't resurrect a retention-cleaned-up old episode into the queue). Unlike
+        // auto-download this isn't capped by maxEpisodesToDownload or gated by a setting -
+        // queueing has no storage cost, and with no play history yet in the feed
+        // UnplayedEligibilityPolicy itself already caps this to just the single newest episode.
+        let newlyEligible = createdEpisodes
+            .filter { $0.publishDate > watermarkBeforeRefresh }
+            .filter {
+                UnplayedEligibilityPolicy.isEligible(
+                    isDownloaded: $0.isDownloaded,
+                    isPlayed: false,
+                    publishDate: $0.publishDate,
+                    mostRecentlyPlayedDate: podcast.mostRecentlyPlayedDate,
+                    newestKnownPublishDate: podcast.newestKnownPublishDate
+                )
+            }
+            .sorted { $0.publishDate < $1.publishDate }
+
+        if !newlyEligible.isEmpty {
+            var nextPosition = PlaybackRecordStore.nextQueuePosition(in: modelContext)
+            for episode in newlyEligible {
+                PlaybackRecordStore.recordForMutation(episodeKey: episode.episodeKey, in: modelContext).queuePosition = nextPosition
+                nextPosition += 1
+            }
+        }
+
         // Save if requested
         if shouldSave {
             try? modelContext.save()

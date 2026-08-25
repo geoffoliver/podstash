@@ -69,6 +69,8 @@ struct SettingsView: View {
     var autoRefreshManager: AutoRefreshManager?
     #if os(macOS)
     var updaterViewModel: SparkleUpdaterViewModel?
+    #else
+    @Environment(\.dismiss) private var dismiss
     #endif
 
     var body: some View {
@@ -151,6 +153,13 @@ struct SettingsView: View {
             }
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") {
+                        dismiss()
+                    }
+                }
+            }
         }
         #endif
     }

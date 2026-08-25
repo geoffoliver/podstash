@@ -64,12 +64,13 @@
   - [x] Phase 5 - iOS: video surface + Audio/Video segmented toggle in `NowPlayingView`, fullscreen presentation/toggle, background = keep playing via video track disabled (not a media-kind switch)
   - [x] Phase 6 - Settings: "Wi-Fi only for video downloads" toggle (mirrors `refreshOnlyOnWiFi`)
   - [x] Phase 6 follow-up - "Auto-download video episodes" toggle, defaults OFF (video can eat storage unattended); manual per-episode download always available regardless of the setting
-- [ ] UI weirdness - Add "Done" button to settings UI on iOS. Currently the only way to get rid of it is to swipe it away, which works, but isn't immediately obvious.
-- [ ] UI weirdness - "Unplayed" view in podcast detail view and "Queue" view list downloaded and unplayed episodes, which is by design. Unfortunately it causes confusion if someone does not have auto-download enabled, as new episodes only appear in the "All" tab of a podcast detail view, and users must manually go through each podcast and hunt for new episodes and download them to get them into the queue. The "Unplayed" and the "Queue" views logic need updating (along with the logic that adds the unplayed count badge to the sidebar items) so that they can include episodes that match any of the following criteria:
-  - [ ] Downloaded and unplayed files
-  - [ ] Any episode in a feed that is unplayed and newer than the most recently played episode in the same feed
-  - [ ] If adding a feed for the first time, the most recent episode of a show
+- [x] UI weirdness - Add "Done" button to settings UI on iOS. Currently the only way to get rid of it is to swipe it away, which works, but isn't immediately obvious.
+- [x] UI weirdness - "Unplayed" view in podcast detail view and "Queue" view list downloaded and unplayed episodes, which is by design. Unfortunately it causes confusion if someone does not have auto-download enabled, as new episodes only appear in the "All" tab of a podcast detail view, and users must manually go through each podcast and hunt for new episodes and download them to get them into the queue. The "Unplayed" and the "Queue" views logic need updating (along with the logic that adds the unplayed count badge to the sidebar items) so that they can include episodes that match any of the following criteria:
+  - [x] Downloaded and unplayed files
+  - [x] Any episode in a feed that is unplayed and newer than the most recently played episode in the same feed
+  - [x] If adding a feed for the first time, the most recent episode of a show
 - [ ] Add ability to unsubscribe from "Search Podcasts" dialog in case someone subscribes to something on accident
+- [ ] UI enhancement - Click/tap current time to change to time remaining and vise versa
 - [ ] CarPlay UI
 - [ ] Bug - When in use in the car, playback does not get paused when Maps gives directions or when Siri speaks
 - [ ] Reorganize transport controls on compact player bar on mobile

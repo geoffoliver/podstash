@@ -121,8 +121,7 @@ struct QueueView: View {
                         onMarkPlayed: { episodes in
                             // Mark episodes as played immediately in memory
                             for episode in episodes {
-                                let record = PlaybackRecordStore.recordForMutation(episodeKey: episode.episodeKey, in: modelContext)
-                                record.isPlayed = true
+                                let record = PlaybackRecordStore.markPlayed(episode: episode, in: modelContext)
                                 record.queuePosition = nil
                                 record.playbackPosition = 0
                             }
@@ -374,8 +373,7 @@ struct QueueView: View {
 
         withAnimation {
             for item in episodesToMark {
-                let record = PlaybackRecordStore.recordForMutation(episodeKey: item.episode.episodeKey, in: modelContext)
-                record.isPlayed = true
+                let record = PlaybackRecordStore.markPlayed(episode: item.episode, in: modelContext)
                 record.queuePosition = nil
                 record.playbackPosition = 0
             }
@@ -412,8 +410,7 @@ struct QueueView: View {
 
     private func markAsPlayed(_ episode: Episode) {
         withAnimation {
-            let record = PlaybackRecordStore.recordForMutation(episodeKey: episode.episodeKey, in: modelContext)
-            record.isPlayed = true
+            let record = PlaybackRecordStore.markPlayed(episode: episode, in: modelContext)
             record.queuePosition = nil
             record.playbackPosition = 0
 
@@ -440,28 +437,42 @@ struct QueueView: View {
     }
 
     private func addAllUnplayedToQueue() {
-        // Fetch downloaded episodes that aren't in queue, oldest first
+        // Candidates: every not-yet-queued episode, oldest first. Not narrowed to downloaded-only
+        // any more - UnplayedEligibilityPolicy also admits a non-downloaded episode newer than its
+        // podcast's mostRecentlyPlayedDate. This is a manual, infrequent, user-initiated sweep, so
+        // a broader fetch here (rather than the per-podcast bounded fetches used by the reactive
+        // sidebar badge) is an acceptable trade for simplicity.
         let queuedKeys = Set(queuedRecords.map(\.episodeKey))
         let descriptor = FetchDescriptor<Episode>(
             predicate: #Predicate { episode in
-                episode.isDownloaded && !queuedKeys.contains(episode.episodeKey)
+                !queuedKeys.contains(episode.episodeKey)
             },
             sortBy: [SortDescriptor(\.publishDate)] // Oldest first
         )
 
         guard let candidateEpisodes = try? modelContext.fetch(descriptor) else { return }
 
-        // Exclude already-played episodes (played state lives on PlaybackRecord, not Episode,
-        // so this can't be expressed in the predicate above). Scoped to just the candidate
-        // episodes' keys rather than fetching every played PlaybackRecord (~13,000+ rows and
-        // growing, since PlaybackRecord history is never pruned).
+        // Played state lives on PlaybackRecord, not Episode, so this can't be expressed in the
+        // predicate above. Scoped to just the candidate episodes' keys rather than fetching every
+        // played PlaybackRecord (~13,000+ rows and growing, since PlaybackRecord history is never
+        // pruned).
         let candidateKeys = Set(candidateEpisodes.map(\.episodeKey))
         let states = PlaybackRecordStore.states(forKeys: candidateKeys, in: modelContext)
-        let unplayedEpisodes = candidateEpisodes.filter { !(states[$0.episodeKey]?.isPlayed ?? false) }
 
-        var nextPosition = (queuedRecords.compactMap(\.queuePosition).max() ?? -1) + 1
+        let eligibleEpisodes = candidateEpisodes.filter { episode in
+            let podcast = podcastDirectory.podcast(for: episode.podcastID)
+            return UnplayedEligibilityPolicy.isEligible(
+                isDownloaded: episode.isDownloaded,
+                isPlayed: states[episode.episodeKey]?.isPlayed ?? false,
+                publishDate: episode.publishDate,
+                mostRecentlyPlayedDate: podcast?.mostRecentlyPlayedDate,
+                newestKnownPublishDate: podcast?.newestKnownPublishDate
+            )
+        }
 
-        for episode in unplayedEpisodes {
+        var nextPosition = PlaybackRecordStore.nextQueuePosition(in: modelContext)
+
+        for episode in eligibleEpisodes {
             PlaybackRecordStore.recordForMutation(episodeKey: episode.episodeKey, in: modelContext).queuePosition = nextPosition
             nextPosition += 1
         }

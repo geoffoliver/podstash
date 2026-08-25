@@ -32,6 +32,14 @@ final class Podcast {
     // needing a tombstone table.
     var newestKnownPublishDate: Date?
 
+    // The newest `publishDate` among episodes marked played in this feed, advanced monotonically
+    // via UnplayedEligibilityPolicy.advancedMostRecentlyPlayedDate whenever an episode is marked
+    // played (marking one unplayed again does not roll this back). Combined with
+    // `newestKnownPublishDate`, this is what lets UnplayedEligibilityPolicy decide whether a
+    // non-downloaded episode counts as "unplayed" without scanning every PlaybackRecord in the
+    // feed: nil means nothing in the feed has ever been played.
+    var mostRecentlyPlayedDate: Date?
+
     init(
         id: UUID = UUID(),
         title: String,
@@ -42,7 +50,8 @@ final class Podcast {
         author: String? = nil,
         subscriptionDate: Date = Date(),
         lastUpdated: Date? = nil,
-        newestKnownPublishDate: Date? = nil
+        newestKnownPublishDate: Date? = nil,
+        mostRecentlyPlayedDate: Date? = nil
     ) {
         self.id = id
         self.title = title
@@ -54,6 +63,7 @@ final class Podcast {
         self.subscriptionDate = subscriptionDate
         self.lastUpdated = lastUpdated
         self.newestKnownPublishDate = newestKnownPublishDate
+        self.mostRecentlyPlayedDate = mostRecentlyPlayedDate
     }
 }
 

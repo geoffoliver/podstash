@@ -89,6 +89,59 @@ struct PlaybackRecordStoreTests {
         #expect(survivors.first?.queuePosition == 2)
     }
 
+    // MARK: - markPlayed
+
+    @Test("markPlayed sets isPlayed and advances the podcast's mostRecentlyPlayedDate from nil")
+    func markPlayedAdvancesWatermarkFromNil() throws {
+        let context = try makeContext()
+        let podcast = Podcast(title: "Show", feedURL: "https://example.com/feed")
+        context.insert(podcast)
+        let publishDate = Date.now.addingTimeInterval(-1000)
+        let episode = Episode(title: "Ep", audioURL: "https://example.com/e.mp3", publishDate: publishDate, podcastID: podcast.id)
+        context.insert(episode)
+        try context.save()
+
+        let record = PlaybackRecordStore.markPlayed(episode: episode, in: context)
+
+        #expect(record.isPlayed == true)
+        #expect(podcast.mostRecentlyPlayedDate == publishDate)
+    }
+
+    @Test("markPlayed does not regress the podcast's mostRecentlyPlayedDate when it's already newer")
+    func markPlayedDoesNotRegressWatermark() throws {
+        let context = try makeContext()
+        let podcast = Podcast(title: "Show", feedURL: "https://example.com/feed")
+        let newerDate = Date.now
+        podcast.mostRecentlyPlayedDate = newerDate
+        context.insert(podcast)
+        let olderPublishDate = Date.now.addingTimeInterval(-5000)
+        let episode = Episode(title: "Ep", audioURL: "https://example.com/e.mp3", publishDate: olderPublishDate, podcastID: podcast.id)
+        context.insert(episode)
+        try context.save()
+
+        _ = PlaybackRecordStore.markPlayed(episode: episode, in: context)
+
+        #expect(podcast.mostRecentlyPlayedDate == newerDate)
+    }
+
+    // MARK: - nextQueuePosition
+
+    @Test("nextQueuePosition is 0 when nothing is queued")
+    func nextQueuePositionStartsAtZero() throws {
+        let context = try makeContext()
+        #expect(PlaybackRecordStore.nextQueuePosition(in: context) == 0)
+    }
+
+    @Test("nextQueuePosition is one past the current maximum queuePosition")
+    func nextQueuePositionFollowsMaximum() throws {
+        let context = try makeContext()
+        context.insert(PlaybackRecord(episodeKey: "a", queuePosition: 0))
+        context.insert(PlaybackRecord(episodeKey: "b", queuePosition: 3))
+        try context.save()
+
+        #expect(PlaybackRecordStore.nextQueuePosition(in: context) == 4)
+    }
+
     // MARK: - firstByKey
 
     @Test("firstByKey keys episodes by episodeKey")

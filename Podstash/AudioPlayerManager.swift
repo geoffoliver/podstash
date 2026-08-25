@@ -710,7 +710,7 @@ class AudioPlayerManager: ObservableObject {
 
         // Mark as played if reached within markPlayedThreshold seconds of the end
         if decision.shouldMarkPlayed {
-            record.isPlayed = true
+            PlaybackRecordStore.markPlayed(episode: episode, in: modelContext)
             record.playbackPosition = 0 // Reset position for played episodes
         }
 
@@ -789,8 +789,7 @@ class AudioPlayerManager: ObservableObject {
     @objc private func playerDidFinishPlaying() {
         Task { @MainActor in
             if let episode = currentEpisode, let modelContext {
-                let record = PlaybackRecordStore.recordForMutation(episodeKey: episode.episodeKey, in: modelContext)
-                record.isPlayed = true
+                let record = PlaybackRecordStore.markPlayed(episode: episode, in: modelContext)
                 record.playbackPosition = 0
                 record.queuePosition = nil // Remove from queue
                 record.lastPlayedDate = Date()

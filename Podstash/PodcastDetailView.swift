@@ -38,17 +38,23 @@ struct PodcastDetailView: View {
         !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
-    // isDownloaded lives on the local Episode directly, so this filters to the (typically
-    // small) downloaded subset BEFORE ever joining PlaybackRecord state - for a podcast with a
-    // large back-catalog (episode rows aren't deleted by retention anymore), that avoids
-    // fetching/joining thousands of episodes just to answer "how many downloaded ones are
-    // unplayed." Used for the "Unplayed" tab's label, which is shown regardless of which tab
-    // is actually selected.
+    // Eligibility (UnplayedEligibilityPolicy) needs played-state for every episode in this feed,
+    // not just the downloaded ones - a non-downloaded episode can still qualify if it's newer
+    // than the podcast's mostRecentlyPlayedDate. Still bounded to this one podcast's episodes
+    // (episodesForPodcast), not the whole library. Used for the "Unplayed" tab's label, which is
+    // shown regardless of which tab is actually selected.
     private func unplayedDownloadedCount() -> Int {
-        let downloaded = episodesForPodcast.filter { $0.isDownloaded }
-        guard !downloaded.isEmpty else { return 0 }
-        let states = PlaybackRecordStore.states(forKeys: Set(downloaded.map(\.episodeKey)), in: modelContext)
-        return downloaded.filter { !(states[$0.episodeKey]?.isPlayed ?? false) }.count
+        guard !episodesForPodcast.isEmpty else { return 0 }
+        let states = PlaybackRecordStore.states(forKeys: Set(episodesForPodcast.map(\.episodeKey)), in: modelContext)
+        return episodesForPodcast.filter { episode in
+            UnplayedEligibilityPolicy.isEligible(
+                isDownloaded: episode.isDownloaded,
+                isPlayed: states[episode.episodeKey]?.isPlayed ?? false,
+                publishDate: episode.publishDate,
+                mostRecentlyPlayedDate: podcast.mostRecentlyPlayedDate,
+                newestKnownPublishDate: podcast.newestKnownPublishDate
+            )
+        }.count
     }
 
     // The episodes actually rendered for the current tab/search. Joins PlaybackRecord state
@@ -71,9 +77,16 @@ struct PodcastDetailView: View {
 
         switch selectedTab {
         case .unplayed:
-            let downloaded = episodesForPodcast.filter { $0.isDownloaded }
-            return PlaybackRecordStore.display(for: downloaded, in: modelContext)
-                .filter { !$0.state.isPlayed }
+            return PlaybackRecordStore.display(for: episodesForPodcast, in: modelContext)
+                .filter { item in
+                    UnplayedEligibilityPolicy.isEligible(
+                        isDownloaded: item.episode.isDownloaded,
+                        isPlayed: item.state.isPlayed,
+                        publishDate: item.episode.publishDate,
+                        mostRecentlyPlayedDate: podcast.mostRecentlyPlayedDate,
+                        newestKnownPublishDate: podcast.newestKnownPublishDate
+                    )
+                }
                 .sorted(by: { $0.episode.publishDate > $1.episode.publishDate })
         case .all:
             // No way around joining state for everything here - "All" fundamentally means
@@ -388,8 +401,7 @@ struct PodcastDetailView: View {
     }
 
     private func markAsPlayed(_ episode: Episode) {
-        let record = PlaybackRecordStore.recordForMutation(episodeKey: episode.episodeKey, in: modelContext)
-        record.isPlayed = true
+        let record = PlaybackRecordStore.markPlayed(episode: episode, in: modelContext)
         record.queuePosition = nil
         record.playbackPosition = 0
         try? modelContext.save()

@@ -180,4 +180,57 @@ struct FeedFetcherTests {
 
         #expect(podcast.newestKnownPublishDate == existingDate)
     }
+
+    // MARK: - Auto-queue
+
+    @Test("A genuinely new episode newer than mostRecentlyPlayedDate is auto-queued")
+    func newEpisodeNewerThanMostRecentlyPlayedIsAutoQueued() async throws {
+        let context = try makeContext()
+        let podcast = Podcast(title: "Show", feedURL: "https://example.com/feed.xml")
+        podcast.mostRecentlyPlayedDate = Date.now.addingTimeInterval(-10 * 86400)
+        context.insert(podcast)
+        try context.save()
+
+        let fetcher = FeedFetcher(modelContext: context, settings: AppSettings())
+        let parsed = makeParsedEpisode(audioURL: "https://example.com/new.mp3", guid: "new-1", publishDate: .now)
+
+        await fetcher.updatePodcastAndEpisodes(
+            podcast: podcast,
+            parsedPodcast: makeParsedPodcast(episodes: [parsed]),
+            parsedEpisodes: [parsed],
+            updateTimestamp: false,
+            shouldSave: false
+        )
+
+        let episode = try #require(try context.fetch(FetchDescriptor<Episode>(predicate: #Predicate { $0.guid == "new-1" }))).first
+        let record = try context.fetch(FetchDescriptor<PlaybackRecord>(predicate: #Predicate { $0.episodeKey == "new-1" })).first
+        #expect(episode != nil)
+        #expect(record?.queuePosition != nil)
+    }
+
+    @Test("A fresh subscribe with no play history only auto-queues the single newest backlog episode")
+    func freshSubscribeOnlyQueuesNewestEpisode() async throws {
+        let context = try makeContext()
+        let podcast = Podcast(title: "Show", feedURL: "https://example.com/feed.xml")
+        context.insert(podcast)
+        try context.save()
+
+        let fetcher = FeedFetcher(modelContext: context, settings: AppSettings())
+        let now = Date.now
+        let parsedEpisodes = (0..<5).map { offset in
+            makeParsedEpisode(audioURL: "https://example.com/ep\(offset).mp3", guid: "ep-\(offset)", publishDate: now.addingTimeInterval(TimeInterval(-offset * 86400)))
+        }
+
+        await fetcher.updatePodcastAndEpisodes(
+            podcast: podcast,
+            parsedPodcast: makeParsedPodcast(episodes: parsedEpisodes),
+            parsedEpisodes: parsedEpisodes,
+            updateTimestamp: false,
+            shouldSave: false
+        )
+
+        let queuedRecords = try context.fetch(FetchDescriptor<PlaybackRecord>(predicate: #Predicate { $0.queuePosition != nil }))
+        #expect(queuedRecords.count == 1)
+        #expect(queuedRecords.first?.episodeKey == "ep-0")
+    }
 }

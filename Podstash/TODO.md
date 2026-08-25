@@ -69,7 +69,7 @@
   - [x] Downloaded and unplayed files
   - [x] Any episode in a feed that is unplayed and newer than the most recently played episode in the same feed
   - [x] If adding a feed for the first time, the most recent episode of a show
-- [ ] Add ability to unsubscribe from "Search Podcasts" dialog in case someone subscribes to something on accident
+- [x] Add ability to unsubscribe from "Search Podcasts" dialog in case someone subscribes to something on accident
 - [ ] UI enhancement - Click/tap current time to change to time remaining and vise versa
 - [ ] Reorganize transport controls on compact player bar on mobile
   - [ ] Move Play/Pause where Airplay button is

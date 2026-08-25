@@ -124,4 +124,20 @@ class SubscriptionManager {
         )
         return (try? modelContext.fetch(descriptor)) ?? []
     }
+
+    /// The feed URL of every currently-subscribed podcast.
+    func subscribedFeedURLs() -> Set<String> {
+        Set(allPodcasts().map(\.feedURL))
+    }
+
+    /// Unsubscribe from whichever podcast is currently subscribed at this feed URL, if any.
+    /// - Returns: true if a matching podcast was found and unsubscribed.
+    @discardableResult
+    func unsubscribe(feedURL: String) -> Bool {
+        let descriptor = FetchDescriptor<Podcast>(
+            predicate: #Predicate { $0.feedURL == feedURL }
+        )
+        guard let podcast = (try? modelContext.fetch(descriptor))?.first else { return false }
+        return unsubscribe(podcast: podcast)
+    }
 }

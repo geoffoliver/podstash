@@ -128,10 +128,11 @@ class PodcastSearchCoordinator: ObservableObject {
     @Published var results: [PodcastSearchResult] = []
     @Published var errorMessage: String? = nil
 
-    // Keyed by feedURL so each result row can track its own add/added/error state
+    // Keyed by feedURL so each result row can track its own add/remove/error state
     // independently while the list stays visible.
     @Published var addingFeedURL: String? = nil
-    @Published var addedFeedURLs: Set<String> = []
+    @Published var removingFeedURL: String? = nil
+    @Published var subscribedFeedURLs: Set<String> = []
     @Published var rowErrorMessages: [String: String] = [:]
 
     private var modelContext: ModelContext?
@@ -149,7 +150,8 @@ class PodcastSearchCoordinator: ObservableObject {
         errorMessage = nil
         isSearching = false
         addingFeedURL = nil
-        addedFeedURLs = []
+        removingFeedURL = nil
+        subscribedFeedURLs = modelContext.map { SubscriptionManager(modelContext: $0).subscribedFeedURLs() } ?? []
         rowErrorMessages = [:]
         isPresented = true
     }
@@ -190,7 +192,7 @@ class PodcastSearchCoordinator: ObservableObject {
     }
 
     func addPodcast(_ result: PodcastSearchResult) {
-        guard let modelContext = modelContext, addingFeedURL == nil else { return }
+        guard let modelContext = modelContext, addingFeedURL == nil, removingFeedURL == nil else { return }
 
         rowErrorMessages[result.feedURL] = nil
         addingFeedURL = result.feedURL
@@ -201,14 +203,34 @@ class PodcastSearchCoordinator: ObservableObject {
 
             switch outcome {
             case .success(let newPodcast):
-                addedFeedURLs.insert(result.feedURL)
+                subscribedFeedURLs.insert(result.feedURL)
                 triggerRefreshAfterAdding?(newPodcast)
 
             case .alreadySubscribed:
+                subscribedFeedURLs.insert(result.feedURL)
                 rowErrorMessages[result.feedURL] = "Already subscribed"
 
             case .failure(let message):
                 rowErrorMessages[result.feedURL] = message
+            }
+        }
+    }
+
+    func removePodcast(_ result: PodcastSearchResult) {
+        guard let modelContext = modelContext, addingFeedURL == nil, removingFeedURL == nil else { return }
+
+        rowErrorMessages[result.feedURL] = nil
+        removingFeedURL = result.feedURL
+
+        Task {
+            let manager = SubscriptionManager(modelContext: modelContext)
+            let didUnsubscribe = manager.unsubscribe(feedURL: result.feedURL)
+            removingFeedURL = nil
+
+            if didUnsubscribe {
+                subscribedFeedURLs.remove(result.feedURL)
+            } else {
+                rowErrorMessages[result.feedURL] = "Couldn't unsubscribe"
             }
         }
     }
@@ -278,6 +300,16 @@ struct PodcastSearchSheet: View {
 private struct PodcastSearchResultRow: View {
     let result: PodcastSearchResult
     @ObservedObject var coordinator: PodcastSearchCoordinator
+    @State private var showingUnsubscribeAlert = false
+
+    private var rowState: PodcastSearchRowState {
+        PodcastSearchRowStatePolicy.state(
+            forFeedURL: result.feedURL,
+            subscribedFeedURLs: coordinator.subscribedFeedURLs,
+            addingFeedURL: coordinator.addingFeedURL,
+            removingFeedURL: coordinator.removingFeedURL
+        )
+    }
 
     var body: some View {
         HStack(spacing: 12) {
@@ -315,20 +347,32 @@ private struct PodcastSearchResultRow: View {
 
             Spacer(minLength: 8)
 
-            if coordinator.addingFeedURL == result.feedURL {
+            switch rowState {
+            case .adding, .removing:
                 ProgressView()
                     .controlSize(.small)
-            } else if coordinator.addedFeedURLs.contains(result.feedURL) {
-                Image(systemName: "checkmark.circle.fill")
-                    .foregroundStyle(.green)
-            } else {
+            case .subscribed:
+                Button("Unsubscribe", role: .destructive) {
+                    showingUnsubscribeAlert = true
+                }
+                .buttonStyle(.bordered)
+                .disabled(coordinator.addingFeedURL != nil || coordinator.removingFeedURL != nil)
+            case .notSubscribed:
                 Button("Add") {
                     coordinator.addPodcast(result)
                 }
                 .buttonStyle(.bordered)
-                .disabled(coordinator.addingFeedURL != nil)
+                .disabled(coordinator.addingFeedURL != nil || coordinator.removingFeedURL != nil)
             }
         }
         .padding(.vertical, 8)
+        .alert("Unsubscribe from Podcast?", isPresented: $showingUnsubscribeAlert) {
+            Button("Cancel", role: .cancel) { }
+            Button("Unsubscribe", role: .destructive) {
+                coordinator.removePodcast(result)
+            }
+        } message: {
+            Text("Are you sure you want to unsubscribe from \"\(result.title)\"? This will delete all downloaded episodes.")
+        }
     }
 }

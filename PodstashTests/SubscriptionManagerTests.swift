@@ -106,4 +106,40 @@ struct SubscriptionManagerTests {
         #expect(try context.fetch(FetchDescriptor<Podcast>()).isEmpty)
         #expect(try context.fetch(FetchDescriptor<Episode>()).isEmpty)
     }
+
+    @Test("unsubscribe(feedURL:) removes the podcast subscribed at that feed URL")
+    func unsubscribeByFeedURLRemovesMatchingPodcast() throws {
+        let context = try makeContext()
+        let manager = SubscriptionManager(modelContext: context)
+        _ = manager.subscribe(title: "Show", feedURL: "https://example.com/feed.xml")
+
+        let result = manager.unsubscribe(feedURL: "https://example.com/feed.xml")
+
+        #expect(result == true)
+        #expect(try context.fetch(FetchDescriptor<Podcast>()).isEmpty)
+    }
+
+    @Test("unsubscribe(feedURL:) returns false and changes nothing for an unknown feed URL")
+    func unsubscribeByFeedURLIgnoresUnknownFeedURL() throws {
+        let context = try makeContext()
+        let manager = SubscriptionManager(modelContext: context)
+        _ = manager.subscribe(title: "Show", feedURL: "https://example.com/feed.xml")
+
+        let result = manager.unsubscribe(feedURL: "https://example.com/other.xml")
+
+        #expect(result == false)
+        #expect(try context.fetch(FetchDescriptor<Podcast>()).count == 1)
+    }
+
+    @Test("subscribedFeedURLs returns the feed URL of every subscribed podcast")
+    func subscribedFeedURLsReturnsAllFeedURLs() throws {
+        let context = try makeContext()
+        let manager = SubscriptionManager(modelContext: context)
+        _ = manager.subscribe(title: "A", feedURL: "https://example.com/a.xml")
+        _ = manager.subscribe(title: "B", feedURL: "https://example.com/b.xml")
+
+        let feedURLs = manager.subscribedFeedURLs()
+
+        #expect(feedURLs == ["https://example.com/a.xml", "https://example.com/b.xml"])
+    }
 }

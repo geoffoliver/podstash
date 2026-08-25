@@ -20,6 +20,9 @@ extension UTType {
 struct ContentView: View {
     @EnvironmentObject var opmlCoordinator: OPMLImportCoordinator
     @EnvironmentObject var refreshCoordinator: RefreshCoordinator
+    // Separate from refreshCoordinator so this view's frequent progress-tick re-renders (see
+    // RefreshProgress.swift) don't propagate to other views that hold RefreshCoordinator itself.
+    @EnvironmentObject var refreshProgress: RefreshProgress
     @EnvironmentObject var audioPlayer: AudioPlayerManager
     // On compact width (iPhone), NavigationSplitView collapses sidebar/detail into a single-
     // column push/pop stack rather than showing them side by side - only the topmost column is
@@ -75,8 +78,8 @@ struct ContentView: View {
             // never overlap the floating player bar.
             if refreshCoordinator.isRefreshing {
                 RefreshStatusBar(
-                    currentPodcastTitle: refreshCoordinator.currentPodcastTitle,
-                    progress: refreshCoordinator.progress,
+                    currentPodcastTitle: refreshProgress.currentPodcastTitle,
+                    progress: refreshProgress.progress,
                     onCancel: { refreshCoordinator.cancelRefresh() }
                 )
                 .transition(.move(edge: .bottom).combined(with: .opacity))
@@ -205,8 +208,8 @@ struct ContentView: View {
             Group {
                 if refreshCoordinator.isRefreshing {
                     RefreshStatusBar(
-                        currentPodcastTitle: refreshCoordinator.currentPodcastTitle,
-                        progress: refreshCoordinator.progress,
+                        currentPodcastTitle: refreshProgress.currentPodcastTitle,
+                        progress: refreshProgress.progress,
                         onCancel: { refreshCoordinator.cancelRefresh() }
                     )
                     .transition(.move(edge: .bottom).combined(with: .opacity))
@@ -365,6 +368,9 @@ struct PodcastListView: View {
     // NavigationSplitView column transition into the podcast's own detail view and silently
     // fail to fire (the alert then belongs to a sidebar view that's mid-teardown).
     @State private var pendingUnsubscribeIDs = Set<UUID>()
+    // Cached result of computeDownloadedUnplayedCounts(), recomputed off the render path - see
+    // that function's doc comment for why it must never be called directly from `body`.
+    @State private var downloadedUnplayedCounts: [UUID: Int] = [:]
     @FocusState private var isFocused: Bool
 
     // Sentinel tag so the Queue row participates in the List's real selection mechanism,
@@ -382,13 +388,19 @@ struct PodcastListView: View {
         multiSelection.subtracting([Self.queueTag])
     }
 
-    /// Downloaded+unplayed episode counts keyed by podcast ID. Must be called ONCE per body
-    /// evaluation and the result reused (see `body` below) - this was briefly a computed `var`
-    /// referenced directly inside the podcast ForEach, which meant it silently rebuilt the
-    /// entire dictionary from scratch for every single row (38 podcasts = 38 full rebuilds per
-    /// render, growing worse as more got downloaded/played). That's what caused both the click
-    /// lag and the refresh slowdown - a refresh triggers many @Query updates, and each one
-    /// re-paid that same O(podcasts x records) cost.
+    /// Downloaded+unplayed episode counts keyed by podcast ID. MUST NEVER be called directly from
+    /// `body` - only from the off-render-path recompute triggered by `.task` below (see
+    /// `badgeRecomputeSignal`/`recomputeDownloadedUnplayedCounts`). It does a real
+    /// `modelContext.fetch(...)` (and, via PlaybackRecordStore.states, another one), and calling
+    /// that synchronously during body evaluation - on the same ModelContext `@Query` is also
+    /// watching - was observed to send SwiftUI's Observation graph into a self-sustaining
+    /// invalidate/re-render loop: body renders -> this fetches -> the fetch registers as a graph
+    /// change -> body renders again, immediately, forever. Measured at ~70 calls/second, pegging
+    /// the main thread at ~100% CPU until force-quit. This was previously a computed `var`
+    /// referenced directly inside the podcast ForEach, which additionally rebuilt the entire
+    /// dictionary from scratch for every single row (38 podcasts = 38 full rebuilds per render) -
+    /// fixed by computing it once per render into a local, but that still left the once-per-render
+    /// call sitting directly in body, which is what caused the render-loop above.
     ///
     /// Played-state used to come from a `@Query` over every `isPlayed == true` PlaybackRecord -
     /// harmless when Episode rows (and their play state) got pruned by retention, but under the
@@ -447,9 +459,26 @@ struct PodcastListView: View {
         return counts
     }
 
+    /// Cheap, pure signal combining the @Query'd collections computeDownloadedUnplayedCounts
+    /// depends on - safe to read directly in body (no SwiftData fetch, just counts/booleans
+    /// already being tracked) so `.task(id:)` below can fire a recompute immediately when a
+    /// refresh, download, or queue change makes the counts stale, without re-running the actual
+    /// fetch on every render the way the old inline call did.
+    private var badgeRecomputeSignal: Int {
+        var hasher = Hasher()
+        hasher.combine(podcasts.count)
+        hasher.combine(downloadedEpisodesQuery.count)
+        hasher.combine(queuedRecords.count)
+        hasher.combine(refreshCoordinator.isRefreshing)
+        return hasher.finalize()
+    }
+
+    private func recomputeDownloadedUnplayedCounts() {
+        downloadedUnplayedCounts = computeDownloadedUnplayedCounts()
+    }
+
     var body: some View {
         let queueCount = queuedRecords.count
-        let downloadedUnplayedCounts = computeDownloadedUnplayedCounts()
 
         List(selection: $multiSelection) {
             // Queue section at top
@@ -514,6 +543,24 @@ struct PodcastListView: View {
                             }
                     }
                 }
+            }
+        }
+        // Recomputes badge counts off the render path - see computeDownloadedUnplayedCounts's
+        // doc comment for why this can never move into body directly. Fires immediately when
+        // badgeRecomputeSignal changes (refresh progress, a download finishing, a queue change)...
+        .task(id: badgeRecomputeSignal) {
+            recomputeDownloadedUnplayedCounts()
+        }
+        // ...and this is the safety net for the cases that signal doesn't cover - e.g. marking a
+        // downloaded-but-unqueued episode played from PodcastDetailView doesn't change any of
+        // podcasts/downloadedEpisodesQuery/queuedRecords here, so nothing would otherwise tell
+        // this view its badge counts just went stale. A low-frequency poll, not a per-render
+        // fetch, so unlike the old inline call it can't feed back into a render loop.
+        .task {
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(3))
+                guard !Task.isCancelled else { return }
+                recomputeDownloadedUnplayedCounts()
             }
         }
         #if !os(macOS)

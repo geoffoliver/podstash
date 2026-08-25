@@ -127,16 +127,24 @@ nonisolated class RSSFeedParser: NSObject, XMLParserDelegate {
         return formatter
     }()
 
+    // A feed's pubDate format is consistent across all its items, so once the first item's
+    // format is found, every later item should hit on the first try rather than re-running the
+    // full cascade below - measured at ~1/3 of total parse time on real feeds when every item
+    // retried all 6 DateFormatters/ISO8601DateFormatters from scratch. See OrderedFallbackParser.
+    private lazy var publishDateParser: OrderedFallbackParser<String, Date> = {
+        var parsers: [(String) -> Date?] = dateFormatters.map { formatter in
+            { text in formatter.date(from: text) }
+        }
+        parsers.append { [isoDateFormatter] text in isoDateFormatter.date(from: text) }
+        parsers.append { [isoDateFormatterNoFractionalSeconds] text in isoDateFormatterNoFractionalSeconds.date(from: text) }
+        return OrderedFallbackParser(parsers: parsers)
+    }()
+
     /// Returns nil, rather than "now", when the string doesn't match any known format - a
     /// silent "now" fallback previously made unparseable-but-old episodes sort as the newest
     /// thing in the feed and get swept up by auto-download.
     private func parsePublishDate(_ text: String) -> Date? {
-        for formatter in dateFormatters {
-            if let date = formatter.date(from: text) {
-                return date
-            }
-        }
-        return isoDateFormatter.date(from: text) ?? isoDateFormatterNoFractionalSeconds.date(from: text)
+        publishDateParser.parse(text)
     }
     
     func parse(data: Data) -> ParsedPodcast? {

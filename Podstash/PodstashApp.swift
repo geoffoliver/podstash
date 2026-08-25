@@ -660,6 +660,7 @@ struct PodstashApp: App {
             .environmentObject(podcastSearchCoordinator)
             .environmentObject(opmlCoordinator)
             .environmentObject(refreshCoordinator)
+            .environmentObject(refreshCoordinator.progressState)
             .environmentObject(audioPlayer)
             .environmentObject(audioPlayer.progress)
             .environmentObject(downloadManager)

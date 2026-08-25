@@ -13,14 +13,16 @@ import Combine
 @MainActor
 class RefreshCoordinator: ObservableObject {
     @Published var isRefreshing: Bool = false
-    @Published var currentPodcastTitle: String?
-    @Published var progress: (current: Int, total: Int)?
     @Published var refreshCompleted: String?
     // Measured height of RefreshStatusBar when it's showing, on iOS only - NavigationSplitView's
     // detail column doesn't shrink in response to a `.safeAreaInset` applied around the whole
     // split view (same quirk as reservePlayerBarSpace), so FloatingPlayerBar there needs this to
     // explicitly clear it rather than relying on layout to keep them apart.
     @Published var statusBarHeight: CGFloat = 0
+    // High-frequency progress ticks live here, not as @Published on this object - see
+    // RefreshProgress.swift for why the split matters. Only ContentView's RefreshStatusBar sites
+    // should observe this directly; other views (PodcastListView) hold RefreshCoordinator itself.
+    let progressState = RefreshProgress()
 
     private var modelContext: ModelContext?
     private var settings: AppSettings?
@@ -43,8 +45,8 @@ class RefreshCoordinator: ObservableObject {
         refreshTask?.cancel()
         refreshTask = nil
         isRefreshing = false
-        currentPodcastTitle = nil
-        progress = nil
+        progressState.currentPodcastTitle = nil
+        progressState.progress = nil
         refreshCompleted = "Refresh cancelled."
         
         // Auto-clear after 2 seconds
@@ -83,22 +85,22 @@ class RefreshCoordinator: ObservableObject {
         guard let modelContext = modelContext, let settings = settings else { return }
         
         isRefreshing = true
-        currentPodcastTitle = nil
+        progressState.currentPodcastTitle = nil
         refreshCompleted = nil
-        
+
         let fetcher = FeedFetcher(modelContext: modelContext, settings: settings, downloadManager: downloadManager)
-        
+
         let results: [Podcast: Result<Void, Error>]
-        
+
         if let podcasts = podcasts {
             results = await fetcher.fetchFeeds(for: podcasts) { title, current, total in
-                self.currentPodcastTitle = title
-                self.progress = (current, total)
+                self.progressState.currentPodcastTitle = title
+                self.progressState.progress = (current, total)
             }
         } else {
             results = await fetcher.fetchAllFeeds { title, current, total in
-                self.currentPodcastTitle = title
-                self.progress = (current, total)
+                self.progressState.currentPodcastTitle = title
+                self.progressState.progress = (current, total)
             }
         }
         
@@ -132,8 +134,8 @@ class RefreshCoordinator: ObservableObject {
         }
         
         isRefreshing = false
-        currentPodcastTitle = nil
-        progress = nil
+        progressState.currentPodcastTitle = nil
+        progressState.progress = nil
         refreshCompleted = message
         
         // Auto-clear after 3 seconds

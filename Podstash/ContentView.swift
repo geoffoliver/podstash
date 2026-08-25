@@ -1152,7 +1152,11 @@ struct EpisodeDetailView: View {
                     ) {
                         artworkPlaceholder
                     }
-                    .frame(maxWidth: 300, maxHeight: 300)
+                    // Fixed, not maxWidth/maxHeight - EpisodeThumbnail wraps its own
+                    // GeometryReader, and inside this ScrollView's unbounded height proposal a
+                    // GeometryReader given only a cap (rather than a concrete value) collapses
+                    // toward zero instead of filling up to that cap.
+                    .frame(width: 300, height: 300)
                     .cornerRadius(16)
                     .shadow(radius: 10)
                     

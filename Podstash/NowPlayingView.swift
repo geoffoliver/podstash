@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import SwiftData
 import AVKit
 
 #if os(iOS) || os(tvOS)
@@ -36,238 +37,454 @@ struct AirPlayButton: View {
 struct NowPlayingView: View {
     @EnvironmentObject var audioPlayer: AudioPlayerManager
     @EnvironmentObject var playbackProgress: PlaybackProgress
+    @Environment(\.modelContext) private var modelContext
     @State private var isFullscreenPresented = false
     @State private var showingTimeRemaining = false
-    // Measured once via the background GeometryReader below, not read inline where the video
-    // surface is laid out - a GeometryReader used as content (rather than a background probe)
-    // has no fixed ideal size of its own, so it gets squeezed by the VStack's Spacers competing
-    // for vertical space instead of actually reflecting the panel's width.
-    @State private var panelWidth: CGFloat = 0
 
     var body: some View {
         if let episode = audioPlayer.currentEpisode {
-            VStack(spacing: 20) {
-                HStack {
-                    Spacer()
-                    #if os(macOS)
-                    Button {
-                        audioPlayer.showMiniPlayer()
-                    } label: {
-                        Label("Mini Player", systemImage: "pip.enter")
-                    }
-                    .help("Open mini player window")
-                    #endif
-                    AirPlayButton()
-                        .frame(width: 28, height: 28)
+            #if os(macOS)
+            macOSPlayerBody(episode: episode)
+            #else
+            iOSPlayerBody(episode: episode)
+                .onAppear { audioPlayer.setNowPlayingSurfaceVisible(true) }
+                .onDisappear { audioPlayer.setNowPlayingSurfaceVisible(false) }
+                .fullScreenCover(isPresented: $isFullscreenPresented) {
+                    FullscreenVideoPlayerView(player: audioPlayer.playerForVideoSurface)
+                        .ignoresSafeArea()
                 }
-                .padding()
+            #endif
+        } else {
+            emptyState
+        }
+    }
+
+    private var emptyState: some View {
+        VStack(spacing: 16) {
+            Image(systemName: "antenna.radiowaves.left.and.right")
+                .font(.system(size: 64))
+                .foregroundStyle(.secondary)
+
+            Text("No Episode Playing")
+                .font(.title2)
+                .fontWeight(.semibold)
+
+            Text("Select an episode from your podcasts to start listening")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+        }
+        .padding()
+    }
+
+    // MARK: - iOS (Apple Podcasts-style full screen player)
+
+    #if !os(macOS)
+    private func iOSPlayerBody(episode: Episode) -> some View {
+        GeometryReader { proxy in
+            let artworkWidth = max(proxy.size.width - 88, 0)
+
+            ZStack {
+                backdrop(episode: episode, size: proxy.size)
+
+                // No flexible Spacers here on purpose - this VStack hugs its natural content
+                // size and ZStack's default center alignment splits any leftover height evenly
+                // above/below. An earlier version used multiple Spacer(minLength:) elements to
+                // fill the sheet's full height, but their split wasn't even in practice (likely
+                // because the nested GeometryReader inside EpisodeThumbnail confuses the VStack's
+                // flexibility calculation), which dumped nearly all the slack into one gap
+                // between the transport controls and the volume row.
+                VStack(spacing: 0) {
+                    artworkOrVideoSurface(episode: episode, availableWidth: artworkWidth)
+                        .id(episode.id)
+
+                    if VideoInlinePolicy.showMediaKindToggle(hasVideoURL: episode.videoURL != nil) {
+                        Picker("Media", selection: Binding(
+                            get: { (audioPlayer.currentMediaKind == .video && audioPlayer.isVideoFrameVisible) ? MediaKind.video : .audio },
+                            set: { audioPlayer.setDisplayMediaKind($0) }
+                        )) {
+                            Text("Audio").tag(MediaKind.audio)
+                            Text("Video").tag(MediaKind.video)
+                        }
+                        .pickerStyle(.segmented)
+                        .padding(.top, 16)
+                    }
+
+                    episodeInfoRow(episode: episode)
+                        .padding(.top, 28)
+
+                    progressSection
+                        .padding(.top, 20)
+
+                    transportControlsRow
+                        .padding(.top, 28)
+
+                    bottomIconsRow
+                        .padding(.top, 28)
+                }
+                .padding(.horizontal, 24)
+                .padding(.vertical, 16)
+            }
+        }
+    }
+
+    private func backdrop(episode: Episode, size: CGSize) -> some View {
+        EpisodeThumbnail(episode: episode, podcast: audioPlayer.currentPodcast) {
+            Color.gray.opacity(0.3)
+        }
+        .frame(width: size.width, height: size.height)
+        .clipped()
+        .blur(radius: 50, opaque: true)
+        // A Material, not a fixed black gradient - materials adapt automatically between light
+        // and dark system appearance, so the backdrop keeps an artwork-tinted ambiance without
+        // permanently forcing a dark look the way a hardcoded black scrim would.
+        .overlay(.regularMaterial)
+        .ignoresSafeArea()
+    }
+
+    private func artworkOrVideoSurface(episode: Episode, availableWidth: CGFloat) -> some View {
+        Group {
+            if audioPlayer.currentMediaKind == .video && audioPlayer.isVideoFrameVisible {
+                VideoPlayerSurface(player: audioPlayer.playerForVideoSurface)
+                    .frame(width: availableWidth, height: availableWidth * 9.0 / 16.0)
+                    .cornerRadius(12)
+                    .shadow(color: .black.opacity(0.4), radius: 16, y: 8)
+                    .overlay(alignment: .topTrailing) {
+                        Button {
+                            isFullscreenPresented = true
+                        } label: {
+                            Image(systemName: "arrow.up.left.and.arrow.down.right")
+                                .font(.body)
+                                .foregroundStyle(.white)
+                                .padding(8)
+                                .background(.black.opacity(0.5), in: Circle())
+                        }
+                        .padding(8)
+                    }
+                    // Always white-on-black, not adaptive - this button sits directly on top of
+                    // the video image itself (not the backdrop scrim), which is arbitrary footage
+                    // rather than something that tracks system appearance.
+            } else {
+                EpisodeThumbnail(episode: episode, podcast: audioPlayer.currentPodcast) {
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(Color.gray.opacity(0.2))
+                        .overlay(
+                            Image(systemName: "music.note")
+                                .font(.system(size: 48))
+                                .foregroundStyle(.secondary)
+                        )
+                }
+                .frame(width: availableWidth, height: availableWidth)
+                .cornerRadius(12)
+                .shadow(color: .black.opacity(0.4), radius: 16, y: 8)
+            }
+        }
+    }
+
+    private func episodeInfoRow(episode: Episode) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(episode.publishDate.formatted(date: .abbreviated, time: .omitted))
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+
+                Text(episode.title)
+                    .font(.title3.weight(.semibold))
+                    .foregroundStyle(.primary)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
+
+                if let podcast = audioPlayer.currentPodcast {
+                    Text(podcast.title)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+            }
+
+            Spacer(minLength: 8)
+
+            Menu {
+                Button {
+                    markAsPlayed(episode)
+                } label: {
+                    Label("Mark as Played", systemImage: "checkmark.circle")
+                }
+            } label: {
+                Image(systemName: "ellipsis")
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(.primary)
+                    .frame(width: 32, height: 32)
+                    .background(Color.primary.opacity(0.1), in: Circle())
+            }
+        }
+    }
+
+    private var progressSection: some View {
+        VStack(spacing: 6) {
+            Slider(
+                value: Binding(
+                    get: { playbackProgress.currentTime },
+                    set: { audioPlayer.seek(to: $0) }
+                ),
+                in: 0...max(playbackProgress.duration, 1)
+            )
+            .tint(.primary)
+
+            HStack {
+                Text(PlaybackTimeDisplayPolicy.elapsedLabel(
+                    currentTime: playbackProgress.currentTime,
+                    duration: playbackProgress.duration,
+                    showingRemaining: showingTimeRemaining
+                ))
+                    .contentShape(Rectangle())
+                    .onTapGesture { showingTimeRemaining.toggle() }
 
                 Spacer()
 
-                // Episode artwork, or (iOS, video episodes) the inline video surface
-                artworkOrVideoSurface(episode: episode)
-                    .id(episode.id)
+                Text(PlaybackTimeDisplayPolicy.elapsedLabel(
+                    currentTime: playbackProgress.currentTime,
+                    duration: playbackProgress.duration,
+                    showingRemaining: true
+                ))
+            }
+            .font(.caption)
+            .monospacedDigit()
+            .foregroundStyle(.secondary)
+        }
+    }
 
-                // Audio/Video toggle - shown whenever the episode has a video enclosure at all.
-                // For a video-only episode, selecting "Audio" doesn't switch sources (there's
-                // nothing to switch to) - it hides the video frame so the user can listen without
-                // looking at it. See VideoDisplayPolicy.
-                #if !os(macOS)
-                if VideoInlinePolicy.showMediaKindToggle(hasVideoURL: episode.videoURL != nil) {
-                    Picker("Media", selection: Binding(
-                        get: { (audioPlayer.currentMediaKind == .video && audioPlayer.isVideoFrameVisible) ? MediaKind.video : .audio },
-                        set: { audioPlayer.setDisplayMediaKind($0) }
-                    )) {
-                        Text("Audio").tag(MediaKind.audio)
-                        Text("Video").tag(MediaKind.video)
+    private var transportControlsRow: some View {
+        HStack {
+            speedButton
+                .frame(width: 44, alignment: .leading)
+
+            Spacer()
+
+            HStack(spacing: 36) {
+                rewindButton
+                playPauseButton
+                forwardButton
+            }
+
+            Spacer()
+
+            Color.clear.frame(width: 44, height: 1)
+        }
+    }
+
+    private var speedButton: some View {
+        Menu {
+            ForEach([0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0], id: \.self) { speed in
+                Button {
+                    audioPlayer.setPlaybackRate(Float(speed))
+                } label: {
+                    HStack {
+                        Text("\(speed, specifier: "%.2f")x")
+                        if playbackProgress.playbackRate == Float(speed) {
+                            Image(systemName: "checkmark")
+                        }
                     }
-                    .pickerStyle(.segmented)
-                    .padding(.horizontal)
                 }
-                #endif
+            }
+        } label: {
+            Text("\(playbackProgress.playbackRate, specifier: "%g")×")
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(.primary)
+        }
+        // Menu tints its label with the system accent color regardless of foregroundStyle on
+        // the label content - .tint here is what actually overrides that to match the neutral
+        // primary/secondary palette the rest of this screen uses.
+        .tint(.primary)
+    }
 
-                // Episode Info
-                VStack(spacing: 8) {
-                    Text(episode.title)
-                        .font(.title2)
-                        .fontWeight(.semibold)
-                        .multilineTextAlignment(.center)
-                        .lineLimit(2)
-                    
-                    if let podcast = audioPlayer.currentPodcast {
-                        Text(podcast.title)
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    }
+    private var rewindButton: some View {
+        Button {
+            audioPlayer.skip(by: -15)
+        } label: {
+            Image(systemName: "gobackward.15")
+                .font(.system(size: 26))
+                .foregroundStyle(.primary)
+                .frame(width: 44, height: 44)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var playPauseButton: some View {
+        Button {
+            audioPlayer.togglePlayPause()
+        } label: {
+            Image(systemName: audioPlayer.isPlaying ? "pause.fill" : "play.fill")
+                .font(.system(size: 38))
+                .foregroundStyle(.primary)
+                .frame(width: 64, height: 64)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var forwardButton: some View {
+        Button {
+            audioPlayer.skip(by: 30)
+        } label: {
+            Image(systemName: "goforward.30")
+                .font(.system(size: 26))
+                .foregroundStyle(.primary)
+                .frame(width: 44, height: 44)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var bottomIconsRow: some View {
+        HStack {
+            Spacer()
+            AirPlayButton()
+                .frame(width: 28, height: 28)
+            Spacer()
+        }
+    }
+
+    private func markAsPlayed(_ episode: Episode) {
+        let record = PlaybackRecordStore.markPlayed(episode: episode, in: modelContext)
+        record.queuePosition = nil
+        record.playbackPosition = 0
+        try? modelContext.save()
+    }
+    #endif
+
+    // MARK: - macOS (legacy panel layout; NowPlayingView is unreachable from the macOS UI today
+    // - Queue is the default detail view - but this keeps the type compiling with a sane, if
+    // simpler, layout should that change.)
+
+    #if os(macOS)
+    private func macOSPlayerBody(episode: Episode) -> some View {
+        VStack(spacing: 20) {
+            HStack {
+                Spacer()
+                Button {
+                    audioPlayer.showMiniPlayer()
+                } label: {
+                    Label("Mini Player", systemImage: "pip.enter")
+                }
+                .help("Open mini player window")
+                AirPlayButton()
+                    .frame(width: 28, height: 28)
+            }
+            .padding()
+
+            Spacer()
+
+            episodeThumbnail(episode: episode)
+                .id(episode.id)
+
+            VStack(spacing: 8) {
+                Text(episode.title)
+                    .font(.title2)
+                    .fontWeight(.semibold)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2)
+
+                if let podcast = audioPlayer.currentPodcast {
+                    Text(podcast.title)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .padding(.horizontal)
+
+            Spacer()
+
+            VStack(spacing: 8) {
+                Slider(
+                    value: Binding(
+                        get: { playbackProgress.currentTime },
+                        set: { audioPlayer.seek(to: $0) }
+                    ),
+                    in: 0...max(playbackProgress.duration, 1)
+                )
+                .padding(.horizontal)
+
+                HStack {
+                    Text(PlaybackTimeDisplayPolicy.elapsedLabel(
+                        currentTime: playbackProgress.currentTime,
+                        duration: playbackProgress.duration,
+                        showingRemaining: showingTimeRemaining
+                    ))
+                        .font(.footnote)
+                        .monospacedDigit()
+                        .foregroundStyle(.secondary)
+                        .contentShape(Rectangle())
+                        .onTapGesture { showingTimeRemaining.toggle() }
+
+                    Spacer()
+
+                    Text(PlaybackTimeDisplayPolicy.format(playbackProgress.duration))
+                        .font(.footnote)
+                        .monospacedDigit()
+                        .foregroundStyle(.secondary)
                 }
                 .padding(.horizontal)
-                
-                Spacer()
-                
-                // Progress Slider
-                VStack(spacing: 8) {
-                    Slider(
-                        value: Binding(
-                            get: { playbackProgress.currentTime },
-                            set: { audioPlayer.seek(to: $0) }
-                        ),
-                        in: 0...max(playbackProgress.duration, 1)
-                    )
-                    .padding(.horizontal)
+            }
 
-                    HStack {
-                        Text(PlaybackTimeDisplayPolicy.elapsedLabel(
-                            currentTime: playbackProgress.currentTime,
-                            duration: playbackProgress.duration,
-                            showingRemaining: showingTimeRemaining
-                        ))
-                            .font(.footnote)
-                            .monospacedDigit()
-                            .foregroundStyle(.secondary)
-                            .contentShape(Rectangle())
-                            .onTapGesture { showingTimeRemaining.toggle() }
-
-                        Spacer()
-
-                        Text(PlaybackTimeDisplayPolicy.format(playbackProgress.duration))
-                            .font(.footnote)
-                            .monospacedDigit()
-                            .foregroundStyle(.secondary)
-                    }
-                    .padding(.horizontal)
+            HStack(spacing: 40) {
+                Button {
+                    audioPlayer.skip(by: -15)
+                } label: {
+                    Image(systemName: "gobackward.15")
+                        .font(.title)
+                        .frame(minWidth: 44, minHeight: 44)
+                        .contentShape(Rectangle())
                 }
 
-                // Playback Controls
-                HStack(spacing: 40) {
-                    // Skip Back 15s
-                    Button {
-                        audioPlayer.skip(by: -15)
-                    } label: {
-                        Image(systemName: "gobackward.15")
-                            .font(.title)
-                            .frame(minWidth: 44, minHeight: 44)
-                            .contentShape(Rectangle())
-                    }
-
-                    // Play/Pause
-                    Button {
-                        audioPlayer.togglePlayPause()
-                    } label: {
-                        Image(systemName: audioPlayer.isPlaying ? "pause.circle.fill" : "play.circle.fill")
-                            .font(.system(size: 64))
-                    }
-
-                    // Skip Forward 30s
-                    Button {
-                        audioPlayer.skip(by: 30)
-                    } label: {
-                        Image(systemName: "goforward.30")
-                            .font(.title)
-                            .frame(minWidth: 44, minHeight: 44)
-                            .contentShape(Rectangle())
-                    }
+                Button {
+                    audioPlayer.togglePlayPause()
+                } label: {
+                    Image(systemName: audioPlayer.isPlaying ? "pause.circle.fill" : "play.circle.fill")
+                        .font(.system(size: 64))
                 }
-                .padding()
-                
-                // Playback Speed
-                Menu {
-                    ForEach([0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0], id: \.self) { speed in
-                        Button(action: {
-                            audioPlayer.setPlaybackRate(Float(speed))
-                        }) {
-                            HStack {
-                                Text("\(speed, specifier: "%.2f")x")
-                                if playbackProgress.playbackRate == Float(speed) {
-                                    Image(systemName: "checkmark")
-                                }
+
+                Button {
+                    audioPlayer.skip(by: 30)
+                } label: {
+                    Image(systemName: "goforward.30")
+                        .font(.title)
+                        .frame(minWidth: 44, minHeight: 44)
+                        .contentShape(Rectangle())
+                }
+            }
+            .padding()
+
+            Menu {
+                ForEach([0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0], id: \.self) { speed in
+                    Button {
+                        audioPlayer.setPlaybackRate(Float(speed))
+                    } label: {
+                        HStack {
+                            Text("\(speed, specifier: "%.2f")x")
+                            if playbackProgress.playbackRate == Float(speed) {
+                                Image(systemName: "checkmark")
                             }
                         }
                     }
-                } label: {
-                    HStack {
-                        Image(systemName: "gauge")
-                        Text("\(playbackProgress.playbackRate, specifier: "%.2f")x")
-                    }
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 8)
-                    .background(.regularMaterial)
-                    .cornerRadius(20)
                 }
-                
-                Spacer()
-            }
-            .padding()
-            .background(
-                // A probe, not the sized content itself - reading geometry here (where this
-                // VStack's width is dictated by the sheet, not by its own children) is what
-                // avoids the Spacer-squeeze problem above.
-                GeometryReader { geometry in
-                    Color.clear
-                        .onAppear { panelWidth = geometry.size.width }
-                        .onChange(of: geometry.size.width) { _, newValue in panelWidth = newValue }
+            } label: {
+                HStack {
+                    Image(systemName: "gauge")
+                    Text("\(playbackProgress.playbackRate, specifier: "%.2f")x")
                 }
-            )
-            #if !os(macOS)
-            .onAppear { audioPlayer.setNowPlayingSurfaceVisible(true) }
-            .onDisappear { audioPlayer.setNowPlayingSurfaceVisible(false) }
-            .fullScreenCover(isPresented: $isFullscreenPresented) {
-                FullscreenVideoPlayerView(player: audioPlayer.playerForVideoSurface)
-                    .ignoresSafeArea()
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+                .background(.regularMaterial)
+                .cornerRadius(20)
             }
-            #endif
-        } else {
-            // Empty State
-            VStack(spacing: 16) {
-                Image(systemName: "antenna.radiowaves.left.and.right")
-                    .font(.system(size: 64))
-                    .foregroundStyle(.secondary)
 
-                Text("No Episode Playing")
-                    .font(.title2)
-                    .fontWeight(.semibold)
-                
-                Text("Select an episode from your podcasts to start listening")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-            }
-            .padding()
+            Spacer()
         }
+        .padding()
     }
-    
-    @ViewBuilder
-    private func artworkOrVideoSurface(episode: Episode) -> some View {
-        #if !os(macOS)
-        if audioPlayer.currentMediaKind == .video && audioPlayer.isVideoFrameVisible {
-            // Explicit width/height from panelWidth (measured by the background GeometryReader
-            // above), not .aspectRatio(fit) negotiating against the VStack's Spacers - that
-            // negotiation is driven by proposed *height*, which shrinks whenever a sibling like
-            // the Audio/Video toggle takes more vertical space, squeezing the video along with
-            // it even though there's plenty of width to spare.
-            let width = max(panelWidth - 32, 0)
-            VideoPlayerSurface(player: audioPlayer.playerForVideoSurface)
-                .frame(width: width, height: width * 9.0 / 16.0)
-                .cornerRadius(12)
-                .shadow(radius: 8)
-                .overlay(alignment: .topTrailing) {
-                    Button {
-                        isFullscreenPresented = true
-                    } label: {
-                        Image(systemName: "arrow.up.left.and.arrow.down.right")
-                            .font(.body)
-                            .foregroundStyle(.white)
-                            .padding(8)
-                            .background(.black.opacity(0.5), in: Circle())
-                    }
-                    .padding(8)
-                }
-        } else {
-            episodeThumbnail(episode: episode)
-        }
-        #else
-        episodeThumbnail(episode: episode)
-        #endif
-    }
+    #endif
 
     private func episodeThumbnail(episode: Episode) -> some View {
         EpisodeThumbnail(episode: episode, podcast: audioPlayer.currentPodcast) {
@@ -283,7 +500,6 @@ struct NowPlayingView: View {
         .cornerRadius(12)
         .shadow(radius: 8)
     }
-
 }
 
 // MARK: - Compact Player Bar (for iOS bottom bar)
@@ -343,16 +559,23 @@ struct CompactPlayerBar: View {
 
                 Spacer()
 
-                // AirPlay Button
-                AirPlayButton()
-                    .frame(width: 24, height: 24)
-
                 // Play/Pause Button
                 Button {
                     audioPlayer.togglePlayPause()
                 } label: {
                     Image(systemName: audioPlayer.isPlaying ? "pause.fill" : "play.fill")
                         .font(.title3)
+                        .frame(minWidth: 44, minHeight: 44)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+
+                // Skip Forward 30s
+                Button {
+                    audioPlayer.skip(by: 30)
+                } label: {
+                    Image(systemName: "goforward.30")
+                        .font(.body)
                         .frame(minWidth: 44, minHeight: 44)
                         .contentShape(Rectangle())
                 }
@@ -368,17 +591,9 @@ struct CompactPlayerBar: View {
                 showingNowPlaying = true
             }
             .sheet(isPresented: $showingNowPlaying) {
-                NavigationStack {
-                    NowPlayingView()
-                        .environmentObject(audioPlayer)
-                        .toolbar {
-                            ToolbarItem(placement: .cancellationAction) {
-                                Button("Done") {
-                                    showingNowPlaying = false
-                                }
-                            }
-                        }
-                }
+                NowPlayingView()
+                    .environmentObject(audioPlayer)
+                    .presentationDragIndicator(.visible)
             }
         }
     }

@@ -71,16 +71,18 @@
   - [x] If adding a feed for the first time, the most recent episode of a show
 - [x] Add ability to unsubscribe from "Search Podcasts" dialog in case someone subscribes to something on accident
 - [x] UI enhancement - Click/tap current time to change to time remaining and vise versa
-- [ ] Reorganize transport controls on compact player bar on mobile
-  - [ ] Move Play/Pause where Airplay button is
-  - [ ] Add fast foward and rewind controls around play/pause button
-- [ ] New feature: Download Missing Episodes - This should be an option in the queue that would let users download any episodes that are in the queue, but have not been downloaded. If this would cause any videos to download, prompt the user and ask them if they also want to download the videos -- we don't want to clog up their storage.
+- [x] Reorganize transport controls on compact player bar on mobile
+  - [x] Move Play/Pause where Airplay button is
+  - [x] Add fast foward and rewind controls around play/pause button
+- [ ] UI enhancement - Make the compact transport bar "float" like Apple Podcasts: an inset rounded-rect card with margins and a shadow, rather than a full-width bar flush against the edge. iOS and desktop both.
+- [ ] New feature: Download Missing Episodes - This should be an option in the queue that would let users download any episodes that are in the queue, but have not been downloaded. If this would cause any videos to download, prompt the user and ask them if they also want to download the videos -- we don't want to clog up their storage. It would also be rad if the menu item could show a count. So like, "Download 20 Missing Episodes".
 - [ ] CarPlay UI
 - [ ] Bug - When in use in the car, playback does not get paused when Maps gives directions or when Siri speaks
 - [ ] New feature: "downloads" manager - Maybe we can just use the queue for this? Show a progress circle like on podcast detail with option to cancel?
 
 # Maybe
 
+- [ ] In-app volume control (iOS Now Playing view) - there's no volume control anywhere in the app today. Considered adding a system-volume slider (MPVolumeView) to Now Playing to mirror Apple Podcasts, but pulled it since it's untested/unused elsewhere in the app. Worth its own pass if wanted.
 - [ ] Activity window - show sync status
 - [ ] "window" menu flashes different content when app is playing - shows extra options for maximizing/fullscreening window
 - [ ] macOS queue drag/drop ghost is a plain blue bar with title only - could match the real row look instead (artwork thumbnail, rounded corners, stacked title/podcast text)

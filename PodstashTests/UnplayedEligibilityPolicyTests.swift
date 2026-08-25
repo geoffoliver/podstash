@@ -96,6 +96,28 @@ struct UnplayedEligibilityPolicyTests {
         #expect(eligible == false)
     }
 
+    // MARK: - earliestEligibilityThreshold
+
+    @Test("earliestEligibilityThreshold is nil when there are no thresholds at all")
+    func earliestThresholdNilWhenEmpty() {
+        #expect(UnplayedEligibilityPolicy.earliestEligibilityThreshold([]) == nil)
+    }
+
+    @Test("earliestEligibilityThreshold is nil when every podcast has no threshold yet")
+    func earliestThresholdNilWhenAllNil() {
+        #expect(UnplayedEligibilityPolicy.earliestEligibilityThreshold([nil, nil]) == nil)
+    }
+
+    @Test("earliestEligibilityThreshold is the minimum of the non-nil thresholds, ignoring nils")
+    func earliestThresholdIsMinimumIgnoringNils() {
+        let earliest = Date.now.addingTimeInterval(-2000)
+        let middle = Date.now.addingTimeInterval(-1000)
+        let latest = Date.now
+
+        let result = UnplayedEligibilityPolicy.earliestEligibilityThreshold([latest, nil, earliest, middle])
+        #expect(result == earliest)
+    }
+
     // MARK: - advancedMostRecentlyPlayedDate
 
     @Test("advancedMostRecentlyPlayedDate adopts the newly played date when there was no prior value")

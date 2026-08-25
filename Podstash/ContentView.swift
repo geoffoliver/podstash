@@ -401,19 +401,20 @@ struct PodcastListView: View {
     /// pulling and hashing the entire played-history table in Swift.
     // Beyond the downloaded set above, UnplayedEligibilityPolicy also admits a non-downloaded
     // episode newer than its podcast's mostRecentlyPlayedDate (or, with no play history yet, the
-    // single newest known episode). That candidate set can't be expressed as one global query -
-    // the threshold differs per podcast - so it's one small bounded fetch per podcast (scoped to
-    // `publishDate >= threshold`, never the whole feed's back-catalog) rather than a full
-    // Episode-table scan, keeping this on the same footing as the original downloaded-only fetch
-    // performance-wise.
+    // single newest known episode). That threshold differs per podcast, but rather than one
+    // bounded fetch per podcast (which turned a refresh's frequent @Query-driven re-renders into
+    // O(podcasts) SQL round trips per render - 38 subscriptions meant 38 synchronous fetches on
+    // every progress tick, which is what made a refresh crawl and peg the CPU), this runs ONE
+    // fetch bounded by the earliest threshold across all podcasts. Each candidate still gets
+    // filtered against its own podcast's actual threshold below via isEligible, so the wider bound
+    // doesn't change which episodes end up counted - it just replaces N round trips with one.
     private func computeDownloadedUnplayedCounts() -> [UUID: Int] {
         var candidateEpisodes = downloadedEpisodesQuery
 
-        for podcast in podcasts {
-            guard let threshold = podcast.mostRecentlyPlayedDate ?? podcast.newestKnownPublishDate else { continue }
-            let podcastID = podcast.id
+        let perPodcastThresholds = podcasts.map { $0.mostRecentlyPlayedDate ?? $0.newestKnownPublishDate }
+        if let threshold = UnplayedEligibilityPolicy.earliestEligibilityThreshold(perPodcastThresholds) {
             let descriptor = FetchDescriptor<Episode>(
-                predicate: #Predicate<Episode> { $0.podcastID == podcastID && $0.publishDate >= threshold }
+                predicate: #Predicate<Episode> { $0.publishDate >= threshold }
             )
             if let recent = try? modelContext.fetch(descriptor) {
                 candidateEpisodes.append(contentsOf: recent)

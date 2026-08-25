@@ -29,6 +29,18 @@ enum UnplayedEligibilityPolicy {
         return publishDate >= newestKnownPublishDate
     }
 
+    /// The minimum of a set of per-podcast eligibility thresholds (each podcast's
+    /// `mostRecentlyPlayedDate ?? newestKnownPublishDate`, or nil if it has neither), ignoring
+    /// nils. Lets a caller gathering candidate episodes across many podcasts run one fetch bounded
+    /// by `publishDate >= earliestEligibilityThreshold(...)` instead of one bounded fetch per
+    /// podcast - each candidate still gets filtered against its own podcast's threshold via
+    /// `isEligible` afterward, so widening the fetch bound this way doesn't affect which episodes
+    /// end up counted, only how many round trips it takes to gather them. Nil (fetch nothing) only
+    /// when every podcast has no threshold yet.
+    static func earliestEligibilityThreshold(_ perPodcastThresholds: [Date?]) -> Date? {
+        perPodcastThresholds.compactMap { $0 }.min()
+    }
+
     /// Advances a podcast's "most recently played" watermark - monotonic, like
     /// `Podcast.newestKnownPublishDate`, so marking an older episode unplayed again doesn't roll
     /// this back.

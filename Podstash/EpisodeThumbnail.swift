@@ -57,24 +57,40 @@ struct EpisodeThumbnail<Placeholder: View>: View {
     }
 
     var body: some View {
-        ZStack(alignment: .bottomTrailing) {
-            CachedAsyncImage(
-                url: resolvedURL,
-                content: { image in
-                    image
-                        .resizable()
-                        .aspectRatio(contentMode: contentMode)
-                },
-                placeholder: placeholder
-            )
+        // GeometryReader, not a bare ZStack - every call site wraps this in an explicit
+        // .frame(width:height:) (see the doc comment above), so this always receives a firm,
+        // unambiguous proposal to relay, not the "ideal size" ambiguity that GeometryReader runs
+        // into when a parent's own size is still being negotiated (e.g. NowPlayingView's video
+        // surface). Without it, a .fill-mode image whose source aspect ratio isn't square renders
+        // *larger* than the frame in one dimension to cover it, which inflates the ZStack's own
+        // layout frame - and the bottomTrailing-aligned video badge then gets positioned against
+        // that inflated frame instead of the visible (clipped) square, so it can render partially
+        // or entirely outside the thumbnail. Explicitly framing + clipping the image to the
+        // measured size keeps the ZStack's frame (and the badge's alignment) sane regardless of
+        // the source image's aspect ratio.
+        GeometryReader { geometry in
+            ZStack(alignment: .bottomTrailing) {
+                CachedAsyncImage(
+                    url: resolvedURL,
+                    content: { image in
+                        image
+                            .resizable()
+                            .aspectRatio(contentMode: contentMode)
+                            .frame(width: geometry.size.width, height: geometry.size.height)
+                            .clipped()
+                    },
+                    placeholder: placeholder
+                )
+                .frame(width: geometry.size.width, height: geometry.size.height)
 
-            if showsVideoBadge {
-                Image(systemName: "video.fill")
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(.white)
-                    .padding(4)
-                    .background(.black.opacity(0.6), in: Circle())
-                    .padding(4)
+                if showsVideoBadge {
+                    Image(systemName: "video.fill")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .padding(4)
+                        .background(.black.opacity(0.6), in: Circle())
+                        .padding(4)
+                }
             }
         }
     }

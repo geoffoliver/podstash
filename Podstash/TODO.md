@@ -49,11 +49,12 @@
 - [x] Github release for x86 Macs
 - [x] Readme
 - [x] Docs
+- [x] UI enhancement (iOS) - podcast detail view's search field is always visible right below the title, unlike Queue's "drag down to reveal" search. The header (artwork/description) and Unplayed/All picker sit in a fixed VStack above a separate List, rather than inside the same scrollable container as the episode list, so the nav bar can't track scroll position to drive the reveal behavior. Fixing this means folding the header + picker into the episode List itself (e.g. as a Section), which would also let them scroll off-screen - worth doing anyway since the header eats a lot of vertical space on iPhone.
 - [x] Sparkle for auto-updates on macOS (iOS still needs TestFlight/App Store). CI signs and publishes `docs/appcast.xml` on every tagged release; toggle is in Settings → Updates.
 - [x] Sparkle is STILL BROKEN!! - fix was missing `com.apple.security.temporary-exception.mach-lookup.global-name` entitlement (`-spks`/`-spki`), required for a sandboxed app to talk to Sparkle's Installer.xpc. Bumped to 0.0.9; needs a real device test of "Check for Updates" from an older build before tagging.
 - [x] Launch screen
-- [ ] Tests?
-- [ ] TestFlight distribution
+- [x] Tests?
+- [x] TestFlight distribution
 - [ ] AppStore submission
 - [x] Bug (iOS) - Queue scrolling is incorrect when the Now Playing view is visible. Scrolling the queue all the way up leaves the last item partially hidden under the Now Playing view.
 - [x] Add video playback support - macOS: video opens in a separate QuickTime-style window (AVPlayerView); iOS: video plays inline in Now Playing with fullscreen toggle. Design finalized, see VIDEO_PLAYBACK_PLAN.md.
@@ -84,8 +85,5 @@
 # Maybe
 
 - [ ] In-app volume control (iOS Now Playing view) - there's no volume control anywhere in the app today. Considered adding a system-volume slider (MPVolumeView) to Now Playing to mirror Apple Podcasts, but pulled it since it's untested/unused elsewhere in the app. Worth its own pass if wanted.
-- [ ] Activity window - show sync status
-- [ ] "window" menu flashes different content when app is playing - shows extra options for maximizing/fullscreening window
 - [ ] macOS queue drag/drop ghost is a plain blue bar with title only - could match the real row look instead (artwork thumbnail, rounded corners, stacked title/podcast text)
 - [ ] macOS "Search Episodes" field (podcast detail) has a lighter background than "Search Queue" (queue view) - same `.searchable()` usage but they render with different bezel colors. Ruled out: toolbar item presence, explicit vs automatic placement, focus state. Suspect it's tied to podcast detail using a real SwiftUI `List` vs queue's NSTableView wrapper - try swapping the episode List to ScrollView/LazyVStack to test.
-- [x] UI enhancement (iOS) - podcast detail view's search field is always visible right below the title, unlike Queue's "drag down to reveal" search. The header (artwork/description) and Unplayed/All picker sit in a fixed VStack above a separate List, rather than inside the same scrollable container as the episode list, so the nav bar can't track scroll position to drive the reveal behavior. Fixing this means folding the header + picker into the episode List itself (e.g. as a Section), which would also let them scroll off-screen - worth doing anyway since the header eats a lot of vertical space on iPhone.

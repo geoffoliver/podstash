@@ -55,7 +55,6 @@
 - [x] Launch screen
 - [x] Tests?
 - [x] TestFlight distribution
-- [ ] AppStore submission
 - [x] Bug (iOS) - Queue scrolling is incorrect when the Now Playing view is visible. Scrolling the queue all the way up leaves the last item partially hidden under the Now Playing view.
 - [x] Add video playback support - macOS: video opens in a separate QuickTime-style window (AVPlayerView); iOS: video plays inline in Now Playing with fullscreen toggle. Design finalized, see VIDEO_PLAYBACK_PLAN.md.
   - [x] Phase 1 - Feed parsing: detect video enclosures (plain `<enclosure>`, `<media:content>`, `podcast:alternateEnclosure`/`source`, HLS skipped), store `videoURL`/`defaultMediaKind` on `Episode`
@@ -76,11 +75,12 @@
   - [x] Move Play/Pause where Airplay button is
   - [x] Add fast foward and rewind controls around play/pause button
 - [x] UI enhancement - Make the compact transport bar "float" like Apple Podcasts: an inset rounded-rect card with margins and a shadow, rather than a full-width bar flush against the edge. iOS and desktop both.
-- [ ] New feature: Download Missing Episodes - This should be an option in the queue that would let users download any episodes that are in the queue, but have not been downloaded. If this would cause any videos to download, prompt the user and ask them if they also want to download the videos -- we don't want to clog up their storage. It would also be rad if the menu item could show a count. So like, "Download 20 Missing Episodes".
-- [ ] Mobile UI enhancement - make list views more compact (edges of list should go to screen edges, for example).
-- [ ] CarPlay UI
 - [x] Bug - When in use in the car, playback does not get paused when Maps gives directions or when Siri speaks
+- [ ] Mobile UI enhancement - make list views more compact (edges of list should go to screen edges, for example).
+- [ ] New feature: Download Missing Episodes - This should be an option in the queue that would let users download any episodes that are in the queue, but have not been downloaded. If this would cause any videos to download, prompt the user and ask them if they also want to download the videos -- we don't want to clog up their storage. It would also be rad if the menu item could show a count. So like, "Download 20 Missing Episodes".
 - [ ] New feature: "downloads" manager - Maybe we can just use the queue for this since all the "unplayed" stuff shows up there automatically? Show a progress circle with an option to cancel just like on podcast detail view.
+- [ ] AppStore submission
+- [ ] CarPlay UI
 
 # Maybe
 

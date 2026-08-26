@@ -121,7 +121,7 @@ struct PodcastDetailView: View {
                     unsubscribe()
                 }
             } message: {
-                Text("Are you sure you want to unsubscribe from \"\(podcast.title)\"? This will delete all downloaded episodes.")
+                Text("Are you sure you want to unsubscribe from \"\(podcast.title)\"? This will delete all downloaded episodes and playback history for this show.")
             }
             .sheet(item: $episodeForInfoSheet) { episode in
                 EpisodeDetailView(episode: episode)

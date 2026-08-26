@@ -666,9 +666,9 @@ struct PodcastListView: View {
             if pendingUnsubscribeIDs.count == 1,
                let selectedID = pendingUnsubscribeIDs.first,
                let podcast = podcasts.first(where: { $0.id == selectedID }) {
-                Text("Are you sure you want to unsubscribe from \"\(podcast.title)\"? This will delete all downloaded episodes.")
+                Text("Are you sure you want to unsubscribe from \"\(podcast.title)\"? This will delete all downloaded episodes and playback history for this show.")
             } else {
-                Text("Are you sure you want to unsubscribe from \(pendingUnsubscribeIDs.count) podcasts? This will delete all downloaded episodes.")
+                Text("Are you sure you want to unsubscribe from \(pendingUnsubscribeIDs.count) podcasts? This will delete all downloaded episodes and playback history for these shows.")
             }
         }
         #if !os(macOS)

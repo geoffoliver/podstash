@@ -377,7 +377,7 @@ private struct PodcastSearchResultRow: View {
                 coordinator.removePodcast(result)
             }
         } message: {
-            Text("Are you sure you want to unsubscribe from \"\(result.title)\"? This will delete all downloaded episodes.")
+            Text("Are you sure you want to unsubscribe from \"\(result.title)\"? This will delete all downloaded episodes and playback history for this show.")
         }
     }
 }

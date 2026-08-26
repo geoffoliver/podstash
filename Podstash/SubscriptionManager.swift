@@ -51,8 +51,8 @@ class SubscriptionManager {
         }
     }
     
-    /// Unsubscribe from a podcast, deleting its local episode metadata and any downloaded audio
-    /// files on disk.
+    /// Unsubscribe from a podcast, deleting its local episode metadata, any downloaded audio
+    /// files on disk, and its episodes' PlaybackRecord history.
     /// - Returns: true if the unsubscribe was actually persisted to the store.
     @discardableResult
     func unsubscribe(podcast: Podcast) -> Bool {
@@ -61,19 +61,25 @@ class SubscriptionManager {
 
     /// Unsubscribe from multiple podcasts in a single save.
     ///
-    /// Deliberately does NOT touch PlaybackRecord: it's durable, cross-device "I've
-    /// listened to this" memory, independent of whether you're currently subscribed - if you
-    /// resubscribe to the same feed later, previously-played episodes should still show as
-    /// played, not look brand new again. (An earlier version of this method tried to delete the
-    /// matching PlaybackRecords here, keyed off the podcast's *currently existing* local
-    /// episodes - but retention cleanup can have already deleted the episode's downloaded file
-    /// by the time you unsubscribe, in the past also deleted the whole row, leaving some
-    /// PlaybackRecords silently un-cleaned. That inconsistency, not the persistence itself, was
-    /// the bug - so PlaybackRecord just isn't unsubscribe's concern at all now.)
+    /// Deletes PlaybackRecord history for the podcasts' episodes too, not just the Episode
+    /// metadata rows. PlaybackRecord is keyed only by `episodeKey` (guid ?? audioURL ?? videoURL,
+    /// see Models.swift) - not scoped to a particular podcast/feed - and some shows publish
+    /// separate audio and video RSS feeds that reuse the same <guid> per episode (it's just a
+    /// link to the episode's webpage, not unique to one feed variant). Leaving PlaybackRecord
+    /// alone meant unsubscribing from one variant and subscribing to the other silently inherited
+    /// the old subscription's played/position state instead of starting fresh.
+    ///
+    /// This is safe to do unconditionally here because Episode rows are only ever deleted by
+    /// unsubscribe itself - EpisodeCleanupManager.cleanupEpisodes only ever reclaims a
+    /// downloaded file, never the Episode row - so the episode list fetched below is always the
+    /// complete set for this podcast, not a partial one some other cleanup already picked over.
+    /// (An earlier version of this method tried to delete PlaybackRecord too, back when that
+    /// completeness guarantee didn't hold, and left some records un-cleaned as a result - that
+    /// inconsistency is why it was dropped rather than fixed at the time.)
     /// - Returns: true if the unsubscribe was actually persisted to the store.
     @discardableResult
     func unsubscribe(podcasts: [Podcast]) -> Bool {
-        var episodeKeysToDequeue: Set<String> = []
+        var episodeKeysToDelete: Set<String> = []
 
         for podcast in podcasts {
             let podcastID = podcast.id
@@ -86,25 +92,20 @@ class SubscriptionManager {
                 if let filename = episode.downloadedFilename {
                     try? FileManager.default.removeItem(at: DownloadManager.localFileURL(forStoredFilename: filename))
                 }
-                episodeKeysToDequeue.insert(episode.episodeKey)
+                episodeKeysToDelete.insert(episode.episodeKey)
                 modelContext.delete(episode)
             }
 
             modelContext.delete(podcast)
         }
 
-        // A queue entry with no local Episode row left to back it can't actually display -
-        // QueueView.queuedEpisodes silently drops any PlaybackRecord it can't join to an Episode -
-        // so leaving queuePosition set here just leaves the queue badge counting entries the queue
-        // itself will never show. isPlayed/playbackPosition/lastPlayedDate are untouched: that
-        // history should still survive a resubscribe (see doc comment above).
-        if !episodeKeysToDequeue.isEmpty {
+        if !episodeKeysToDelete.isEmpty {
             let recordDescriptor = FetchDescriptor<PlaybackRecord>(
-                predicate: #Predicate { episodeKeysToDequeue.contains($0.episodeKey) }
+                predicate: #Predicate { episodeKeysToDelete.contains($0.episodeKey) }
             )
-            let recordsToDequeue = (try? modelContext.fetch(recordDescriptor)) ?? []
-            for record in recordsToDequeue {
-                record.queuePosition = nil
+            let recordsToDelete = (try? modelContext.fetch(recordDescriptor)) ?? []
+            for record in recordsToDelete {
+                modelContext.delete(record)
             }
         }
 

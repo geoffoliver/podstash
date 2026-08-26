@@ -64,8 +64,8 @@ struct SubscriptionManagerTests {
         #expect(try context.fetch(FetchDescriptor<Episode>()).isEmpty)
     }
 
-    @Test("unsubscribe clears queuePosition but preserves play history")
-    func unsubscribeDequeuesButKeepsPlayHistory() throws {
+    @Test("unsubscribe deletes PlaybackRecord history for the podcast's episodes")
+    func unsubscribeDeletesPlaybackHistory() throws {
         let context = try makeContext()
         let podcast = Podcast(title: "Show", feedURL: "https://example.com/feed.xml")
         context.insert(podcast)
@@ -82,10 +82,40 @@ struct SubscriptionManagerTests {
         manager.unsubscribe(podcast: podcast)
 
         let survivingRecords = try context.fetch(FetchDescriptor<PlaybackRecord>(predicate: #Predicate { $0.episodeKey == episodeKey }))
-        let survivor = try #require(survivingRecords.first)
-        #expect(survivor.queuePosition == nil)
-        #expect(survivor.isPlayed == true)
-        #expect(survivor.playbackPosition == 42)
+        #expect(survivingRecords.isEmpty)
+    }
+
+    @Test("Resubscribing under a different feed with an episode that reuses a guid from the unsubscribed feed doesn't inherit its stale play state")
+    func resubscribeDoesNotInheritStalePlayStateAcrossGuidCollision() throws {
+        // Some shows publish separate audio and video RSS feeds that reuse the same <guid> per
+        // episode (it's just a link to the episode's webpage, not scoped to one feed variant) -
+        // this is the exact scenario reported: unsubscribing from the audio feed and subscribing
+        // to the video feed of the same show must not resurrect the audio feed's play history.
+        let context = try makeContext()
+        let sharedGuid = "https://showsite.example.com/episodes/42"
+
+        let audioPodcast = Podcast(title: "Show (Audio)", feedURL: "https://example.com/audio.xml")
+        context.insert(audioPodcast)
+        let audioEpisode = Episode(title: "Ep 42", audioURL: "https://example.com/ep42.mp3", guid: sharedGuid, publishDate: .now, podcastID: audioPodcast.id)
+        context.insert(audioEpisode)
+        let record = PlaybackRecordStore.recordForMutation(episodeKey: audioEpisode.episodeKey, in: context)
+        record.isPlayed = true
+        record.playbackPosition = 1234
+        try context.save()
+
+        let manager = SubscriptionManager(modelContext: context)
+        manager.unsubscribe(podcast: audioPodcast)
+
+        let videoPodcast = Podcast(title: "Show (Video)", feedURL: "https://example.com/video.xml")
+        context.insert(videoPodcast)
+        let videoEpisode = Episode(title: "Ep 42", videoURL: "https://example.com/ep42.mp4", guid: sharedGuid, publishDate: .now, podcastID: videoPodcast.id)
+        context.insert(videoEpisode)
+        try context.save()
+
+        #expect(videoEpisode.episodeKey == audioEpisode.episodeKey) // same guid -> same join key
+        let state = PlaybackRecordStore.state(for: videoEpisode, in: context)
+        #expect(state.isPlayed == false)
+        #expect(state.playbackPosition == 0)
     }
 
     @Test("unsubscribing multiple podcasts removes every podcast's episodes in one call")

@@ -351,6 +351,20 @@ struct QueueView: View {
         .environment(\.editMode, $editMode)
         #endif
         }
+        // Collapse any PlaybackRecords duplicated by a CloudKit sync race (see
+        // PlaybackRecordStore.deduplicate) as soon as the Queue is looked at, rather than only at
+        // app launch/refresh. Without this, a duplicate that lands mid-session sits unreachable
+        // here until the next launch: recordForMutation resolves ambiguously by episodeKey alone,
+        // so remove/mark-played on either duplicate row can only ever affect one of the two
+        // records, leaving the other stuck in the queue. onAppear catches a duplicate that
+        // already existed when this view opened; onChange catches one that syncs in while it's
+        // already on screen.
+        .onAppear {
+            PlaybackRecordStore.deduplicate(in: modelContext)
+        }
+        .onChange(of: queuedRecords) { _, _ in
+            PlaybackRecordStore.deduplicate(in: modelContext)
+        }
         // Shared alert - now applied to Group
         .alert(multiSelection.count == 1 ? "Remove Episode from Queue?" : "Remove \(multiSelection.count) Episodes from Queue?",
                isPresented: $showingRemoveAlert) {

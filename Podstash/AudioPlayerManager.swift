@@ -44,6 +44,9 @@ class AudioPlayerManager: ObservableObject {
     // MARK: - Private Properties
     private var player: AVPlayer?
     private var timeObserver: Any?
+    // The .AVPlayerItemDidPlayToEndTime registration for the currently-loaded item, so
+    // teardownPlayerItem can remove it before the next one is added - see setupNotifications.
+    private var playbackEndObserver: NSObjectProtocol?
     private var modelContext: ModelContext?
     private var periodicSaveTimer: Timer?
     private var settings: AppSettings?
@@ -390,6 +393,17 @@ class AudioPlayerManager: ObservableObject {
         if let observer = timeObserver {
             player?.removeTimeObserver(observer)
             timeObserver = nil
+        }
+        // Without this, the previous episode's completion observer stayed registered forever -
+        // scoped by object identity to its now-discarded AVPlayerItem, so harmless in principle,
+        // but AVFoundation/ARC can reuse that freed memory address for a later item (especially
+        // mid-queue, switching episodes back to back). When that happens the new item's real
+        // completion notification also matches the stale registration, firing
+        // playerDidFinishPlaying an extra time against whatever's playing by then - silently
+        // marking an unrelated, never-played episode played and dropping it from the queue.
+        if let playbackEndObserver {
+            NotificationCenter.default.removeObserver(playbackEndObserver)
+            self.playbackEndObserver = nil
         }
         player?.pause()
         player = nil
@@ -824,15 +838,21 @@ class AudioPlayerManager: ObservableObject {
     }
     
     private func setupNotifications() {
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(playerDidFinishPlaying),
-            name: .AVPlayerItemDidPlayToEndTime,
-            object: player?.currentItem
-        )
+        // Block-based, with the token retained in playbackEndObserver, so teardownPlayerItem can
+        // remove exactly this registration by reference rather than by (name, object) matching -
+        // see teardownPlayerItem for why relying on object identity alone was the bug.
+        playbackEndObserver = NotificationCenter.default.addObserver(
+            forName: .AVPlayerItemDidPlayToEndTime,
+            object: player?.currentItem,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                self?.playerDidFinishPlaying()
+            }
+        }
     }
-    
-    @objc private func playerDidFinishPlaying() {
+
+    private func playerDidFinishPlaying() {
         Task { @MainActor in
             if let episode = currentEpisode, let modelContext {
                 let record = PlaybackRecordStore.markPlayed(episode: episode, in: modelContext)

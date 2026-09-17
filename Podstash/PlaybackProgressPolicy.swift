@@ -33,7 +33,12 @@ enum PlaybackProgressPolicy {
         // truth for how long the actual audio file is, once it's known (0 before the player has
         // loaded it, in which case fall back to the feed's stated duration).
         let effectiveDuration: TimeInterval? = playerMeasuredDuration > 0 ? playerMeasuredDuration : episodeDuration
-        let shouldMarkPlayed = effectiveDuration.map { currentTime >= $0 - markPlayedThreshold } ?? false
+        // Cap the "before the end" cutoff at half the episode's duration: for anything 60s or
+        // longer this is just markPlayedThreshold, unchanged. Without the cap, a flat 30s cutoff
+        // made duration - threshold go negative for any episode shorter than that (trailers,
+        // promos, ad-only bonus clips), which made currentTime >= that negative number true even
+        // at the very start - marking it played before any of it had actually played.
+        let shouldMarkPlayed = effectiveDuration.map { currentTime >= $0 - min(markPlayedThreshold, $0 / 2) } ?? false
 
         return ProgressSaveDecision(shouldSave: significantChange || shouldMarkPlayed, shouldMarkPlayed: shouldMarkPlayed)
     }

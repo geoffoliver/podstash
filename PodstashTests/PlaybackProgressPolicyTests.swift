@@ -60,6 +60,40 @@ struct PlaybackProgressPolicyTests {
         #expect(decision.shouldMarkPlayed == true)
     }
 
+    @Test("Regression: a short episode (under the mark-played threshold) is not marked played at its start")
+    func doesNotMarkShortEpisodePlayedAtStart() {
+        // A 15-second promo/trailer: with a flat 30s "before the end" cutoff and no floor,
+        // duration - threshold goes negative, so currentTime (0) >= that negative number was
+        // always true - marking the episode played the instant it opened, before any of it had
+        // actually played.
+        let decision = PlaybackProgressPolicy.decision(
+            currentTime: 0, lastSavedPosition: 0,
+            playerMeasuredDuration: 15, episodeDuration: nil
+        )
+        #expect(decision.shouldMarkPlayed == false)
+    }
+
+    @Test("Regression: a short episode isn't marked played after only a few seconds")
+    func doesNotMarkShortEpisodePlayedPartway() {
+        // Same 15-second episode, 5 seconds in (a third of the way through) - still shouldn't
+        // count as played.
+        let decision = PlaybackProgressPolicy.decision(
+            currentTime: 5, lastSavedPosition: 0,
+            playerMeasuredDuration: 15, episodeDuration: nil
+        )
+        #expect(decision.shouldMarkPlayed == false)
+    }
+
+    @Test("A short episode still marks played once it's actually nearly finished")
+    func marksShortEpisodePlayedNearItsRealEnd() {
+        // 14 of 15 seconds in - genuinely almost done - should still mark played.
+        let decision = PlaybackProgressPolicy.decision(
+            currentTime: 14, lastSavedPosition: 0,
+            playerMeasuredDuration: 15, episodeDuration: nil
+        )
+        #expect(decision.shouldMarkPlayed == true)
+    }
+
     @Test("Never marks played when no duration is known from either source")
     func neverMarksPlayedWithoutAnyDuration() {
         let decision = PlaybackProgressPolicy.decision(

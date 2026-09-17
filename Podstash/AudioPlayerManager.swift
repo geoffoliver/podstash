@@ -846,8 +846,9 @@ class AudioPlayerManager: ObservableObject {
             object: player?.currentItem,
             queue: .main
         ) { [weak self] _ in
+            guard let self else { return }
             Task { @MainActor in
-                self?.playerDidFinishPlaying()
+                self.playerDidFinishPlaying()
             }
         }
     }

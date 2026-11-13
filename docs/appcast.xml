@@ -4,6 +4,23 @@
         <title>Podstash</title>
         <item>
             <title>0.0.21</title>
+            <pubDate>Fri, 13 Nov 2026 04:49:51 +0000</pubDate>
+            <link>https://geoffoliver.github.io/podstash/</link>
+            <sparkle:version>32</sparkle:version>
+            <sparkle:shortVersionString>0.0.21</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>26.5</sparkle:minimumSystemVersion>
+            <description sparkle:format="markdown"><![CDATA[## What's Changed
+- Bump build number for TestFlight/Sparkle (marketing version unchanged)
+- Fix main-thread stalls from full-table SwiftData fetches
+- Fix Swift 6 concurrency warning in playback-end observer
+
+**Full Changelog**: https://github.com/geoffoliver/podstash/compare/v0.0.21-4...v0.0.21-5
+
+]]></description>
+            <enclosure url="https://github.com/geoffoliver/podstash/releases/download/v0.0.21-5/Podstash.app.zip" length="5127960" type="application/octet-stream" sparkle:edSignature="UsKixpv6bxwWAgNZqlnzOSEKQLB5xP3rbModLhB3IKlnSIqitlxiEBslDV2JYC00XeQRJENwCvkfCo6qvdw/CA=="/>
+        </item>
+        <item>
+            <title>0.0.21</title>
             <pubDate>Thu, 17 Sep 2026 18:41:06 +0000</pubDate>
             <link>https://geoffoliver.github.io/podstash/</link>
             <sparkle:version>31</sparkle:version>
@@ -41,23 +58,6 @@
 
 ]]></description>
             <enclosure url="https://github.com/geoffoliver/podstash/releases/download/v0.0.21-3/Podstash.app.zip" length="5117645" type="application/octet-stream" sparkle:edSignature="5s6z36N7dP6P7sr7+KVmNr50p5FwUjRk0ZJJ9faUFu9vKOoLP/ZgdrZ9A7GkOAOCLbAjKOYTFQti2uYNpQ+hBQ=="/>
-        </item>
-        <item>
-            <title>0.0.21</title>
-            <pubDate>Tue, 25 Aug 2026 07:01:24 +0000</pubDate>
-            <link>https://geoffoliver.github.io/podstash/</link>
-            <sparkle:version>29</sparkle:version>
-            <sparkle:shortVersionString>0.0.21</sparkle:shortVersionString>
-            <sparkle:minimumSystemVersion>26.5</sparkle:minimumSystemVersion>
-            <description sparkle:format="markdown"><![CDATA[## What's Changed
-- Bump build number for TestFlight/Sparkle (marketing version unchanged)
-- Fix refresh CPU spike: batch the per-podcast unplayed-count fetch
-- updated TODO
-
-**Full Changelog**: https://github.com/geoffoliver/podstash/compare/v0.0.21-1...v0.0.21-2
-
-]]></description>
-            <enclosure url="https://github.com/geoffoliver/podstash/releases/download/v0.0.21-2/Podstash.app.zip" length="5103529" type="application/octet-stream" sparkle:edSignature="PPjumuFtL9OIg9ItzsIcd/pfCHheJA+B7cn46vUcJs7qPu5GCdOvSUV+TJEqOo/EFHRrUnoMz6AlWJpgvX65AQ=="/>
         </item>
     </channel>
 </rss>

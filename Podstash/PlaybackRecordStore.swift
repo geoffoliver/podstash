@@ -126,10 +126,25 @@ enum PlaybackRecordStore {
     /// prefer having a queuePosition over not having one.
     static func deduplicate(in context: ModelContext) {
         guard let allRecords = try? context.fetch(FetchDescriptor<PlaybackRecord>()) else { return }
+        deduplicate(allRecords, in: context)
+    }
 
+    /// Same merge as deduplicate(in:), scoped to just `keys` - one IN-clause fetch instead of the
+    /// whole table. For callers that run often and only care about a small set (QueueView runs it
+    /// on every appearance, for the queue's own keys); the full-table pass above fetches every
+    /// PlaybackRecord ever created (~13,000+ and growing, never pruned), which is far too slow
+    /// for anything but an occasional background sweep.
+    static func deduplicate(keys: Set<String>, in context: ModelContext) {
+        guard !keys.isEmpty else { return }
+        let descriptor = FetchDescriptor<PlaybackRecord>(predicate: #Predicate { keys.contains($0.episodeKey) })
+        guard let records = try? context.fetch(descriptor) else { return }
+        deduplicate(records, in: context)
+    }
+
+    private static func deduplicate(_ records: [PlaybackRecord], in context: ModelContext) {
         var survivorByKey: [String: PlaybackRecord] = [:]
 
-        for record in allRecords.sorted(by: { $0.episodeKey < $1.episodeKey }) {
+        for record in records.sorted(by: { $0.episodeKey < $1.episodeKey }) {
             guard !record.episodeKey.isEmpty else { continue }
 
             guard let survivor = survivorByKey[record.episodeKey] else {

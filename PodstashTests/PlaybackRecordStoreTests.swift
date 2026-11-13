@@ -61,6 +61,27 @@ struct PlaybackRecordStoreTests {
         #expect(survivors.first?.isPlayed == true)
     }
 
+    // QueueView runs this on every appearance - scoped to the queue's own keys so it never pays
+    // for a fetch of the entire (never-pruned, ~13,000+ row) PlaybackRecord table.
+    @Test("deduplicate(keys:) merges duplicates for the given keys and leaves every other key alone")
+    func scopedDeduplicateOnlyTouchesGivenKeys() throws {
+        let context = try makeContext()
+        context.insert(PlaybackRecord(episodeKey: "queued", isPlayed: false, queuePosition: 0))
+        context.insert(PlaybackRecord(episodeKey: "queued", isPlayed: false, playbackPosition: 300))
+        context.insert(PlaybackRecord(episodeKey: "elsewhere", isPlayed: false))
+        context.insert(PlaybackRecord(episodeKey: "elsewhere", isPlayed: true))
+        try context.save()
+
+        PlaybackRecordStore.deduplicate(keys: ["queued"], in: context)
+
+        let queued = try context.fetch(FetchDescriptor<PlaybackRecord>(predicate: #Predicate { $0.episodeKey == "queued" }))
+        #expect(queued.count == 1)
+        #expect(queued.first?.queuePosition == 0)
+        #expect(queued.first?.playbackPosition == 300)
+        let elsewhere = try context.fetch(FetchDescriptor<PlaybackRecord>(predicate: #Predicate { $0.episodeKey == "elsewhere" }))
+        #expect(elsewhere.count == 2)
+    }
+
     @Test("deduplicate keeps the larger playback position when neither record is played")
     func deduplicatePrefersFurtherProgress() throws {
         let context = try makeContext()

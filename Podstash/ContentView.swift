@@ -368,9 +368,12 @@ struct PodcastListView: View {
     // NavigationSplitView column transition into the podcast's own detail view and silently
     // fail to fire (the alert then belongs to a sidebar view that's mid-teardown).
     @State private var pendingUnsubscribeIDs = Set<UUID>()
-    // Cached result of computeDownloadedUnplayedCounts(), recomputed off the render path - see
-    // that function's doc comment for why it must never be called directly from `body`.
+    // Cached result of UnplayedBadgeCounts.counts, recomputed off the render path - see
+    // recomputeDownloadedUnplayedCounts's doc comment for why it must never run from `body`.
     @State private var downloadedUnplayedCounts: [UUID: Int] = [:]
+    // Bumped on every ModelContext save so badgeRecomputeSignal changes - see the
+    // .onReceive(ModelContext.didSave) below.
+    @State private var badgeSaveGeneration = 0
     @FocusState private var isFocused: Bool
 
     // Sentinel tag so the Queue row participates in the List's real selection mechanism,
@@ -388,93 +391,29 @@ struct PodcastListView: View {
         multiSelection.subtracting([Self.queueTag])
     }
 
-    /// Downloaded+unplayed episode counts keyed by podcast ID. MUST NEVER be called directly from
-    /// `body` - only from the off-render-path recompute triggered by `.task` below (see
-    /// `badgeRecomputeSignal`/`recomputeDownloadedUnplayedCounts`). It does a real
-    /// `modelContext.fetch(...)` (and, via PlaybackRecordStore.states, another one), and calling
-    /// that synchronously during body evaluation - on the same ModelContext `@Query` is also
-    /// watching - was observed to send SwiftUI's Observation graph into a self-sustaining
-    /// invalidate/re-render loop: body renders -> this fetches -> the fetch registers as a graph
-    /// change -> body renders again, immediately, forever. Measured at ~70 calls/second, pegging
-    /// the main thread at ~100% CPU until force-quit. This was previously a computed `var`
-    /// referenced directly inside the podcast ForEach, which additionally rebuilt the entire
-    /// dictionary from scratch for every single row (38 podcasts = 38 full rebuilds per render) -
-    /// fixed by computing it once per render into a local, but that still left the once-per-render
-    /// call sitting directly in body, which is what caused the render-loop above.
-    ///
-    /// Played-state used to come from a `@Query` over every `isPlayed == true` PlaybackRecord -
-    /// harmless when Episode rows (and their play state) got pruned by retention, but under the
-    /// CloudKit-split architecture PlaybackRecord rows are never deleted, so that query grew to
-    /// ~13,000 rows and rebuilding a Set from all of them (map + hash every episodeKey) on every
-    /// single render - i.e. every click, since any @State change re-evaluates body - was costing
-    /// most of a second by itself. downloadedEpisodesQuery is tiny (usually single digits to
-    /// tens), so scope the PlaybackRecord lookup to just those keys via
-    /// PlaybackRecordStore.states(forKeys:in:), which becomes a cheap SQL IN-clause instead of
-    /// pulling and hashing the entire played-history table in Swift.
-    // Beyond the downloaded set above, UnplayedEligibilityPolicy also admits a non-downloaded
-    // episode newer than its podcast's mostRecentlyPlayedDate (or, with no play history yet, the
-    // single newest known episode). That threshold differs per podcast, but rather than one
-    // bounded fetch per podcast (which turned a refresh's frequent @Query-driven re-renders into
-    // O(podcasts) SQL round trips per render - 38 subscriptions meant 38 synchronous fetches on
-    // every progress tick, which is what made a refresh crawl and peg the CPU), this runs ONE
-    // fetch bounded by the earliest threshold across all podcasts. Each candidate still gets
-    // filtered against its own podcast's actual threshold below via isEligible, so the wider bound
-    // doesn't change which episodes end up counted - it just replaces N round trips with one.
-    private func computeDownloadedUnplayedCounts() -> [UUID: Int] {
-        var candidateEpisodes = downloadedEpisodesQuery
-
-        let perPodcastThresholds = podcasts.map { $0.mostRecentlyPlayedDate ?? $0.newestKnownPublishDate }
-        if let threshold = UnplayedEligibilityPolicy.earliestEligibilityThreshold(perPodcastThresholds) {
-            let descriptor = FetchDescriptor<Episode>(
-                predicate: #Predicate<Episode> { $0.publishDate >= threshold }
-            )
-            if let recent = try? modelContext.fetch(descriptor) {
-                candidateEpisodes.append(contentsOf: recent)
-            }
-        }
-
-        guard !candidateEpisodes.isEmpty else { return [:] }
-
-        // An episode can appear in both the downloaded query and a per-podcast recency fetch
-        // above - dedupe by episodeKey before joining state, same helper QueueView.queuedEpisodes
-        // uses for the same reason.
-        let deduped = PlaybackRecordStore.firstByKey(candidateEpisodes).values
-        let states = PlaybackRecordStore.states(forKeys: Set(deduped.map(\.episodeKey)), in: modelContext)
-        let podcastsByID = Dictionary(uniqueKeysWithValues: podcasts.map { ($0.id, $0) })
-
-        var counts: [UUID: Int] = [:]
-        for episode in deduped {
-            let podcast = podcastsByID[episode.podcastID]
-            let eligible = UnplayedEligibilityPolicy.isEligible(
-                isDownloaded: episode.isDownloaded,
-                isPlayed: states[episode.episodeKey]?.isPlayed ?? false,
-                publishDate: episode.publishDate,
-                mostRecentlyPlayedDate: podcast?.mostRecentlyPlayedDate,
-                newestKnownPublishDate: podcast?.newestKnownPublishDate
-            )
-            if eligible {
-                counts[episode.podcastID, default: 0] += 1
-            }
-        }
-        return counts
+    /// Badge counts MUST NEVER be computed directly from `body` - only from the off-render-path
+    /// recompute triggered by `.task(id:)` below. UnplayedBadgeCounts does real
+    /// `modelContext.fetch(...)` calls, and calling those synchronously during body evaluation -
+    /// on the same ModelContext `@Query` is also watching - was observed to send SwiftUI's
+    /// Observation graph into a self-sustaining invalidate/re-render loop (~70 renders/second,
+    /// main thread pegged at 100% until force-quit). See UnplayedBadgeCounts for how candidates
+    /// are gathered and why they're bounded per podcast.
+    private func recomputeDownloadedUnplayedCounts() {
+        downloadedUnplayedCounts = UnplayedBadgeCounts.counts(for: podcasts, in: modelContext)
     }
 
-    /// Cheap, pure signal combining the @Query'd collections computeDownloadedUnplayedCounts
-    /// depends on - safe to read directly in body (no SwiftData fetch, just counts/booleans
-    /// already being tracked) so `.task(id:)` below can fire a recompute immediately when a
-    /// refresh, download, or queue change makes the counts stale, without re-running the actual
-    /// fetch on every render the way the old inline call did.
+    /// Cheap, pure signal combining what the badge counts depend on - safe to read directly in
+    /// body (no SwiftData fetch, just counts/booleans already being tracked) so `.task(id:)` below
+    /// recomputes when a refresh, download, queue change, or any other save makes the counts
+    /// stale, without re-running the fetches on every render.
     private var badgeRecomputeSignal: Int {
         var hasher = Hasher()
         hasher.combine(podcasts.count)
         hasher.combine(downloadedEpisodesQuery.count)
         hasher.combine(queuedRecords.count)
         hasher.combine(refreshCoordinator.isRefreshing)
+        hasher.combine(badgeSaveGeneration)
         return hasher.finalize()
-    }
-
-    private func recomputeDownloadedUnplayedCounts() {
-        downloadedUnplayedCounts = computeDownloadedUnplayedCounts()
     }
 
     var body: some View {
@@ -545,20 +484,26 @@ struct PodcastListView: View {
                 }
             }
         }
-        // Recomputes badge counts off the render path - see computeDownloadedUnplayedCounts's
-        // doc comment for why this can never move into body directly. Fires immediately when
-        // badgeRecomputeSignal changes (refresh progress, a download finishing, a queue change)...
+        // Recomputes badge counts off the render path - see recomputeDownloadedUnplayedCounts's
+        // doc comment for why this can never move into body directly. Fires when
+        // badgeRecomputeSignal changes. The short sleep debounces bursts (a refresh saves once
+        // per feed): .task(id:) cancels the pending run whenever the signal changes again.
         .task(id: badgeRecomputeSignal) {
+            try? await Task.sleep(for: .milliseconds(250))
+            guard !Task.isCancelled else { return }
             recomputeDownloadedUnplayedCounts()
         }
-        // ...and this is the safety net for the cases that signal doesn't cover - e.g. marking a
-        // downloaded-but-unqueued episode played from PodcastDetailView doesn't change any of
-        // podcasts/downloadedEpisodesQuery/queuedRecords here, so nothing would otherwise tell
-        // this view its badge counts just went stale. A low-frequency poll, not a per-render
-        // fetch, so unlike the old inline call it can't feed back into a render loop.
+        // Any local save can change a badge in ways the @Query counts above don't see - e.g.
+        // marking a downloaded-but-unqueued episode played from PodcastDetailView. This replaces
+        // a 3-second poll, which re-ran the full recompute forever whether anything changed or not.
+        .onReceive(NotificationCenter.default.publisher(for: ModelContext.didSave)) { _ in
+            badgeSaveGeneration &+= 1
+        }
+        // Safety net for changes that arrive without a local ModelContext save (CloudKit imports
+        // from another device) - infrequent, since local changes are covered by didSave above.
         .task {
             while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(3))
+                try? await Task.sleep(for: .seconds(60))
                 guard !Task.isCancelled else { return }
                 recomputeDownloadedUnplayedCounts()
             }

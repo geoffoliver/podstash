@@ -83,6 +83,13 @@ enum MediaKind: String, Codable {
 // plain scalar and callers fetch/filter Episodes by it instead of walking `podcast.episodes`.
 @Model
 final class Episode {
+    // Local-only store, so adding/changing indexes here never touches the CloudKit schema.
+    // (podcastID, publishDate) serves PodcastDetailView's per-podcast @Query and
+    // UnplayedBadgeCounts' per-podcast threshold fetches; episodeKey serves every PlaybackRecord
+    // join (QueueView.queuedEpisodes etc.). Without these, each of those was a full scan of a
+    // ~20k-row table with ~20 MB of descriptions.
+    #Index<Episode>([\.podcastID, \.publishDate], [\.episodeKey])
+
     var id: UUID = UUID()
     var title: String = ""
     var episodeDescription: String?
@@ -131,6 +138,12 @@ final class Episode {
     // device's local Downloads folder via DownloadManager.localFileURL(forStoredFilename:).
     var downloadedFilename: String?
     // Plain scalar (see type-level doc comment above) - not a relationship.
+    //
+    // hashModifier exists ONLY to change Episode's model version hash. Core Data leaves indexes
+    // out of that hash, so adding the #Index above on its own never migrates an existing store -
+    // the index would only ever appear in freshly created ones. Changing the hash forces a
+    // one-time lightweight migration that builds it. Bump this again if an index here changes.
+    @Attribute(hashModifier: "index-v1")
     var podcastID: UUID = UUID()
 
     init(

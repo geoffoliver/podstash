@@ -358,12 +358,14 @@ struct QueueView: View {
         // so remove/mark-played on either duplicate row can only ever affect one of the two
         // records, leaving the other stuck in the queue. onAppear catches a duplicate that
         // already existed when this view opened; onChange catches one that syncs in while it's
-        // already on screen.
+        // already on screen. Scoped to the queue's own keys (which still catches a non-queued
+        // duplicate of a queued episode, since it shares the key) - the unscoped full-table pass
+        // made every switch back to Queue fetch ~13,000+ PlaybackRecords on the main thread.
         .onAppear {
-            PlaybackRecordStore.deduplicate(in: modelContext)
+            PlaybackRecordStore.deduplicate(keys: Set(queuedRecords.map(\.episodeKey)), in: modelContext)
         }
-        .onChange(of: queuedRecords) { _, _ in
-            PlaybackRecordStore.deduplicate(in: modelContext)
+        .onChange(of: queuedRecords) { _, newRecords in
+            PlaybackRecordStore.deduplicate(keys: Set(newRecords.map(\.episodeKey)), in: modelContext)
         }
         // Shared alert - now applied to Group
         .alert(multiSelection.count == 1 ? "Remove Episode from Queue?" : "Remove \(multiSelection.count) Episodes from Queue?",

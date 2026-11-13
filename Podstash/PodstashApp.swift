@@ -679,16 +679,19 @@ struct PodstashApp: App {
                 downloadManager.setModelContext(context)
                 downloadManager.setSettings(settings)
 
-                // Collapse any PlaybackRecords duplicated by a CloudKit sync race (e.g. two
-                // devices each first-touching the same episode before either's row synced to
-                // the other) before anything else reads queue/played state.
-                PlaybackRecordStore.deduplicate(in: context)
+                // Once per process, not once per window - see LaunchHousekeeping.
+                LaunchHousekeeping.shared.runOnce {
+                    // Collapse any PlaybackRecords duplicated by a CloudKit sync race (e.g. two
+                    // devices each first-touching the same episode before either's row synced to
+                    // the other) before anything else reads queue/played state.
+                    PlaybackRecordStore.deduplicate(in: context)
 
-                // Reclaim disk space from downloaded files no live episode references anymore.
-                downloadManager.pruneOrphanedDownloads()
+                    // Reclaim disk space from downloaded files no live episode references anymore.
+                    downloadManager.pruneOrphanedDownloads()
 
-                // Reclaim disk space from download temp files orphaned by a crash or force-quit.
-                downloadManager.pruneStaleTempDownloads()
+                    // Reclaim disk space from download temp files orphaned by a crash or force-quit.
+                    downloadManager.pruneStaleTempDownloads()
+                }
 
                 // Set up callback to refresh feeds after adding a podcast
                 addPodcastCoordinator.triggerRefreshAfterAdding = { podcast in
